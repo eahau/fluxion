@@ -1,0 +1,61 @@
+spring:
+  application:
+    name: fluxion-runtime
+
+  # ─── DevTools 热重载（仅 developmentOnly 生效）──────────────
+  devtools:
+    restart:
+      enabled: true
+      exclude: static/**,log4j2-spring.yaml
+    livereload:
+      enabled: true
+
+  # 运行时默认关闭 Spring Security，业务系统通过 sidecar 部署时由部署方统一管控入口安全
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration
+
+  web:
+    resources:
+      add-mappings: false
+
+server:
+  port: 8081
+
+# ─── 工作流平台配置 ────────────────────────────────────────────────────
+workflow:
+  # 实例角色：worker 表示运行面节点，向 Admin 注册并拉取定义/函数
+  instance:
+    role: worker
+    # 应用分组，用于配置中心按组下发定义/函数；空表示接收全量
+    app-group:
+
+  # 配置中心类型：http | apollo | nacos
+  config:
+    type: http
+    http:
+      # Admin 地址，运行时从此拉取工作流定义和函数配置
+      admin-url: http://localhost:8080
+
+  # 执行日志存储模式：log（默认，SLF4J） | db
+  execution-log:
+    store: log
+
+  # 默认节点超时（毫秒）
+  node:
+    default-timeout-ms: 30000
+
+  # 重试配置
+  retry:
+    wheel-tick-duration-ms: 100
+    wheel-buckets-per-wheel: 512
+
+# ─── 管理端点 ─────────────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always

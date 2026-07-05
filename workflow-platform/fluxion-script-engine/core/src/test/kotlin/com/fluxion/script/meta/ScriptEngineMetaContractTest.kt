@@ -1,0 +1,70 @@
+package com.fluxion.script.meta
+
+import com.fasterxml.jackson.core.type.TypeReference
+import com.networknt.schema.JsonSchemaFactory
+import com.networknt.schema.SpecVersion
+import com.fluxion.core.util.JsonUtil
+import com.fluxion.core.util.uncheckedCast
+import com.fluxion.core.value.FunctionMeta
+import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.DynamicTest
+import org.junit.jupiter.api.TestFactory
+
+class ScriptEngineMetaContractTest {
+
+    data class ContractCase(
+        val functionRef: String,
+        val optionalParams: List<String> = emptyList()
+    )
+
+    private val cases = listOf(
+        ContractCase("builtin:groovyScript", optionalParams = listOf("script", "scriptRef"))
+    )
+
+    @TestFactory
+    fun `script engine function meta contract`(): List<DynamicTest> = cases.map { case ->
+        DynamicTest.dynamicTest("${case.functionRef} meta contract") {
+            val meta = metaByRef(case.functionRef)
+
+            assertEquals(case.functionRef, meta.name)
+            assertFalse(meta.description.isNullOrBlank())
+            assertSchemaValid(meta.inputSchema, "inputSchema")
+            assertParamCoverage(meta.inputSchema, emptyList(), case.optionalParams)
+        }
+    }
+
+    private fun metaByRef(ref: String): FunctionMeta {
+        return ScriptEngineFunctionMetas::class.java.declaredFields
+            .filter { it.type == FunctionMeta::class.java }
+            .map { it.get(null) as FunctionMeta }
+            .first { it.name == ref }
+    }
+
+    private fun assertSchemaValid(schema: Any?, label: String) {
+        if (schema == null) return
+        val schemaJson = if (schema is String) schema else JsonUtil.serialize(schema)
+        try {
+            JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V7).getSchema(schemaJson)
+        } catch (ex: Exception) {
+            fail("$label is not a valid JSON Schema: $schemaJson", ex)
+        }
+    }
+
+    private fun assertParamCoverage(schema: Any?, required: List<String>, optional: List<String>) {
+        if (schema == null) {
+            assertTrue(required.isEmpty() && optional.isEmpty())
+            return
+        }
+        val schemaJson = if (schema is String) schema else JsonUtil.serialize(schema)
+        val schemaMap = JsonUtil.deserialize(schemaJson, object : TypeReference<Map<String, Any>>() {})
+        val properties = schemaMap["properties"].uncheckedCast<Map<String, Any>>() ?: emptyMap()
+        val requiredList = (schemaMap["required"] as? List<*>)?.map { it.toString() } ?: emptyList()
+
+        for (param in required + optional) {
+            assertTrue(properties.containsKey(param), "schema should define property '$param'")
+        }
+        for (param in required) {
+            assertTrue(requiredList.contains(param), "schema should mark '$param' as required")
+        }
+    }
+}

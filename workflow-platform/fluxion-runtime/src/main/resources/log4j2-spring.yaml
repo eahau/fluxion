@@ -1,0 +1,54 @@
+# Log4j2 配置（YAML 格式）
+# 文件名使用 -spring 后缀以支持 Spring Boot profile 机制
+# monitorInterval: 每 30 秒检测文件变化，自动热重载
+Configuration:
+  status: WARN
+  monitorInterval: 30
+
+  properties:
+    property:
+      # 控制台格式：时间 [线程] 级别 [traceId] 包名首字母.完整类名 - 消息
+      - name: CONSOLE_PATTERN
+        value: "%d{HH:mm:ss.SSS} [%t] %-5level [%X{traceId}] %logger{1.} - %msg%n"
+
+  Appenders:
+    Console:
+      name: Console
+      target: SYSTEM_OUT
+      PatternLayout:
+        pattern: "${CONSOLE_PATTERN}"
+
+  Loggers:
+    # 项目日志
+    Logger:
+      - name: com.fluxion
+        level: INFO
+        additivity: false
+        AppenderRef:
+          ref: Console
+      - name: com.fluxion.core.engine
+        level: DEBUG
+        additivity: false
+        AppenderRef:
+          ref: Console
+      # 工作流执行日志（专用命名 Logger）
+      - name: WorkflowExecutionLog
+        level: INFO
+        additivity: false
+        AppenderRef:
+          ref: Console
+      - name: WorkflowExecutionSnapshot
+        level: INFO
+        additivity: false
+        AppenderRef:
+          ref: Console
+      # 减少 Spring 框架噪音
+      - name: org.springframework
+        level: WARN
+      - name: org.apache
+        level: WARN
+
+    Root:
+      level: WARN
+      AppenderRef:
+        ref: Console

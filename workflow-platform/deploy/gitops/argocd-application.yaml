@@ -1,0 +1,85 @@
+# ============================================================
+# ArgoCD Application — GitOps 声明式部署
+# ============================================================
+#
+# 前置条件：
+#   1. 集群已安装 ArgoCD: https://argo-cd.readthedocs.io/en/stable/getting_started/
+#   2. 镜像已推送到容器仓库（如 registry.example.com/fluxion-admin:native）
+#
+# 用法：
+#   kubectl apply -f deploy/gitops/argocd-application.yaml
+#
+# 工作流：
+#   Git push → ArgoCD 检测变更 → 自动同步到 K8s → 滚动更新
+#
+
+---
+# ArgoCD Application — 声明 "期望状态在 Git 中"
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: fluxion-admin
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/your-org/fluxion-platform.git  # 替换为实际仓库
+    targetRevision: main
+    path: deploy/k8s
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: fluxion
+
+  syncPolicy:
+    # 自动同步：Git 变更 → K8s 资源
+    automated:
+      prune: true       # 删除 Git 中移除的资源
+      selfHeal: true    # 手动修改 K8s 后自动回滚到 Git 状态
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
+  # 健康检查 — 利用 Spring Boot Actuator 端点
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas  # HPA 管理的 replicas 字段忽略差异
+
+---
+# ArgoCD Image Updater — 自动跟踪镜像更新（可选）
+# 配合 CI/CD 使用：CI 构建推送新镜像 → Image Updater 自动更新 Git → ArgoCD 同步
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: fluxion-admin-canary
+  namespace: argocd
+  annotations:
+    # Image Updater 注解：自动跟踪 latest tag 的更新
+    argocd-image-updater.argoproj.io/image-list: fluxion=registry.example.com/fluxion-admin
+    argocd-image-updater.argoproj.io/fluxion.update-strategy: latest
+    argocd-image-updater.argoproj.io/write-back-method: git
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/your-org/fluxion-platform.git
+    targetRevision: main
+    path: deploy/k8s
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: fluxion
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

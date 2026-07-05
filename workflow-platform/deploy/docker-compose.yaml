@@ -1,0 +1,130 @@
+# ============================================================
+# Fluxion Docker Compose — 一键启动完整环境
+# ============================================================
+#
+# 用法（在 deploy/ 目录下执行）：
+#   # Native Image 模式（零 JRE，推荐）
+#   docker compose --profile native up -d
+#
+#   # 传统 JVM 模式
+#   docker compose --profile jvm up -d
+#
+#   # 开发模式（MySQL + Redis + JVM 应用）
+#   docker compose --profile dev up -d
+#
+#   # 停止
+#   docker compose down
+#
+#   # 查看日志
+#   docker compose logs -f fluxion-admin
+#
+
+services:
+
+  # ── 基础设施 ────────────────────────────────────────────────
+
+  mysql:
+    image: mysql:8.0
+    container_name: fluxion-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: fluxion_root
+      MYSQL_DATABASE: fluxion
+      MYSQL_USER: fluxion
+      MYSQL_PASSWORD: fluxion123
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-pfluxion_root"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    profiles: ["native", "jvm", "dev"]
+
+  redis:
+    image: redis:7-alpine
+    container_name: fluxion-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    profiles: ["native", "jvm", "dev"]
+
+  # ── 应用：Native Image 模式 ────────────────────────────────
+
+  fluxion-admin:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: native
+    image: fluxion-admin:native
+    container_name: fluxion-admin
+    ports:
+      - "${PORT:-8080}:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/fluxion?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+      SPRING_DATASOURCE_USERNAME: fluxion
+      SPRING_DATASOURCE_PASSWORD: fluxion123
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_FLYWAY_ENABLED: "true"
+      JAVA_TOOL_OPTIONS: "-Xmx512m"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    profiles: ["native"]
+
+  # ── 应用：JVM 模式 ────────────────────────────────────────
+
+  fluxion-admin-jvm:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: jvm
+    image: fluxion-admin:jvm
+    container_name: fluxion-admin
+    ports:
+      - "${PORT:-8080}:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/fluxion?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+      SPRING_DATASOURCE_USERNAME: fluxion
+      SPRING_DATASOURCE_PASSWORD: fluxion123
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_FLYWAY_ENABLED: "true"
+      JAVA_TOOL_OPTIONS: "-Xmx512m -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+    profiles: ["jvm", "dev"]
+
+volumes:
+  mysql_data:
+  redis_data:

@@ -1,0 +1,56 @@
+{
+  "name": "workflow-admin-ui",
+  "version": "1.0.0",
+  "private": true,
+  "description": "函数式工作流配置后台前端",
+  "scripts": {
+    "dev": "max dev",
+    "build": "max build",
+    "postinstall": "max setup",
+    "setup": "max setup",
+    "start": "npm run dev",
+    "lint": "max lint",
+    "openapi": "openapi-typescript ../doc/openapi.yaml -o src/types/api.generated.d.ts"
+  },
+  "dependencies": {
+    "@ant-design/icons": "^5.3.0",
+    "@ant-design/pro-components": "^2.6.48",
+    "@codemirror/autocomplete": "^6.20.3",
+    "@codemirror/lang-sql": "^6.10.0",
+    "@codemirror/language": "^6.12.4",
+    "@codemirror/legacy-modes": "^6.5.3",
+    "@codemirror/state": "^6.7.0",
+    "@codemirror/view": "^6.43.2",
+    "@monaco-editor/react": "^4.6.0",
+    "@rjsf/antd": "^5.17.1",
+    "@rjsf/core": "^5.17.1",
+    "@rjsf/utils": "^5.17.1",
+    "@rjsf/validator-ajv8": "^5.17.1",
+    "@types/dagre": "^0.7.54",
+    "@uiw/react-codemirror": "^4.25.10",
+    "@umijs/max": "^4.1.0",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
+    "antd": "^5.14.0",
+    "dagre": "^0.8.5",
+    "dayjs": "^1.11.10",
+    "echarts": "^5.4.3",
+    "echarts-for-react": "^3.0.2",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "reactflow": "^11.10.4",
+    "zustand": "^4.5.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.16",
+    "@types/react": "^18.2.55",
+    "@types/react-dom": "^18.2.19",
+    "@umijs/lint": "^4.1.0",
+    "openapi-typescript": "^7.13.0",
+    "prettier": "^3.2.5",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

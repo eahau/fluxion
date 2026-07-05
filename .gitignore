@@ -1,0 +1,8 @@
+# 全局通用规则（IDE/系统文件）
+.idea/
+.vscode/
+.qoder/
+*.iml
+*.swp
+.DS_Store
+Thumbs.db

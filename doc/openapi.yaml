@@ -1,0 +1,2800 @@
+openapi: 3.0.3
+info:
+  title: Workflow Admin API
+  description: 工作流平台管理后台 REST API
+  version: 1.0.0
+  contact:
+    name: Workflow Platform Team
+
+servers:
+  - url: http://localhost:8080
+    description: 本地开发环境
+  - url: https://api.example.com
+    description: 生产环境
+
+tags:
+  - name: Auth
+    description: OAuth 2.0 / OIDC 认证授权
+  - name: Workflows
+    description: 工作流定义管理
+  - name: Debug
+    description: 调试执行
+  - name: Schemas
+    description: Schema 注册与管理
+  - name: Functions
+    description: 函数注册与管理
+  - name: Decorators
+    description: 节点装饰器参数 Schema
+  - name: Instances
+    description: 业务实例注册与发现
+  - name: Executions
+    description: 执行历史与重放
+  - name: Monitor
+    description: 监控与日志
+  - name: Audit
+    description: 审计日志
+  - name: User
+    description: 用户管理
+  - name: Role
+    description: 角色管理
+
+paths:
+  # ============ Auth API ============
+  /api/admin/auth/login:
+    post:
+      operationId: login
+      tags: [Auth]
+      summary: 用户登录
+      description: |
+        管理员登录，返回 JWT Token。
+        底层认证由 AuthProvider SPI 驱动：
+        - local：本地数据库（默认）
+        - remote：远程 OAuth 2.0 / OIDC 服务（Keycloak、Casdoor 等）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: 认证失败
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ============ Workflow API ============
+  /api/admin/workflows:
+    get:
+      operationId: listWorkflows
+      tags: [Workflows]
+      summary: 分页查询工作流定义
+      parameters:
+        - name: keyword
+          in: query
+          description: 关键词（名称/描述）
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/WorkflowStatus'
+        - name: category
+          in: query
+          schema:
+            $ref: '#/components/schemas/WorkflowCategory'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageResponseWorkflowDefinition'
+
+    post:
+      operationId: createWorkflow
+      tags: [Workflows]
+      summary: 创建工作流
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowDefinition'
+      responses:
+        '200':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowDefinition'
+
+  /api/admin/workflows/{workflowId}:
+    get:
+      operationId: getWorkflow
+      tags: [Workflows]
+      summary: 获取工作流详情
+      parameters:
+        - $ref: '#/components/parameters/WorkflowIdPath'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowDefinition'
+        '404':
+          description: 未找到
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      operationId: updateWorkflow
+      tags: [Workflows]
+      summary: 更新工作流
+      parameters:
+        - $ref: '#/components/parameters/WorkflowIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowDefinition'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowDefinition'
+        '404':
+          description: 未找到
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      operationId: deleteWorkflow
+      tags: [Workflows]
+      summary: 删除工作流
+      parameters:
+        - $ref: '#/components/parameters/WorkflowIdPath'
+      responses:
+        '204':
+          description: 删除成功
+        '404':
+          description: 未找到
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/admin/workflows/{workflowId}/execute:
+    post:
+      operationId: executeWorkflow
+      tags: [Workflows]
+      summary: 执行工作流
+      parameters:
+        - $ref: '#/components/parameters/WorkflowIdPath'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                inputs:
+                  type: object
+                  additionalProperties: true
+                  description: 工作流各节点输入参数（key=nodeId）
+      responses:
+        '200':
+          description: 执行成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DebugResult'
+
+  /api/admin/workflows/{workflowId}/publish:
+    post:
+      operationId: publishWorkflow
+      tags: [Workflows]
+      summary: 发布工作流
+      description: 将工作流从 DRAFT 状态发布为 ACTIVE，并按指定的 PublishTarget 推送到配置中心
+      parameters:
+        - $ref: '#/components/parameters/WorkflowIdPath'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublishTarget'
+      responses:
+        '200':
+          description: 发布成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowDefinition'
+        '404':
+          description: 未找到
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/admin/workflows/{workflowId}/deprecate:
+    post:
+      operationId: deprecateWorkflow
+      tags: [Workflows]
+      summary: 下线工作流
+      description: 将工作流从 ACTIVE 状态变更为 DEPRECATED，并从配置中心移除
+      parameters:
+        - $ref: '#/components/parameters/WorkflowIdPath'
+      responses:
+        '200':
+          description: 下线成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowDefinition'
+        '404':
+          description: 未找到
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/admin/workflows/{workflowId}/versions:
+    get:
+      operationId: listWorkflowVersions
+      tags: [Workflows]
+      summary: 查询工作流历史版本
+      parameters:
+        - $ref: '#/components/parameters/WorkflowIdPath'
+      responses:
+        '200':
+          description: 版本列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WorkflowDefinition'
+
+  /api/admin/workflows/{workflowId}/rollback:
+    post:
+      operationId: rollbackWorkflow
+      tags: [Workflows]
+      summary: 回滚工作流到指定版本
+      parameters:
+        - $ref: '#/components/parameters/WorkflowIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RollbackRequest'
+      responses:
+        '200':
+          description: 回滚成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowDefinition'
+
+  /api/admin/workflows/import/openapi:
+    post:
+      operationId: importOpenAPI
+      tags: [Workflows]
+      summary: 导入 OpenAPI 文件
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: 导入结果
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WorkflowDefinition'
+
+  /api/admin/workflows/import/openapi/confirm:
+    post:
+      operationId: confirmImportOpenAPI
+      tags: [Workflows]
+      summary: 确认导入 OpenAPI
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImportConfirmRequest'
+      responses:
+        '200':
+          description: 确认导入结果
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WorkflowDefinition'
+
+  /api/admin/workflows/export/openapi:
+    get:
+      operationId: exportOpenAPI
+      tags: [Workflows]
+      summary: 导出 OpenAPI（单工作流/全量）
+      parameters:
+        - name: ids
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          description: 工作流 ID 列表（不传则导出全量）
+        - name: title
+          in: query
+          schema:
+            type: string
+        - name: version
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OpenAPI 文档
+          content:
+            application/json:
+              schema:
+                type: object
+            text/yaml:
+              schema:
+                type: string
+    post:
+      operationId: batchExportOpenAPI
+      tags: [Workflows]
+      summary: 批量导出 OpenAPI
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OpenAPIExportRequest'
+      responses:
+        '200':
+          description: OpenAPI 文档
+          content:
+            application/json:
+              schema:
+                type: object
+            text/yaml:
+              schema:
+                type: string
+
+  # ============ Debug API ============
+  /api/admin/workflows/{workflowId}/debug:
+    post:
+      operationId: debugWorkflow
+      tags: [Debug]
+      summary: 调试执行工作流
+      parameters:
+        - $ref: '#/components/parameters/WorkflowIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DebugWorkflowRequest'
+      responses:
+        '200':
+          description: 调试结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DebugResult'
+
+  /api/admin/workflows/{workflowId}/debug/node:
+    post:
+      operationId: debugWorkflowNode
+      tags: [Debug]
+      summary: 调试单个节点
+      parameters:
+        - $ref: '#/components/parameters/WorkflowIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DebugNodeRequest'
+      responses:
+        '200':
+          description: 调试结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DebugResult'
+
+  /api/admin/workflows/{workflowId}/debug/step:
+    post:
+      operationId: debugWorkflowStep
+      tags: [Debug]
+      summary: 单步执行
+      parameters:
+        - $ref: '#/components/parameters/WorkflowIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DebugStepRequest'
+      responses:
+        '200':
+          description: 调试结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DebugResult'
+
+  /api/admin/workflows/{workflowId}/debug/rerun:
+    post:
+      operationId: rerunWorkflowNode
+      tags: [Debug]
+      summary: 从节点重跑
+      parameters:
+        - $ref: '#/components/parameters/WorkflowIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DebugRerunRequest'
+      responses:
+        '200':
+          description: 重跑结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DebugResult'
+
+  /api/admin/workflows/{workflowId}/debug/history:
+    get:
+      operationId: listDebugHistory
+      tags: [Debug]
+      summary: 查询调试执行历史
+      parameters:
+        - $ref: '#/components/parameters/WorkflowIdPath'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: 调试历史列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageResponseDebugExecutionRecord'
+
+  /api/admin/workflows/{workflowId}/debug/history/{executionId}:
+    get:
+      operationId: getDebugHistoryDetail
+      tags: [Debug]
+      summary: 查询调试历史详情
+      parameters:
+        - $ref: '#/components/parameters/WorkflowIdPath'
+        - name: executionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 调试历史详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DebugExecutionRecord'
+
+  # ============ Schema API ============
+  /api/admin/schemas:
+    get:
+      operationId: listSchemas
+      tags: [Schemas]
+      summary: 分页查询 Schema
+      parameters:
+        - name: keyword
+          in: query
+          schema:
+            type: string
+        - name: schemaType
+          in: query
+          schema:
+            type: string
+          description: 按类型标签过滤（INPUT/OUTPUT/EVENT），仅返回包含该标签的 Schema
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageResponseSchemaDefinition'
+
+    post:
+      operationId: createSchema
+      tags: [Schemas]
+      summary: 注册 Schema
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SchemaDefinition'
+      responses:
+        '200':
+          description: 注册成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchemaDefinition'
+
+  /api/admin/schemas/{schemaName}:
+    get:
+      operationId: getSchema
+      tags: [Schemas]
+      summary: 获取 Schema 详情
+      parameters:
+        - $ref: '#/components/parameters/SchemaNamePath'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchemaDefinition'
+        '404':
+          description: 未找到
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      operationId: updateSchema
+      tags: [Schemas]
+      summary: 更新 Schema
+      parameters:
+        - $ref: '#/components/parameters/SchemaNamePath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SchemaDefinition'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchemaDefinition'
+
+    delete:
+      operationId: deleteSchema
+      tags: [Schemas]
+      summary: 删除 Schema
+      parameters:
+        - $ref: '#/components/parameters/SchemaNamePath'
+      responses:
+        '204':
+          description: 删除成功
+
+  /api/admin/schemas/tables:
+    get:
+      operationId: listTables
+      tags: [Schemas]
+      summary: 列出数据库中所有用户表
+      parameters:
+        - name: dataSource
+          in: query
+          schema:
+            type: string
+          description: 数据源名称，默认使用主数据源
+      responses:
+        '200':
+          description: 表名列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  /api/admin/schemas/tables/{tableName}/columns:
+    get:
+      operationId: listTableColumns
+      tags: [Schemas]
+      summary: 获取指定表的列元数据
+      parameters:
+        - $ref: '#/components/parameters/TableNamePath'
+        - name: dataSource
+          in: query
+          schema:
+            type: string
+          description: 数据源名称，默认使用主数据源
+      responses:
+        '200':
+          description: 列元数据列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TableColumnMetadata'
+
+  /api/admin/schemas/tables/detail:
+    get:
+      operationId: listTablesWithColumns
+      tags: [Schemas]
+      summary: 获取所有表及其列信息，用于设计器侧边栏一次性加载
+      parameters:
+        - name: dataSource
+          in: query
+          schema:
+            type: string
+          description: 数据源名称，默认使用主数据源
+      responses:
+        '200':
+          description: 表及其列列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TableDetail'
+
+  /api/admin/schemas/tables/{tableName}/foreign-keys:
+    get:
+      operationId: listForeignKeys
+      tags: [Schemas]
+      summary: 获取指定表的外键信息
+      parameters:
+        - $ref: '#/components/parameters/TableNamePath'
+        - name: dataSource
+          in: query
+          schema:
+            type: string
+          description: 数据源名称，默认使用主数据源
+      responses:
+        '200':
+          description: 外键信息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForeignKeysResponse'
+
+  /api/admin/schemas/tables/{tableName}/json-schema:
+    get:
+      operationId: generateTableJsonSchema
+      tags: [Schemas]
+      summary: 根据表结构生成 JSON Schema，不持久化
+      parameters:
+        - $ref: '#/components/parameters/TableNamePath'
+        - name: dataSource
+          in: query
+          schema:
+            type: string
+          description: 数据源名称，默认使用主数据源
+      responses:
+        '200':
+          description: 生成的 JSON Schema 字符串
+          content:
+            application/json:
+              schema:
+                type: string
+
+  /api/admin/schemas/{schemaName}/versions:
+    get:
+      operationId: listSchemaVersions
+      tags: [Schemas]
+      summary: 查询 Schema 历史版本
+      parameters:
+        - $ref: '#/components/parameters/SchemaNamePath'
+      responses:
+        '200':
+          description: 版本列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SchemaDefinition'
+
+  # ============ Function API ============
+  /api/admin/functions:
+    get:
+      operationId: listFunctions
+      tags: [Functions]
+      summary: 分页查询函数
+      parameters:
+        - name: keyword
+          in: query
+          schema:
+            type: string
+        - name: category
+          in: query
+          schema:
+            $ref: '#/components/schemas/FunctionCategory'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageResponseFunctionDefinition'
+
+    post:
+      operationId: createFunction
+      tags: [Functions]
+      summary: 注册函数
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FunctionDefinition'
+      responses:
+        '200':
+          description: 注册成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FunctionDefinition'
+
+  /api/admin/functions/{functionName}:
+    get:
+      operationId: getFunction
+      tags: [Functions]
+      summary: 获取函数详情
+      parameters:
+        - $ref: '#/components/parameters/FunctionNamePath'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FunctionDefinition'
+        '404':
+          description: 未找到
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      operationId: updateFunction
+      tags: [Functions]
+      summary: 更新函数
+      parameters:
+        - $ref: '#/components/parameters/FunctionNamePath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FunctionDefinition'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FunctionDefinition'
+
+    delete:
+      operationId: deleteFunction
+      tags: [Functions]
+      summary: 删除函数
+      parameters:
+        - $ref: '#/components/parameters/FunctionNamePath'
+      responses:
+        '204':
+          description: 删除成功
+
+  /api/admin/functions/{functionName}/test:
+    post:
+      operationId: testFunction
+      tags: [Functions]
+      summary: 测试执行函数
+      parameters:
+        - $ref: '#/components/parameters/FunctionNamePath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                inputs:
+                  type: object
+                  additionalProperties: true
+                  description: 函数节点参数（nodeParams），即函数 paramSchema 对应的实例数据
+                directInput:
+                  type: object
+                  additionalProperties: true
+                  description: 直接入参（模拟上游节点输出 / DAG 聚合结果），未传时默认使用 inputs
+                workflowInput:
+                  type: object
+                  additionalProperties: true
+                  description: 工作流原始入参（模拟 workflowInput）
+                declaredDeps:
+                  type: object
+                  additionalProperties: true
+                  description: 声明依赖节点输出（key 为节点 ID，value 为节点输出）
+      responses:
+        '200':
+          description: 测试成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  output:
+                    description: 函数执行输出（任意类型，如对象、数组、字符串、数字等）
+                  error:
+                    type: string
+                  errorType:
+                    type: string
+                    description: 异常类型（异常类简单名）
+                  errorStack:
+                    type: string
+                    description: 异常堆栈摘要（admin 调试用）
+                  durationMs:
+                    type: integer
+                    format: int64
+                    description: 函数执行耗时（毫秒）
+                  logs:
+                    type: array
+                    items:
+                      type: string
+                    description: 函数测试执行日志（输入、输出、异常等）
+                  outputValid:
+                    type: boolean
+                    description: 输出是否符合出参 schema（无出参 schema 时默认为 true）
+                  validationErrors:
+                    type: array
+                    items:
+                      type: string
+                    description: 出参 schema 校验错误列表
+
+  # ============ Decorator API ============
+  /api/admin/decorators:
+    get:
+      operationId: listDecorators
+      tags: [Decorators]
+      summary: 查询装饰器参数 Schema
+      responses:
+        '200':
+          description: 装饰器列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DecoratorDefinition'
+
+  # ============ Instance API ============
+  /api/admin/instances:
+    get:
+      operationId: listInstances
+      tags: [Instances]
+      summary: 查询已注册的业务实例
+      description: 返回当前存活的业务实例列表，可按应用群筛选
+      parameters:
+        - name: group
+          in: query
+          description: 应用群名称（不传则返回全部）
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 实例列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InstanceInfo'
+
+  /api/admin/instances/groups:
+    get:
+      operationId: listInstanceGroups
+      tags: [Instances]
+      summary: 查询已注册的应用群列表
+      responses:
+        '200':
+          description: 应用群列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AppGroup'
+
+  # ============ Execution API ============
+  /api/admin/executions:
+    get:
+      operationId: listExecutions
+      tags: [Executions]
+      summary: 查询执行历史列表
+      parameters:
+        - name: keyword
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: workflowId
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: 执行历史列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageResponseExecutionRecord'
+
+  /api/admin/executions/{executionId}:
+    get:
+      operationId: getExecution
+      tags: [Executions]
+      summary: 查看执行详情
+      parameters:
+        - $ref: '#/components/parameters/ExecutionIdPath'
+      responses:
+        '200':
+          description: 执行详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TraceDetail'
+
+  /api/admin/executions/{executionId}/rerun:
+    post:
+      operationId: rerunExecution
+      tags: [Executions]
+      summary: 从指定节点重放执行
+      parameters:
+        - $ref: '#/components/parameters/ExecutionIdPath'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RerunExecutionRequest'
+      responses:
+        '200':
+          description: 重放结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TraceDetail'
+
+  /api/admin/executions/{executionId}/signal:
+    post:
+      operationId: sendSignal
+      tags: [Executions]
+      summary: 向运行中的工作流发送信号（恢复等待节点）
+      parameters:
+        - $ref: '#/components/parameters/ExecutionIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [signalName]
+              properties:
+                signalName:
+                  type: string
+                  description: 信号名称
+                data:
+                  description: 信号携带的数据（任意类型）
+      responses:
+        '200':
+          description: 信号已发送
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  executionId:
+                    type: string
+                  signalName:
+                    type: string
+                  status:
+                    type: string
+                    enum: [DELIVERED, BUFFERED]
+        '400':
+          description: 信号未被接受（工作流可能未在运行）
+
+  /api/admin/executions/{executionId}/signals/waiting:
+    get:
+      operationId: getWaitingSignals
+      tags: [Executions]
+      summary: 查询工作流正在等待的信号列表
+      parameters:
+        - $ref: '#/components/parameters/ExecutionIdPath'
+      responses:
+        '200':
+          description: 等待中的信号列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  executionId:
+                    type: string
+                  waiting:
+                    type: array
+                    items:
+                      type: string
+                  buffered:
+                    type: array
+                    items:
+                      type: string
+
+  # ============ Monitor API ============
+  /api/admin/monitor/metrics:
+    get:
+      operationId: getMetricsOverview
+      tags: [Monitor]
+      summary: 获取监控指标概览
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricsOverview'
+
+  /api/admin/monitor/metrics/node-latencies:
+    get:
+      operationId: getNodeLatencies
+      tags: [Monitor]
+      summary: 获取节点平均耗时
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NodeLatency'
+
+  /api/admin/monitor/errors:
+    get:
+      operationId: listErrorLogs
+      tags: [Monitor]
+      summary: 查询错误日志
+      parameters:
+        - name: keyword
+          in: query
+          schema:
+            type: string
+        - name: startTime
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: endTime
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageResponseErrorLog'
+
+  /api/admin/monitor/metrics/trend:
+    get:
+      operationId: getMetricsTrend
+      tags: [Monitor]
+      summary: 获取请求量趋势
+      parameters:
+        - name: metric
+          in: query
+          schema:
+            type: string
+            enum: [requests, successRate, latency]
+          description: 指标类型
+        - name: startTime
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: endTime
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: hours
+          in: query
+          schema:
+            type: integer
+          description: 查询最近 N 小时的趋势数据
+        - name: interval
+          in: query
+          schema:
+            type: string
+            enum: [1m, 5m, 15m, 1h, 1d]
+          description: 聚合粒度
+      responses:
+        '200':
+          description: 趋势数据
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricsTrend'
+
+  /api/admin/monitor/traces/{executionId}:
+    get:
+      operationId: getTrace
+      tags: [Monitor]
+      summary: 获取执行链路详情
+      parameters:
+        - name: executionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TraceDetail'
+
+  # ============ Audit API ============
+  /api/admin/audit-logs:
+    get:
+      operationId: listAuditLogs
+      tags: [Audit]
+      summary: 查询审计日志
+      parameters:
+        - name: operator
+          in: query
+          schema:
+            type: string
+        - name: action
+          in: query
+          schema:
+            type: string
+        - name: resourceType
+          in: query
+          schema:
+            type: string
+        - name: startTime
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: endTime
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: 审计日志列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageResponseAuditLog'
+
+  # ============ User API ============
+  /api/admin/current-user:
+    get:
+      operationId: getCurrentUser
+      tags: [User]
+      summary: 获取当前登录用户及权限
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentUser'
+
+  /api/admin/users:
+    get:
+      operationId: listUsers
+      tags: [User]
+      summary: 查询用户列表
+      parameters:
+        - name: keyword
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: 用户列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageResponseUser'
+    post:
+      operationId: createUser
+      tags: [User]
+      summary: 创建用户
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRequest'
+      responses:
+        '200':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+
+  /api/admin/users/{userId}:
+    get:
+      operationId: getUser
+      tags: [User]
+      summary: 获取用户详情
+      parameters:
+        - $ref: '#/components/parameters/UserIdPath'
+      responses:
+        '200':
+          description: 用户详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+    put:
+      operationId: updateUser
+      tags: [User]
+      summary: 更新用户
+      parameters:
+        - $ref: '#/components/parameters/UserIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+    delete:
+      operationId: deleteUser
+      tags: [User]
+      summary: 删除用户
+      parameters:
+        - $ref: '#/components/parameters/UserIdPath'
+      responses:
+        '204':
+          description: 删除成功
+
+  # ============ Role API ============
+  /api/admin/roles:
+    get:
+      operationId: listRoles
+      tags: [Role]
+      summary: 查询角色列表
+      parameters:
+        - name: keyword
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: 角色列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageResponseRole'
+    post:
+      operationId: createRole
+      tags: [Role]
+      summary: 创建角色
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleRequest'
+      responses:
+        '200':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Role'
+
+  /api/admin/roles/{roleId}:
+    get:
+      operationId: getRole
+      tags: [Role]
+      summary: 获取角色详情
+      parameters:
+        - $ref: '#/components/parameters/RoleIdPath'
+      responses:
+        '200':
+          description: 角色详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Role'
+    put:
+      operationId: updateRole
+      tags: [Role]
+      summary: 更新角色
+      parameters:
+        - $ref: '#/components/parameters/RoleIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Role'
+    delete:
+      operationId: deleteRole
+      tags: [Role]
+      summary: 删除角色
+      parameters:
+        - $ref: '#/components/parameters/RoleIdPath'
+      responses:
+        '204':
+          description: 删除成功
+
+components:
+  parameters:
+    Page:
+      name: page
+      in: query
+      description: 页码（从 0 开始）
+      schema:
+        type: integer
+        default: 0
+
+    PageSize:
+      name: pageSize
+      in: query
+      description: 每页条数
+      schema:
+        type: integer
+        default: 20
+
+    InstanceIdPath:
+      name: instanceId
+      in: path
+      required: true
+      description: 业务实例唯一标识
+      schema:
+        type: string
+
+    WorkflowIdPath:
+      name: workflowId
+      in: path
+      required: true
+      schema:
+        type: string
+
+    SchemaNamePath:
+      name: schemaName
+      in: path
+      required: true
+      schema:
+        type: string
+
+    TableNamePath:
+      name: tableName
+      in: path
+      required: true
+      schema:
+        type: string
+
+    FunctionNamePath:
+      name: functionName
+      in: path
+      required: true
+      schema:
+        type: string
+
+    ExecutionIdPath:
+      name: executionId
+      in: path
+      required: true
+      schema:
+        type: string
+
+    UserIdPath:
+      name: userId
+      in: path
+      required: true
+      schema:
+        type: string
+
+    RoleIdPath:
+      name: roleId
+      in: path
+      required: true
+      schema:
+        type: string
+
+  schemas:
+    # ============ 通用响应 ============
+    ErrorResponse:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        status:
+          type: integer
+        error:
+          type: string
+        path:
+          type: string
+
+    # ============ 枚举类型 ============
+    NodeType:
+      type: string
+      enum:
+        - PARAM_VALIDATE
+        - DYNAMIC_VALIDATE
+        - DATA_QUERY
+        - DATA_TRANSFORM
+        - ASSEMBLE_RESPONSE
+        - SCRIPT
+        - CUSTOM
+        - CONDITION_BRANCH
+        - FILTER
+        - PARALLEL
+        - SUB_WORKFLOW
+        - EIP_ROUTER
+        - LOOP
+        - WAIT
+
+    FunctionNodeType:
+      type: string
+      enum:
+        - PARAM_VALIDATE
+        - DYNAMIC_VALIDATE
+        - DATA_QUERY
+        - DATA_TRANSFORM
+        - ASSEMBLE_RESPONSE
+        - SCRIPT
+        - CUSTOM
+        - CONDITION_BRANCH
+        - FILTER
+        - PARALLEL
+        - SUB_WORKFLOW
+        - EIP_ROUTER
+        - LOOP
+        - WAIT
+
+    ErrorStrategy:
+      type: string
+      enum: [FAIL, IGNORE, FALLBACK, RETRY]
+
+    WorkflowCategory:
+      type: string
+      enum: [BUSINESS, META]
+
+    WorkflowScope:
+      type: string
+      enum: [PLATFORM, PRIVATE, MARKETPLACE]
+      description: |
+        工作流作用域：
+        - PLATFORM: 平台内置，全局共享，仅管理员可修改
+        - PRIVATE: 应用私有，绑定到特定 app_group
+        - MARKETPLACE: 市场发布，可被安装
+
+    WorkflowStatus:
+      type: string
+      enum: [DRAFT, ACTIVE, DEPRECATED]
+
+    FunctionCategory:
+      type: string
+      enum: [BUILTIN, CUSTOM, SCRIPT, EXTERNAL]
+
+    FunctionStatus:
+      type: string
+      enum: [ACTIVE, INACTIVE]
+
+    NodeTraceStatus:
+      type: string
+      enum: [SUCCESS, FAILED, SKIPPED, FALLBACK]
+
+    DebugStatus:
+      type: string
+      enum: [RUNNING, COMPLETED, PAUSED, STEP, FAILED]
+
+    PublishType:
+      type: string
+      enum: [ALL, APP_GROUP, INSTANCES]
+      description: |
+        发布目标类型：
+        - ALL: 全量广播
+        - APP_GROUP: 按应用群发布
+        - INSTANCES: 按具体实例发布
+
+    # ============ Workflow 相关 ============
+    Position:
+      type: object
+      properties:
+        x:
+          type: number
+        y:
+          type: number
+
+    FilterRule:
+      type: object
+      required: [field, operator]
+      properties:
+        field:
+          type: string
+          description: 字段名（支持点号嵌套路径，如 user.address.city）
+        operator:
+          type: string
+          description: 操作符
+          enum: [eq, neq, gt, gte, lt, lte, in, notIn, contains, isNull, isNotNull, startsWith, endsWith, regex]
+        value:
+          description: 规则值（与字段值比较的目标）
+        negate:
+          type: boolean
+          default: false
+          description: 是否对当前规则结果取反
+
+    ConditionalNext:
+      type: object
+      required: [target]
+      properties:
+        target:
+          type: string
+          description: 条件为 true 时跳转的目标节点 ID
+        condition:
+          type: string
+          description: JEXL/SpEL 条件表达式（与 rules 二选一）
+        logic:
+          type: string
+          description: 多字段组合逻辑
+          enum: [and, or]
+          default: and
+        negate:
+          type: boolean
+          default: false
+          description: 是否对整体条件结果取反（表达式模式或规则组合模式均生效）
+        rules:
+          type: array
+          description: 结构化规则列表（与 condition 二选一）
+          items:
+            $ref: '#/components/schemas/FilterRule'
+
+    WorkflowNode:
+      type: object
+      required: [id, name, type, functionRef]
+      properties:
+        id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        type:
+          $ref: '#/components/schemas/NodeType'
+        functionRef:
+          type: string
+          minLength: 1
+          maxLength: 256
+        errorStrategy:
+          $ref: '#/components/schemas/ErrorStrategy'
+        timeoutMs:
+          type: integer
+          default: 30000
+          minimum: 0
+        params:
+          type: object
+          additionalProperties: true
+          description: 工作流各节点输入参数（key=nodeId）
+        decorators:
+          type: array
+          items:
+            type: string
+        decoratorParams:
+          type: object
+          additionalProperties: true
+          description: 工作流各节点输入参数（key=nodeId）
+        dependsOn:
+          type: array
+          items:
+            type: string
+        position:
+          $ref: '#/components/schemas/Position'
+        conditionalNexts:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConditionalNext'
+        remark:
+          type: string
+          maxLength: 512
+          description: 节点备注（画布显示用）
+        asyncExecution:
+          type: boolean
+          default: false
+          description: 是否异步执行（true=不阻塞后续节点，异常不中止流程）
+
+    WorkflowTrigger:
+      type: object
+      required: [type]
+      properties:
+        id:
+          type: string
+          maxLength: 128
+        type:
+          $ref: '#/components/schemas/TriggerType'
+        config:
+          type: object
+          additionalProperties: true
+          description: |
+            触发器配置（按类型不同结构不同）：
+            - EVENT: { "eventType": "user.created", "source": "authing" }
+            - WEBHOOK: { "path": "/hooks/my-workflow" }
+        enabled:
+          type: boolean
+          default: true
+
+    TriggerType:
+      type: string
+      enum: [MANUAL, WEBHOOK, EVENT, API]
+      description: |
+        触发器类型：
+        - MANUAL: 手动执行
+        - WEBHOOK: HTTP POST 触发
+        - EVENT: 应用事件触发
+        - API: API 同步调用
+
+    WorkflowDefinition:
+      type: object
+      required: [name, category, protocol, nodes]
+      properties:
+        id:
+          type: string
+          readOnly: true
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        category:
+          $ref: '#/components/schemas/WorkflowCategory'
+        scope:
+          $ref: '#/components/schemas/WorkflowScope'
+        appGroup:
+          type: string
+          maxLength: 128
+          description: 所属应用分组（scope=PRIVATE 时必填）
+        sourceRef:
+          type: string
+          readOnly: true
+          description: 来源引用（安装市场工作流时指向原始 workflowId）
+        protocol:
+          type: string
+          minLength: 1
+          maxLength: 32
+        method:
+          type: string
+          maxLength: 20
+          description: |
+            协议方法。HTTP/HTTPS：标准 HTTP 方法（GET/POST/PUT/DELETE 等）；
+            gRPC：调用类型（UNARY/SERVER_STREAMING 等）；Dubbo：接口方法名（可选）。
+        path:
+          type: string
+          maxLength: 512
+        status:
+          $ref: '#/components/schemas/WorkflowStatus'
+        inputSchema:
+          type: object
+          additionalProperties: true
+          description: 入参 Schema 内容（具体语法由 inputSchemaFormat 决定）
+        inputSchemaFormat:
+          type: string
+          default: json-schema
+          description: 入参 Schema 格式标识（如 json-schema、protobuf、avro，支持扩展自定义格式）
+        outputSchema:
+          type: object
+          additionalProperties: true
+          description: 出参 Schema 内容（具体语法由 outputSchemaFormat 决定）
+        outputSchemaFormat:
+          type: string
+          default: json-schema
+          description: 出参 Schema 格式标识（如 json-schema、protobuf、avro，支持扩展自定义格式）
+        transactionConfig:
+          type: object
+          additionalProperties: true
+          description: |
+            事务配置（TransactionConfig 序列化）。
+            字段示例：{ "propagationBehavior": 0, "isolationLevel": 2, "timeoutMs": 30000, "transactionName": "create-order" }
+            特殊值 { "mode": "SAGA" } 表示使用 Saga 模式。
+        workflowDecorators:
+          type: array
+          items:
+            type: string
+          description: 工作流级装饰器列表（按顺序包裹整段工作流执行）
+        workflowDecoratorParams:
+          type: object
+          additionalProperties:
+            type: object
+            additionalProperties: true
+          description: 工作流级装饰器参数（key=装饰器名，value=参数Map）
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowNode'
+        triggers:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowTrigger'
+          description: 触发器列表（定义工作流的启动方式）
+        publishTarget:
+          $ref: '#/components/schemas/PublishTarget'
+        version:
+          type: integer
+          readOnly: true
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        updatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+        isProtected:
+          type: boolean
+          readOnly: true
+
+    NodeTrace:
+      type: object
+      properties:
+        nodeId:
+          type: string
+        nodeName:
+          type: string
+        status:
+          $ref: '#/components/schemas/NodeTraceStatus'
+        durationMs:
+          type: integer
+        inputs:
+          type: object
+          additionalProperties: true
+          description: 工作流各节点输入参数（key=nodeId）
+        output:
+          type: object
+          additionalProperties: true
+          description: 工作流各节点输入参数（key=nodeId）
+        error:
+          type: string
+
+    DebugResult:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/DebugStatus'
+        snapshot:
+          type: object
+          additionalProperties: true
+          description: 工作流各节点输入参数（key=nodeId）
+        traces:
+          type: array
+          items:
+            $ref: '#/components/schemas/NodeTrace'
+        finalOutput:
+          type: object
+          additionalProperties: true
+          description: 工作流各节点输入参数（key=nodeId）
+        totalDurationMs:
+          type: integer
+
+    DebugExecutionRecord:
+      type: object
+      properties:
+        id:
+          type: string
+        workflowId:
+          type: string
+        timestamp:
+          type: integer
+          format: int64
+        status:
+          type: string
+          enum: [SUCCESS, FAILED]
+        totalDurationMs:
+          type: integer
+        inputs:
+          type: object
+          additionalProperties: true
+          description: 工作流各节点输入参数（key=nodeId）
+        nodeTraces:
+          type: array
+          items:
+            $ref: '#/components/schemas/NodeTrace'
+        finalOutput:
+          type: object
+          additionalProperties: true
+          description: 工作流各节点输入参数（key=nodeId）
+        errorMessage:
+          type: string
+
+    # ============ Instance / Publish 相关 ============
+    InstanceInfo:
+      type: object
+      properties:
+        instanceId:
+          type: string
+          description: 实例唯一标识
+        appGroup:
+          type: string
+          description: 所属应用群
+        host:
+          type: string
+          description: 实例主机地址
+        port:
+          type: integer
+          description: 实例端口
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+          description: 实例元数据
+        lastHeartbeatMs:
+          type: integer
+          format: int64
+          description: 最近一次心跳时间戳（毫秒）
+
+    AppGroup:
+      type: object
+      properties:
+        name:
+          type: string
+          description: 应用群名称
+        instanceCount:
+          type: integer
+          description: 该群下存活实例数
+
+    PublishTarget:
+      type: object
+      description: 发布目标，用于指定工作流/函数推送到哪些实例或应用群
+      properties:
+        type:
+          $ref: '#/components/schemas/PublishType'
+        groups:
+          type: array
+          items:
+            type: string
+          description: 应用群名称列表（type=APP_GROUP 时必填）
+        instanceIds:
+          type: array
+          items:
+            type: string
+          description: 实例 ID 列表（type=INSTANCES 时必填）
+
+    # ============ Schema 相关 ============
+    SchemaType:
+      type: string
+      enum: [INPUT, OUTPUT, EVENT]
+
+    TableColumnMetadata:
+      type: object
+      properties:
+        name:
+          type: string
+          description: 列名
+        dataType:
+          type: string
+          description: 数据库类型名
+        sqlType:
+          type: integer
+          description: java.sql.Types 常量值
+        size:
+          type: integer
+          description: 列长度/精度
+        nullable:
+          type: boolean
+          description: 是否可空
+        defaultValue:
+          type: string
+          description: 默认值
+        comment:
+          type: string
+          description: 列注释
+        ordinalPosition:
+          type: integer
+          description: 列顺序
+        autoIncrement:
+          type: boolean
+          description: 是否自增
+
+    TableDetail:
+      type: object
+      properties:
+        name:
+          type: string
+          description: 表名
+        columns:
+          type: array
+          items:
+            $ref: '#/components/schemas/TableColumnMetadata'
+          description: 列元数据列表
+
+    ForeignKeyInfo:
+      type: object
+      properties:
+        fkName:
+          type: string
+          nullable: true
+          description: 外键约束名
+        sourceTable:
+          type: string
+          description: 来源表名
+        sourceColumn:
+          type: string
+          description: 来源列名
+        targetTable:
+          type: string
+          description: 目标表名
+        targetColumn:
+          type: string
+          description: 目标列名
+        keySeq:
+          type: integer
+          description: 外键列顺序
+
+    ForeignKeysResponse:
+      type: object
+      properties:
+        incoming:
+          type: array
+          items:
+            $ref: '#/components/schemas/ForeignKeyInfo'
+          description: 指向当前表的外键
+        outgoing:
+          type: array
+          items:
+            $ref: '#/components/schemas/ForeignKeyInfo'
+          description: 当前表指向其他表的外键
+
+    SchemaDefinition:
+      type: object
+      required: [schemaName, schemaType, schemaJson]
+      properties:
+        id:
+          type: integer
+          format: int64
+          readOnly: true
+        schemaName:
+          type: string
+          minLength: 1
+          maxLength: 256
+          description: Schema 唯一名称
+        schemaType:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: 类型标签（逗号分隔，如 INPUT,OUTPUT），支持多类型复用
+        schemaFormat:
+          type: string
+          default: json-schema
+          description: Schema 格式标识（如 json-schema、protobuf、avro，支持扩展自定义格式）
+        schemaJson:
+          type: string
+          minLength: 1
+          maxLength: 65535
+          description: Schema 内容（字符串形式，具体语法由 schemaFormat 决定）
+        description:
+          type: string
+          maxLength: 1024
+          nullable: true
+        frozen:
+          type: boolean
+          default: false
+          description: 是否已冻结（锁定），冻结后普通用户不可修改/删除
+        scope:
+          type: string
+          maxLength: 16
+          default: PLATFORM
+          description: 作用域：PLATFORM/PRIVATE
+        appGroup:
+          type: string
+          maxLength: 128
+          description: 所属应用分组（scope=PRIVATE 时必填）
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        updatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+
+    # ============ Function 相关 ============
+    FunctionDefinition:
+      type: object
+      required: [name, category, nodeType, status]
+      properties:
+        id:
+          type: string
+          readOnly: true
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        category:
+          $ref: '#/components/schemas/FunctionCategory'
+        nodeType:
+          $ref: '#/components/schemas/FunctionNodeType'
+        engine:
+          type: string
+          maxLength: 32
+          description: 脚本引擎，如 groovy/javascript
+        script:
+          type: string
+          maxLength: 65535
+          description: 脚本源码
+        config:
+          type: object
+          additionalProperties: true
+          description: 函数配置
+        status:
+          $ref: '#/components/schemas/FunctionStatus'
+        scope:
+          $ref: '#/components/schemas/WorkflowScope'
+        appGroup:
+          type: string
+          description: 所属应用分组（scope=PRIVATE 时必填）
+        sourceRef:
+          type: string
+          readOnly: true
+          description: 来源引用（安装市场函数时指向原始 functionName）
+        publishTarget:
+          $ref: '#/components/schemas/PublishTarget'
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        updatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+
+    # ============ Monitor 相关 ============
+    MetricsOverview:
+      type: object
+      properties:
+        totalRequests:
+          type: integer
+          format: int64
+        totalExecutions:
+          type: integer
+          format: int64
+        successRate:
+          type: number
+          format: double
+        avgDurationMs:
+          type: integer
+          format: int64
+        errorCount:
+          type: integer
+          format: int64
+        p99LatencyMs:
+          type: integer
+          format: int64
+        activeWorkflows:
+          type: integer
+
+    NodeLatency:
+      type: object
+      properties:
+        nodeId:
+          type: string
+        nodeName:
+          type: string
+        functionRef:
+          type: string
+        avgDurationMs:
+          type: integer
+          format: int64
+        p99DurationMs:
+          type: integer
+          format: int64
+        callCount:
+          type: integer
+          format: int64
+
+    ErrorLog:
+      type: object
+      properties:
+        id:
+          type: string
+        time:
+          type: string
+          format: date-time
+        workflowId:
+          type: string
+        workflowName:
+          type: string
+        nodeId:
+          type: string
+        nodeName:
+          type: string
+        nodeType:
+          type: string
+        errorType:
+          type: string
+        message:
+          type: string
+        stackTrace:
+          type: string
+
+    TraceDetail:
+      type: object
+      properties:
+        executionId:
+          type: string
+        workflowName:
+          type: string
+        totalDurationMs:
+          type: integer
+          format: int64
+        status:
+          type: string
+        traces:
+          type: array
+          items:
+            $ref: '#/components/schemas/TraceNode'
+
+    TraceNode:
+      type: object
+      properties:
+        nodeId:
+          type: string
+        nodeName:
+          type: string
+        durationMs:
+          type: integer
+          format: int64
+        status:
+          type: string
+        inputs:
+          type: object
+          additionalProperties: true
+          description: 工作流各节点输入参数（key=nodeId）
+        output:
+          type: object
+          additionalProperties: true
+          description: 工作流各节点输入参数（key=nodeId）
+        error:
+          type: string
+        sql:
+          type: string
+
+    # ============ User 相关 ============
+    CurrentUser:
+      type: object
+      properties:
+        name:
+          type: string
+        avatar:
+          type: string
+        roles:
+          type: array
+          items:
+            type: string
+        permissions:
+          type: array
+          items:
+            type: string
+          description: 当前用户拥有的细粒度权限列表（不含 ROLE_ 前缀）
+        access:
+          $ref: '#/components/schemas/UserAccess'
+
+    UserAccess:
+      type: object
+      properties:
+        canView:
+          type: boolean
+        canEdit:
+          type: boolean
+        canPublish:
+          type: boolean
+        canAdmin:
+          type: boolean
+
+    # ============ 分页响应 ============
+    PageResponseWorkflowDefinition:
+      type: object
+      properties:
+        list:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowDefinition'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        pageSize:
+          type: integer
+
+    PageResponseFunctionDefinition:
+      type: object
+      properties:
+        list:
+          type: array
+          items:
+            $ref: '#/components/schemas/FunctionDefinition'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        pageSize:
+          type: integer
+
+    PageResponseSchemaDefinition:
+      type: object
+      properties:
+        list:
+          type: array
+          items:
+            $ref: '#/components/schemas/SchemaDefinition'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        pageSize:
+          type: integer
+
+    PageResponseDebugExecutionRecord:
+      type: object
+      properties:
+        list:
+          type: array
+          items:
+            $ref: '#/components/schemas/DebugExecutionRecord'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        pageSize:
+          type: integer
+
+    PageResponseErrorLog:
+      type: object
+      properties:
+        list:
+          type: array
+          items:
+            $ref: '#/components/schemas/ErrorLog'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        pageSize:
+          type: integer
+
+    # ============ 新增请求/响应体 ============
+    RollbackRequest:
+      type: object
+      required: [version]
+      properties:
+        version:
+          type: integer
+          minimum: 1
+
+    ImportConfirmRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/WorkflowDefinition'
+          description: 待导入的工作流定义列表
+
+    OpenAPIExportRequest:
+      type: object
+      required: [ids]
+      properties:
+        ids:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            type: string
+        title:
+          type: string
+          maxLength: 256
+        version:
+          type: string
+          maxLength: 32
+
+    DebugWorkflowRequest:
+      type: object
+      properties:
+        inputs:
+          type: object
+          additionalProperties: true
+          description: 工作流各节点输入参数（key=nodeId）
+        breakpoints:
+          type: array
+          items:
+            type: string
+          description: 断点节点 ID 列表
+        mockConfig:
+          $ref: '#/components/schemas/MockConfig'
+
+    DebugNodeRequest:
+      type: object
+      required: [nodeId]
+      properties:
+        nodeId:
+          type: string
+          minLength: 1
+          maxLength: 128
+        inputData:
+          type: object
+          additionalProperties: true
+          description: 工作流各节点输入参数（key=nodeId）
+        mockConfig:
+          $ref: '#/components/schemas/MockConfig'
+
+    DebugStepRequest:
+      type: object
+      required: [snapshot]
+      properties:
+        snapshot:
+          type: object
+          additionalProperties: true
+          description: 工作流各节点输入参数（key=nodeId）
+        breakpoints:
+          type: array
+          items:
+            type: string
+
+    DebugRerunRequest:
+      type: object
+      required: [nodeId]
+      properties:
+        nodeId:
+          type: string
+          minLength: 1
+          maxLength: 128
+        snapshot:
+          type: object
+          additionalProperties: true
+          description: 工作流各节点输入参数（key=nodeId）
+        overrideInput:
+          type: object
+          additionalProperties: true
+          description: 工作流各节点输入参数（key=nodeId）
+
+    MockConfig:
+      type: object
+      description: 调试 Mock 配置
+      properties:
+        enabled:
+          type: boolean
+          default: true
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/MockRule'
+
+    MockRule:
+      type: object
+      description: 单条 Mock 规则
+      properties:
+        id:
+          type: string
+          description: 规则唯一标识
+        functionRef:
+          type: string
+          description: 目标函数引用
+        enabled:
+          type: boolean
+          default: true
+        condition:
+          $ref: '#/components/schemas/MockCondition'
+        response:
+          description: 静态响应值（与 responseTemplate 二选一）
+        responseTemplate:
+          type: string
+          description: 响应模板字符串，支持 ${var} 和 #{jexlExpr}
+        delayMs:
+          type: integer
+          default: 0
+
+    MockCondition:
+      type: object
+      description: Mock 命中条件
+      properties:
+        expression:
+          type: string
+          description: JEXL 条件表达式
+        fieldMatchers:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/FieldMatcher'
+
+    FieldMatcher:
+      type: object
+      description: 字段值匹配器
+      properties:
+        exact:
+          type: array
+          items:
+            type: string
+        startsWith:
+          type: array
+          items:
+            type: string
+        endsWith:
+          type: array
+          items:
+            type: string
+        contains:
+          type: array
+          items:
+            type: string
+
+    RerunExecutionRequest:
+      type: object
+      properties:
+        nodeId:
+          type: string
+
+    # ============ 装饰器 ============
+    DecoratorDefinition:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        group:
+          type: string
+          maxLength: 64
+        label:
+          type: string
+          maxLength: 128
+        description:
+          type: string
+          maxLength: 512
+        paramSchema:
+          type: object
+          additionalProperties: true
+          description: 装饰器参数 JSON Schema
+
+    # ============ 执行记录 ============
+    ExecutionRecord:
+      type: object
+      properties:
+        executionId:
+          type: string
+        workflowId:
+          type: string
+        workflowName:
+          type: string
+        status:
+          type: string
+        totalDurationMs:
+          type: integer
+          format: int64
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+
+    PageResponseExecutionRecord:
+      type: object
+      properties:
+        list:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExecutionRecord'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        pageSize:
+          type: integer
+
+    # ============ 监控 ============
+    MetricsTrend:
+      type: object
+      properties:
+        metric:
+          type: string
+        interval:
+          type: string
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrendPoint'
+
+    TrendPoint:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        value:
+          type: number
+          format: double
+
+    # ============ 审计 ============
+    AuditLog:
+      type: object
+      properties:
+        id:
+          type: string
+        operator:
+          type: string
+        action:
+          type: string
+        resourceType:
+          type: string
+        resourceId:
+          type: string
+        detail:
+          type: string
+        ip:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+
+    PageResponseAuditLog:
+      type: object
+      properties:
+        list:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditLog'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        pageSize:
+          type: integer
+
+    # ============ 用户/角色 ============
+    User:
+      type: object
+      required: [username]
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        nickname:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        status:
+          type: string
+          enum: [ACTIVE, INACTIVE]
+        roles:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    UserRequest:
+      type: object
+      required: [username]
+      properties:
+        username:
+          type: string
+          minLength: 1
+          maxLength: 64
+        nickname:
+          type: string
+          maxLength: 64
+        email:
+          type: string
+          maxLength: 128
+        phone:
+          type: string
+          maxLength: 32
+        status:
+          type: string
+          enum: [ACTIVE, INACTIVE]
+        roleIds:
+          type: array
+          items:
+            type: string
+
+    PageResponseUser:
+      type: object
+      properties:
+        list:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        pageSize:
+          type: integer
+
+    Role:
+      type: object
+      required: [name]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        code:
+          type: string
+        description:
+          type: string
+        permissions:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    RoleRequest:
+      type: object
+      required: [name, code]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 64
+        code:
+          type: string
+          minLength: 1
+          maxLength: 64
+        description:
+          type: string
+          maxLength: 256
+        permissions:
+          type: array
+          maxItems: 100
+          items:
+            type: string
+
+    PageResponseRole:
+      type: object
+      properties:
+        list:
+          type: array
+          items:
+            $ref: '#/components/schemas/Role'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        pageSize:
+          type: integer
+
+    # ============ Auth ============
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          description: 用户名
+        password:
+          type: string
+          description: 密码
+
+    LoginResponse:
+      type: object
+      required: [token, type]
+      properties:
+        token:
+          type: string
+          description: JWT 访问令牌
+        type:
+          type: string
+          example: Bearer
+          description: 令牌类型
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

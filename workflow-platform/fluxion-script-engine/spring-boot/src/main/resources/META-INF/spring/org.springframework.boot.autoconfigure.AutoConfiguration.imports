@@ -1,0 +1,2 @@
+com.fluxion.script.config.ScriptEngineAutoConfiguration
+com.fluxion.script.config.FunctionConfigApplierConfiguration

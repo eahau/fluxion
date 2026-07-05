@@ -1,0 +1,177 @@
+# Fluxion Kubernetes Deployment — Native Image 模式
+# 用法: kubectl apply -f deploy/k8s/
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: fluxion
+  labels:
+    app: fluxion
+
+---
+# ConfigMap — 非敏感配置
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluxion-admin-config
+  namespace: fluxion
+data:
+  SPRING_PROFILES_ACTIVE: "prod"
+  SPRING_DATASOURCE_URL: "jdbc:mysql://mysql.fluxion.svc.cluster.local:3306/fluxion?useSSL=false&serverTimezone=Asia/Shanghai"
+  SPRING_DATA_REDIS_HOST: "redis-master.fluxion.svc.cluster.local"
+  SPRING_DATA_REDIS_PORT: "6379"
+  SPRING_FLYWAY_ENABLED: "true"
+
+---
+# Secret — 敏感配置（生产环境应使用 SealedSecrets 或 External Secrets）
+apiVersion: v1
+kind: Secret
+metadata:
+  name: fluxion-admin-secret
+  namespace: fluxion
+type: Opaque
+stringData:
+  SPRING_DATASOURCE_USERNAME: "fluxion"
+  SPRING_DATASOURCE_PASSWORD: "fluxion123"  # 生产请替换
+
+---
+# Deployment — Native Image 零 JRE
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fluxion-admin
+  namespace: fluxion
+  labels:
+    app: fluxion-admin
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: fluxion-admin
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: fluxion-admin
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/actuator/prometheus"
+    spec:
+      containers:
+        - name: fluxion-admin
+          image: fluxion-admin:native
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              name: http
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: fluxion-admin-config
+            - secretRef:
+                name: fluxion-admin-secret
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8080
+            initialDelaySeconds: 1
+            periodSeconds: 2
+            failureThreshold: 10
+
+---
+# Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: fluxion-admin
+  namespace: fluxion
+  labels:
+    app: fluxion-admin
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 8080
+      protocol: TCP
+      name: http
+  selector:
+    app: fluxion-admin
+
+---
+# HPA — 自动水平扩缩
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: fluxion-admin
+  namespace: fluxion
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: fluxion-admin
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+
+---
+# Ingress — Nginx Ingress Controller
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: fluxion-admin
+  namespace: fluxion
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: fluxion.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: fluxion-admin
+                port:
+                  number: 80

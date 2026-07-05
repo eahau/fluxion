@@ -1,0 +1,3 @@
+com.fluxion.redis.config.RedisWorkflowAutoConfiguration
+com.fluxion.redis.lettuce.LettuceWorkflowAutoConfiguration
+com.fluxion.redis.redisson.RedissonWorkflowAutoConfiguration

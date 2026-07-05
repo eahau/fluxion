@@ -1,0 +1,35 @@
+# ============ Build output ============
+# Eclipse/STS 编译输出 + Spring Boot AOT processAot 生成的源码镜像
+# （AOT 输出已重定向到 build/aot/，此规则仅清理历史遗留）
+bin/
+
+# ============ Gradle ============
+.gradle/
+build/
+# 忽略所有目录下的build文件夹
+**/src/main/**/build/
+**/src/test/**/build/
+# 仅保留wrapper配置文件，忽略jar包
+gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/
+!gradle/wrapper/gradle-wrapper.properties
+
+# ============ Kotlin ============
+.kotlin/
+
+# ============ IDE ============
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+
+# ============ OS ============
+.DS_Store
+Thumbs.db
+
+# ============ Local Config ============
+application-local.yaml
+application-local.yml
+.env
+.env.local

@@ -1,0 +1,126 @@
+server:
+  port: 7070
+
+spring:
+  application:
+    name: workflow-platform
+
+  # 当请求没有匹配到任何 Handler 时抛出 NoHandlerFoundException，
+  # 以便 GlobalExceptionHandler 统一转换为 AdminErrorResponse 格式
+  mvc:
+    throw-exception-if-no-handler-found: true
+  web:
+    resources:
+      add-mappings: false
+
+  # ─── 数据库 ────────────────────────────────────────────────────────
+  datasource:
+    url: jdbc:mysql://localhost:3306/workflow_platform?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: ${DB_USER:root}
+    password: ${DB_PASSWORD:password}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+  # ─── JPA ────────────────────────────────────────────────────────────
+  jpa:
+    hibernate:
+      ddl-auto: validate   # Flyway 管理 DDL，JPA 只做校验
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: false
+
+  # ─── Flyway ─────────────────────────────────────────────────────────
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    # 迁移脚本中的 ${...} 是文档示例占位符，不做 Flyway 占位符替换
+    placeholder-replacement: false
+
+  # ─── Redis ──────────────────────────────────────────────────────────
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 2
+
+  # ─── Cache（Caffeine L1 + Redis L2） ────────────────────────────────
+  cache:
+    type: caffeine
+    caffeine:
+      spec: maximumSize=1000,expireAfterWrite=5m
+    cache-names:
+      - wfDefinition
+      - wfBinding
+      - wfFunction
+      - wfSchema
+
+  # ─── Security ────────────────────────────────────────────────────────
+  security:
+    filter:
+      order: 1
+
+# ─── ACL 配置 ────────────────────────────────────────────────────────────────
+fluxion:
+  acl:
+    enabled: true  # false = 全放行（替代 @Profile("local")）
+    provider: local  # local | remote
+    remote:
+      base-url: http://acl-service:8080  # 远程 ACL 地址
+    disabled-management: []  # 禁用的本地管理项：[user, role, permission, tenant, group]
+
+# ─── 工作流平台配置 ────────────────────────────────────────────────────────
+workflow:
+  # 执行日志存储模式：log（默认，SLF4J） | db（写入 wf_execution_log 表）
+  execution-log:
+    store: log
+
+  # 默认节点超时（毫秒）
+  node:
+    default-timeout-ms: 30000
+
+  # 重试配置
+  retry:
+    wheel-tick-duration-ms: 100
+    wheel-buckets-per-wheel: 512
+
+  # 配置中心切换：通过 Spring Profile 激活
+  #   默认（无 profile）：HTTP 自举模式
+  #   spring.profiles.active=nacos：Nacos 模式（详见 application-nacos.yaml）
+  #   spring.profiles.active=apollo：Apollo 模式（详见 application-apollo.yaml）
+
+  # 实例角色：admin 表示管理节点，worker 表示业务工作节点
+  # workflow-admin 作为管理后台，默认以 admin 角色启动
+  instance:
+    role: admin
+
+# ─── 管理端点 ─────────────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+  # ─── 分布式追踪 ──────────────────────────────────────────────────────
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLE_RATE:1.0}   # 开发环境 100%，生产环境建议 0.1
+    propagation:
+      type: w3c                                  # W3C TraceContext 标准
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}

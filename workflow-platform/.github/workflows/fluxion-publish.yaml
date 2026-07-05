@@ -1,0 +1,105 @@
+# ============================================================
+# Fluxion Maven Publish — 发布 JAR 到 GitHub Packages
+# ============================================================
+#
+# 触发条件：
+#   - 创建 Release（tag: v*）
+#   - 手动触发（可指定版本号）
+#
+# 发布目标：
+#   - GitHub Packages（ghcr.io/maven）
+#   - 可选：私有 Nexus / Artifactory
+#
+# 发布的模块（库模块，不含应用模块）：
+#   fluxion-core, fluxion-core-spring-boot,
+#   fluxion-adapter-spi, fluxion-adapter-http-core,
+#   fluxion-builtin-functions-core, ...
+#
+
+name: Publish to Maven
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '发布版本号（如 1.0.0，留空则用 SNAPSHOT）'
+        required: false
+        default: ''
+
+env:
+  WORKDIR: workflow-platform
+
+jobs:
+
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write  # 需要写权限推送到 GitHub Packages
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event_name }}" = "release" ]; then
+            # 从 tag 提取版本号（v1.0.0 → 1.0.0）
+            TAG="${{ github.event.release.tag_name }}"
+            echo "version=${TAG#v}" >> $GITHUB_OUTPUT
+          else
+            echo "version=1.0.0-SNAPSHOT" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run tests
+        working-directory: ${{ env.WORKDIR }}
+        run: ./gradlew test --no-daemon
+
+      - name: Publish to GitHub Packages
+        working-directory: ${{ env.WORKDIR }}
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Publishing version: $RELEASE_VERSION"
+          ./gradlew publishAllPublicationsToGitHubPackagesRepository --no-daemon
+
+      - name: Publish summary
+        run: |
+          echo "## Maven Publish Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version**: ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Registry**: GitHub Packages" >> $GITHUB_STEP_SUMMARY
+          echo "- **Group**: com.fluxion" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Usage" >> $GITHUB_STEP_SUMMARY
+          echo '```kotlin' >> $GITHUB_STEP_SUMMARY
+          echo "repositories {" >> $GITHUB_STEP_SUMMARY
+          echo "    maven {" >> $GITHUB_STEP_SUMMARY
+          echo "        url = uri(\"https://maven.pkg.github.com/${{ github.repository }}\")" >> $GITHUB_STEP_SUMMARY
+          echo "        credentials {" >> $GITHUB_STEP_SUMMARY
+          echo "            username = project.findProperty(\"gpr.user\") as String?" >> $GITHUB_STEP_SUMMARY
+          echo "            password = project.findProperty(\"gpr.token\") as String?" >> $GITHUB_STEP_SUMMARY
+          echo "        }" >> $GITHUB_STEP_SUMMARY
+          echo "    }" >> $GITHUB_STEP_SUMMARY
+          echo "}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "dependencies {" >> $GITHUB_STEP_SUMMARY
+          echo "    implementation(\"com.fluxion:fluxion-core:${{ steps.version.outputs.version }}\")" >> $GITHUB_STEP_SUMMARY
+          echo "}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,38 @@
+{
+  "id": "demo-hello-world",
+  "name": "Hello World 示例工作流",
+  "category": "BUSINESS",
+  "protocol": "HTTP",
+  "method": "GET",
+  "path": "/api/demo/hello",
+  "status": "DRAFT",
+  "version": 1,
+  "isProtected": false,
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "description": "问候名称"
+      }
+    }
+  },
+  "outputSchema": {
+    "type": "object"
+  },
+  "nodes": [
+    {
+      "id": "fetch",
+      "name": "获取示例数据",
+      "type": "CUSTOM",
+      "functionRef": "builtin:httpCall",
+      "timeoutMs": 10000,
+      "params": {
+        "url": "https://httpbin.org/get",
+        "method": "GET",
+        "timeout": 5000
+      },
+      "dependsOn": []
+    }
+  ]
+}

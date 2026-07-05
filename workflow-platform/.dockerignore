@@ -1,0 +1,20 @@
+# Gradle
+.gradle/
+build/
+**/build/
+**/bin/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Node
+workflow-admin-ui/
+
+# Git
+.git/
+.gitignore
+
+# OS
+.DS_Store

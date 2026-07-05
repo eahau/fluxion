@@ -1,0 +1,1531 @@
+/* ═══════════════════════════════════════════════════════════════
+   设计令牌（Design Tokens）：浅色 / 深色模式统一变量
+   所有自定义组件禁止硬编码颜色，统一通过以下变量引用。
+   深色模式通过 document.body 上的 .fluxion-dark 类激活。
+   ═══════════════════════════════════════════════════════════════ */
+:root {
+  /* 背景 */
+  --fluxion-bg: #f5f6fa;
+  --fluxion-bg-elevated: #ffffff;
+  --fluxion-bg-sider: #ffffff;
+  --fluxion-bg-header: #ffffff;
+  --fluxion-surface: #ffffff;
+  --fluxion-surface-hover: #f5f5f5;
+
+  /* 文字 */
+  --fluxion-text: #1e293b;
+  --fluxion-text-secondary: #64748b;
+  --fluxion-text-muted: #94a3b8;
+  --fluxion-text-inverse: #ffffff;
+
+  /* 边框 */
+  --fluxion-border: #e2e8f0;
+  --fluxion-border-light: #f0f0f0;
+
+  /* 主题 */
+  --fluxion-primary: #6366f1;
+  --fluxion-primary-light: #818cf8;
+  --fluxion-primary-hover: #4f46e5;
+}
+
+.fluxion-dark {
+  --fluxion-bg: #0f172a;
+  --fluxion-bg-elevated: #1e293b;
+  --fluxion-bg-sider: #0f172a;
+  --fluxion-bg-header: #1e293b;
+  --fluxion-surface: #1e293b;
+  --fluxion-surface-hover: #334155;
+
+  --fluxion-text: rgba(255, 255, 255, 0.92);
+  --fluxion-text-secondary: rgba(255, 255, 255, 0.65);
+  --fluxion-text-muted: rgba(255, 255, 255, 0.45);
+  --fluxion-text-inverse: #0f172a;
+
+  --fluxion-border: rgba(255, 255, 255, 0.08);
+  --fluxion-border-light: rgba(255, 255, 255, 0.06);
+
+  --fluxion-primary: #818cf8;
+  --fluxion-primary-light: #a5b4fc;
+  --fluxion-primary-hover: #6366f1;
+}
+
+/* ─── 侧边栏菜单：浅色品牌主题，与主界面视觉统一 ─────────── */
+
+/* 侧边栏整体背景 */
+.ant-layout-sider.fluxion-sider {
+  background: #fff !important;
+}
+
+/* 菜单基础样式：白底深字 */
+.fluxion-sider .ant-menu {
+  background: transparent !important;
+  color: rgba(0, 0, 0, 0.65) !important;
+}
+
+/* 菜单项悬停：品牌色淡底 */
+.fluxion-sider .ant-menu-item:hover {
+  background-color: rgba(99, 102, 241, 0.06) !important;
+  color: #6366f1 !important;
+}
+
+/* 菜单项选中：品牌色淡底 + 品牌色文字 */
+.fluxion-sider .ant-menu-item-selected {
+  background-color: rgba(99, 102, 241, 0.08) !important;
+  color: #6366f1 !important;
+  font-weight: 600;
+}
+
+/* 选中项右侧指示条用品牌色 */
+.fluxion-sider .ant-menu-item-selected::after {
+  border-right-color: #6366f1 !important;
+}
+
+/* 图标颜色跟随 */
+.fluxion-sider .ant-menu-item-selected .anticon,
+.fluxion-sider .ant-menu-item:hover .anticon {
+  color: #6366f1 !important;
+}
+
+/* 链接颜色继承 */
+.fluxion-sider .ant-menu-item a {
+  color: inherit !important;
+}
+
+/* ─── 深色主题：通过 .fluxion-dark 类名激活 ───────────────── */
+/*
+ * 统一色板：
+ *   L0 底色   #0f172a  content 区域
+ *   L1 表面   #1e293b  卡片、header、表头
+ *   L2 浮层   #334155  hover、elevated
+ *   主文字    rgba(255,255,255,0.92)
+ *   副文字    rgba(255,255,255,0.65)
+ *   弱文字    rgba(255,255,255,0.45)
+ *   品牌色    #818cf8  (indigo-400)
+ *   品牌悬停  #a5b4fc  (indigo-300)
+ *   边框      rgba(255,255,255,0.08)
+ */
+
+/* ── 基础背景层 ── */
+.fluxion-dark .ant-layout-sider.fluxion-sider {
+  background: #0f172a !important;
+}
+.fluxion-dark .fluxion-header {
+  background: #1e293b !important;
+  border-bottom-color: rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.4) !important;
+}
+.fluxion-dark .fluxion-content {
+  background: #0f172a !important;
+}
+
+/* ── 侧边栏菜单 ── */
+.fluxion-dark.ant-layout .ant-layout-sider.fluxion-sider,
+.fluxion-dark .ant-layout-sider.fluxion-sider {
+  background: #0f172a !important;
+}
+/* 覆盖 Ant Design theme="light" 的内联背景 */
+.fluxion-dark .fluxion-sider .ant-layout-sider-children {
+  background: #0f172a !important;
+}
+.fluxion-dark .fluxion-sider .ant-menu,
+.fluxion-dark .fluxion-sider .ant-menu-light {
+  background: transparent !important;
+  color: rgba(255, 255, 255, 0.65) !important;
+}
+.fluxion-dark .fluxion-sider .ant-menu-item {
+  color: rgba(255, 255, 255, 0.65) !important;
+}
+.fluxion-dark .fluxion-sider .ant-menu-item:hover {
+  background-color: rgba(129, 140, 248, 0.12) !important;
+  color: #a5b4fc !important;
+}
+.fluxion-dark .fluxion-sider .ant-menu-item-selected {
+  background-color: rgba(129, 140, 248, 0.18) !important;
+  color: #a5b4fc !important;
+  font-weight: 600;
+}
+.fluxion-dark .fluxion-sider .ant-menu-item-selected::after {
+  border-right-color: #818cf8 !important;
+}
+.fluxion-dark .fluxion-sider .ant-menu-item-selected .anticon,
+.fluxion-dark .fluxion-sider .ant-menu-item:hover .anticon {
+  color: #a5b4fc !important;
+}
+.fluxion-dark .fluxion-sider .ant-menu-item .ant-menu-item-icon,
+.fluxion-dark .fluxion-sider .ant-menu-item .anticon {
+  color: rgba(255, 255, 255, 0.65) !important;
+}
+.fluxion-dark .fluxion-sider .ant-menu-item a {
+  color: inherit !important;
+}
+
+/* ── Header 内部元素 ── */
+.fluxion-dark .fluxion-header .ant-breadcrumb,
+.fluxion-dark .fluxion-header .ant-breadcrumb a,
+.fluxion-dark .fluxion-header .ant-breadcrumb-separator {
+  color: rgba(255, 255, 255, 0.65) !important;
+}
+.fluxion-dark .fluxion-header .ant-typography {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+.fluxion-dark .fluxion-search-box {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  color: rgba(255, 255, 255, 0.45) !important;
+}
+
+/* ── 排版 ── */
+.fluxion-dark .ant-typography {
+  color: rgba(255, 255, 255, 0.92);
+}
+.fluxion-dark .ant-typography-secondary,
+.fluxion-dark .ant-typography.ant-typography-secondary {
+  color: rgba(255, 255, 255, 0.45) !important;
+}
+
+/* ── 卡片 ── */
+.fluxion-dark .ant-card {
+  background: #1e293b !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+.fluxion-dark .ant-card-head {
+  border-bottom-color: rgba(255, 255, 255, 0.08) !important;
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+.fluxion-dark .ant-card-head-title {
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+.fluxion-dark .ant-card-body {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+.fluxion-dark .ant-card-actions {
+  background: rgba(255, 255, 255, 0.02) !important;
+  border-top-color: rgba(255, 255, 255, 0.08) !important;
+}
+.fluxion-dark .ant-card-actions > li {
+  color: rgba(255, 255, 255, 0.65) !important;
+}
+
+/* ── 表格 ── */
+.fluxion-dark .ant-table {
+  background: transparent !important;
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+.fluxion-dark .ant-table-thead > tr > th {
+  background: rgba(255, 255, 255, 0.04) !important;
+  color: rgba(255, 255, 255, 0.65) !important;
+  border-bottom-color: rgba(255, 255, 255, 0.08) !important;
+}
+.fluxion-dark .ant-table-tbody > tr > td {
+  border-bottom-color: rgba(255, 255, 255, 0.06) !important;
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+.fluxion-dark .ant-table-tbody > tr:hover > td {
+  background: rgba(255, 255, 255, 0.04) !important;
+}
+.fluxion-dark .ant-table-placeholder {
+  background: transparent !important;
+}
+.fluxion-dark .ant-empty-description {
+  color: rgba(255, 255, 255, 0.45) !important;
+}
+
+/* ── 表单控件 ── */
+.fluxion-dark .ant-input,
+.fluxion-dark .ant-input-affix-wrapper,
+.fluxion-dark .ant-select-selector,
+.fluxion-dark .ant-input-number,
+.fluxion-dark .ant-picker {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+.fluxion-dark .ant-input::placeholder,
+.fluxion-dark .ant-input-number::placeholder {
+  color: rgba(255, 255, 255, 0.35) !important;
+}
+.fluxion-dark .ant-select-selection-placeholder {
+  color: rgba(255, 255, 255, 0.35) !important;
+}
+.fluxion-dark .ant-select-arrow,
+.fluxion-dark .ant-picker-suffix {
+  color: rgba(255, 255, 255, 0.45) !important;
+}
+.fluxion-dark .ant-form-item-label > label {
+  color: rgba(255, 255, 255, 0.65) !important;
+}
+.fluxion-dark .ant-form-item-explain {
+  color: rgba(255, 255, 255, 0.45) !important;
+}
+.fluxion-dark .ant-input-group-addon,
+.fluxion-dark .ant-input-group-addon {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  color: rgba(255, 255, 255, 0.65) !important;
+}
+
+/* ── 下拉菜单 / 弹出层 ── */
+.fluxion-dark .ant-dropdown-menu {
+  background: #1e293b !important;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.fluxion-dark .ant-dropdown-menu-item {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+.fluxion-dark .ant-dropdown-menu-item:hover {
+  background: rgba(255, 255, 255, 0.06) !important;
+}
+.fluxion-dark .ant-dropdown-menu-item-danger {
+  color: #f87171 !important;
+}
+.fluxion-dark .ant-select-dropdown {
+  background: #1e293b !important;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.fluxion-dark .ant-select-item {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+.fluxion-dark .ant-select-item-option-active {
+  background: rgba(255, 255, 255, 0.06) !important;
+}
+.fluxion-dark .ant-select-item-option-selected {
+  background: rgba(129, 140, 248, 0.15) !important;
+  color: #a5b4fc !important;
+}
+
+/* ── Modal ── */
+.fluxion-dark .ant-modal-content {
+  background: #1e293b !important;
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+.fluxion-dark .ant-modal-header {
+  background: #1e293b !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+.fluxion-dark .ant-modal-title {
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+.fluxion-dark .ant-modal-close-x {
+  color: rgba(255, 255, 255, 0.45) !important;
+}
+.fluxion-dark .ant-modal-footer {
+  border-top-color: rgba(255, 255, 255, 0.08) !important;
+}
+.fluxion-dark .ant-modal-body {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+
+/* ── Tag ── */
+.fluxion-dark .ant-tag {
+  border-color: rgba(255, 255, 255, 0.15);
+}
+.fluxion-dark .ant-tag-default {
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: rgba(255, 255, 255, 0.65) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* ── Badge ── */
+.fluxion-dark .ant-badge-count {
+  box-shadow: 0 0 0 2px #1e293b !important;
+}
+
+/* ── Button ── */
+.fluxion-dark .ant-btn-default {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+.fluxion-dark .ant-btn-default:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: #fff !important;
+}
+.fluxion-dark .ant-btn-text {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+.fluxion-dark .ant-btn-text:hover {
+  background: rgba(255, 255, 255, 0.06) !important;
+}
+
+/* ── Tabs ── */
+.fluxion-dark .ant-tabs-tab {
+  color: rgba(255, 255, 255, 0.45) !important;
+}
+.fluxion-dark .ant-tabs-tab:hover {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+.fluxion-dark .ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: #818cf8 !important;
+}
+.fluxion-dark .ant-tabs-ink-bar {
+  background: #818cf8 !important;
+}
+.fluxion-dark .ant-tabs-nav::before {
+  border-bottom-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* ── Segmented ── */
+.fluxion-dark .ant-segmented {
+  background: rgba(255, 255, 255, 0.06) !important;
+}
+.fluxion-dark .ant-segmented-item {
+  color: rgba(255, 255, 255, 0.65) !important;
+}
+.fluxion-dark .ant-segmented-item-selected {
+  background: rgba(129, 140, 248, 0.2) !important;
+  color: #a5b4fc !important;
+}
+
+/* ── Statistic ── */
+.fluxion-dark .ant-statistic-title {
+  color: rgba(255, 255, 255, 0.45) !important;
+}
+.fluxion-dark .ant-statistic-content {
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+
+/* ── Divider ── */
+.fluxion-dark .ant-divider {
+  border-top-color: rgba(255, 255, 255, 0.08) !important;
+  color: rgba(255, 255, 255, 0.45) !important;
+}
+
+/* ── List ── */
+.fluxion-dark .ant-list-item {
+  border-bottom-color: rgba(255, 255, 255, 0.06) !important;
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+
+/* ── Tooltip ── */
+.fluxion-dark .ant-tooltip-inner {
+  background: #334155 !important;
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+
+/* ── Progress ── */
+.fluxion-dark .ant-progress-text {
+  color: rgba(255, 255, 255, 0.65) !important;
+}
+.fluxion-dark .ant-progress-outer {
+  color: rgba(255, 255, 255, 0.65) !important;
+}
+
+/* ── Pagination ── */
+.fluxion-dark .ant-pagination-item {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+.fluxion-dark .ant-pagination-item a {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+.fluxion-dark .ant-pagination-item-active {
+  background: rgba(129, 140, 248, 0.2) !important;
+  border-color: #818cf8 !important;
+}
+.fluxion-dark .ant-pagination-item-active a {
+  color: #a5b4fc !important;
+}
+.fluxion-dark .ant-pagination-prev .ant-pagination-item-link,
+.fluxion-dark .ant-pagination-next .ant-pagination-item-link {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  color: rgba(255, 255, 255, 0.65) !important;
+}
+.fluxion-dark .ant-pagination-options .ant-select-selector {
+  background: rgba(255, 255, 255, 0.06) !important;
+}
+
+/* ── Radio / Checkbox ── */
+.fluxion-dark .ant-radio-wrapper,
+.fluxion-dark .ant-checkbox-wrapper {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+.fluxion-dark .ant-radio-inner {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(255, 255, 255, 0.25) !important;
+}
+.fluxion-dark .ant-radio-checked .ant-radio-inner {
+  border-color: #818cf8 !important;
+}
+.fluxion-dark .ant-radio-checked .ant-radio-inner::after {
+  background: #818cf8 !important;
+}
+.fluxion-dark .ant-checkbox-inner {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(255, 255, 255, 0.25) !important;
+}
+.fluxion-dark .ant-checkbox-checked .ant-checkbox-inner {
+  background: #818cf8 !important;
+  border-color: #818cf8 !important;
+}
+
+/* ── 全局搜索弹窗 (深色适配) ── */
+.fluxion-dark .global-search-overlay > div {
+  background: #1e293b !important;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.fluxion-dark .global-search-overlay .ant-input {
+  background: transparent !important;
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+.fluxion-dark .global-search-overlay .ant-input::placeholder {
+  color: rgba(255, 255, 255, 0.35) !important;
+}
+
+/* ── Scrollbar (深色) ── */
+.fluxion-dark ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+}
+.fluxion-dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* ── 工作流设计器页面深色主题 ── */
+/* 设计器根容器 */
+.fluxion-dark #workflow-designer-root {
+  background: var(--fluxion-bg) !important;
+}
+/* 设计器 Toolbar */
+.fluxion-dark .fluxion-designer-toolbar {
+  background: var(--fluxion-bg-elevated) !important;
+  border-bottom-color: var(--fluxion-border) !important;
+}
+.fluxion-dark .fluxion-designer-toolbar .ant-input {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: var(--fluxion-border) !important;
+  color: var(--fluxion-text) !important;
+}
+.fluxion-dark .fluxion-designer-toolbar .ant-btn-default {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+  color: var(--fluxion-text-secondary) !important;
+}
+.fluxion-dark .fluxion-designer-toolbar .ant-btn-default:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: var(--fluxion-text-inverse) !important;
+}
+.fluxion-dark .fluxion-designer-toolbar .ant-select-selector {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: var(--fluxion-border) !important;
+  color: var(--fluxion-text-secondary) !important;
+}
+.fluxion-dark .fluxion-designer-toolbar .ant-select-arrow {
+  color: var(--fluxion-text-muted) !important;
+}
+.fluxion-dark .fluxion-designer-toolbar .ant-divider {
+  border-color: var(--fluxion-border) !important;
+}
+/* 画布区域 */
+.fluxion-dark .fluxion-designer-canvas {
+  background: var(--fluxion-bg) !important;
+}
+/* ReactFlow 控件深色适配 */
+.fluxion-dark .react-flow__minimap {
+  background: var(--fluxion-bg-elevated) !important;
+  border-color: var(--fluxion-border) !important;
+}
+.fluxion-dark .react-flow__controls {
+  border-color: var(--fluxion-border) !important;
+}
+.fluxion-dark .react-flow__controls-button {
+  background: var(--fluxion-bg-elevated) !important;
+  border-bottom-color: var(--fluxion-border-light) !important;
+}
+.fluxion-dark .react-flow__controls-button:hover {
+  background: var(--fluxion-surface-hover) !important;
+}
+.fluxion-dark .react-flow__controls-button svg {
+  fill: var(--fluxion-text-secondary) !important;
+}
+/* 左侧函数库面板 */
+.fluxion-dark .fluxion-designer-left-panel {
+  background: var(--fluxion-bg-elevated) !important;
+  border-right-color: var(--fluxion-border) !important;
+}
+/* 右侧 NodeConfigPanel */
+.fluxion-dark .fluxion-designer-config-panel {
+  background: var(--fluxion-bg-elevated) !important;
+}
+.fluxion-dark .fluxion-designer-config-panel .ant-card {
+  background: var(--fluxion-bg-elevated) !important;
+  border-color: var(--fluxion-border) !important;
+}
+.fluxion-dark .fluxion-designer-config-panel .ant-card-head {
+  background: var(--fluxion-bg-elevated) !important;
+  border-bottom-color: var(--fluxion-border) !important;
+  color: var(--fluxion-text) !important;
+}
+.fluxion-dark .fluxion-designer-config-panel .ant-tabs-tab {
+  color: var(--fluxion-text-muted) !important;
+}
+.fluxion-dark .fluxion-designer-config-panel .ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: var(--fluxion-primary) !important;
+}
+.fluxion-dark .fluxion-designer-config-panel .ant-tabs-ink-bar {
+  background: var(--fluxion-primary) !important;
+}
+.fluxion-dark .fluxion-designer-config-panel .ant-tabs-nav::before {
+  border-bottom-color: var(--fluxion-border) !important;
+}
+.fluxion-dark .fluxion-designer-config-panel .ant-empty-description {
+  color: var(--fluxion-text-muted) !important;
+}
+
+/* ─── RJSF 表单紧凑样式覆盖 ─────────────────────────────── */
+
+/* 表单整体宽度约束：右侧面板自适应，全屏不撑太宽 */
+.node-param-form {
+  max-width: 560px;
+}
+
+/* 表单整体去除多余间距 */
+.node-param-form fieldset {
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+.node-param-form fieldset > legend {
+  display: none;
+}
+
+/* Form.Item 间距收紧：24px → 8px */
+.node-param-form .ant-form-item {
+  margin-bottom: 8px !important;
+}
+
+/* Form.Item label 间距收紧 */
+.node-param-form .ant-form-item-label {
+  padding-bottom: 2px !important;
+}
+
+.node-param-form .ant-form-item-label > label {
+  font-size: 12px;
+  height: auto;
+}
+
+/* 数组项工具栏（增删按钮）紧凑 */
+.node-param-form .array-item-list .ant-row {
+  margin-bottom: 4px;
+}
+
+.node-param-form .array-item-list .ant-col[style*="192px"] {
+  flex: none !important;
+  width: 80px !important;
+}
+
+/* 嵌套数组（rules）更紧凑 */
+.node-param-form fieldset fieldset {
+  background: #fafafa;
+  border-radius: 4px;
+  padding: 8px;
+  margin: 4px 0;
+}
+
+/* 添加按钮紧凑 */
+.node-param-form .array-item-add {
+  max-width: 120px;
+}
+
+/* description 文字缩小 */
+.node-param-form .ant-form-item-explain {
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+/* 输入控件宽度自适应容器 */
+.node-param-form .ant-input,
+.node-param-form .ant-select,
+.node-param-form .ant-input-number {
+  max-width: 100%;
+}
+
+/* 函数测试面板内表单去除最大宽度限制，撑满面板 */
+.function-test-form.node-param-form {
+  max-width: none;
+}
+
+/* ─── 函数测试面板紧凑布局 ─────────────────────────────── */
+
+.function-test-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 100%;
+}
+
+.function-test-mode-switch {
+  align-self: flex-start;
+}
+
+.function-test-columns {
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+
+.function-test-col {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.function-test-col-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.function-test-col-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: #595959;
+}
+
+.function-test-col-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+  padding: 10px;
+  background: #fafafa;
+}
+
+.function-test-result-col .function-test-col-body {
+  background: #fff;
+}
+
+.function-test-error {
+  padding: 8px 10px;
+  background: #fff2f0;
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+
+.function-test-error-message {
+  margin-top: 4px;
+  color: #cf1322;
+  font-size: 12px;
+  word-break: break-word;
+}
+
+.function-test-result-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.function-test-result-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.function-test-logs {
+  margin: 0;
+  padding: 8px 10px;
+  background: #f5f5f5;
+  border-radius: 6px;
+  font-size: 12px;
+  max-height: 200px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #595959;
+}
+
+.function-test-empty {
+  margin: 24px 0;
+}
+
+/* 响应式：小屏幕垂直堆叠 */
+@media (max-width: 768px) {
+  .function-test-columns {
+    flex-direction: column;
+  }
+
+  .function-test-col {
+    flex: none;
+    min-height: 280px;
+  }
+}
+
+/* ─── 函数测试面板深色模式 ─────────────────────────────── */
+
+.fluxion-dark .function-test-col-title {
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.fluxion-dark .function-test-col-body {
+  background: #0f172a;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.fluxion-dark .function-test-result-col .function-test-col-body {
+  background: #0f172a;
+}
+
+.fluxion-dark .function-test-error {
+  background: rgba(255, 77, 79, 0.1);
+}
+
+.fluxion-dark .function-test-error-message {
+  color: #ff7875;
+}
+
+.fluxion-dark .function-test-logs {
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.65);
+}
+
+/* CodeMirror 编辑器在深色模式下的边框 */
+.fluxion-dark .cm-editor {
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* ─── 左侧函数库 Tabs 内容区滚动修复 ────────────────────── */
+.designer-left-tabs .ant-tabs-content-holder {
+  flex: 1;
+  overflow: hidden;
+}
+.designer-left-tabs .ant-tabs-content {
+  height: 100%;
+}
+.designer-left-tabs .ant-tabs-tabpane {
+  height: 100%;
+}
+
+/* ─── 条件配置编辑器样式 ─────────────────────────────── */
+.condition-editor-item {
+  border: 1px solid #e8e8e8;
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  background: #fafafa;
+  transition: border-color 0.2s;
+}
+
+.condition-editor-item:hover {
+  border-color: #bfbfbf;
+}
+
+.condition-editor-item .condition-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.condition-editor-item .condition-header .condition-index {
+  font-size: 12px;
+  color: #8c8c8c;
+  min-width: 20px;
+}
+
+.condition-editor-rule-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.condition-editor-rule-row .ant-select,
+.condition-editor-rule-row .ant-input,
+.condition-editor-rule-row .ant-auto-complete {
+  font-size: 13px;
+}
+
+.condition-editor-section-label {
+  font-size: 12px;
+  color: #595959;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+/* ─── 节点卡片动画 ─────────────────────────────────────── */
+@keyframes fluxion-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.25); }
+  50% { box-shadow: 0 0 0 8px rgba(59, 130, 246, 0); }
+}
+
+@keyframes fluxion-flow-dash {
+  to { stroke-dashoffset: -12; }
+}
+
+.fluxion-node-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px -4px rgba(0,0,0,0.15), 0 4px 8px rgba(0,0,0,0.08) !important;
+}
+
+/* ─── 工作流列表卡片悬浮上浮效果 ─────────────────── */
+.workflow-list-card {
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.workflow-list-card:hover {
+  transform: translateY(-4px) !important;
+  box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.15),
+              0 4px 12px rgba(0, 0, 0, 0.08) !important;
+}
+
+/* ─── 函数编辑器视觉增强 ─────────────────────────────── */
+
+/* 区块卡片阴影与层次 */
+.fn-schema-card,
+.fn-section-card {
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  border-radius: 8px !important;
+  margin-bottom: 16px;
+}
+
+.fn-schema-card:hover,
+.fn-section-card:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Schema 表格行间距优化 */
+.fn-schema-table .ant-table-tbody > tr > td {
+  padding: 10px 8px !important;
+  vertical-align: middle !important;
+}
+
+.fn-schema-table .ant-table-thead > tr > th {
+  font-weight: 600 !important;
+  color: #1e293b !important;
+  background: #f8fafc !important;
+  font-size: 13px !important;
+}
+
+/* 表单项 label 增强 */
+.ant-form-item-label > label {
+  font-weight: 500;
+  color: #374151;
+}
+
+/* ─── 登录页样式 ─────────────────────────────────────────── */
+.login-page {
+  min-height: 100vh;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.login-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+}
+
+.login-bg-gradient {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, #1e1b4b 0%, #312e81 30%, #4338ca 60%, #6366f1 100%);
+}
+
+.login-bg-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+.login-float {
+  position: absolute;
+  animation: login-float-anim 8s ease-in-out infinite;
+}
+
+.login-float-1 { top: 20%; left: 15%; animation-delay: 0s; }
+.login-float-2 { top: 60%; right: 20%; animation-delay: 2s; }
+.login-float-3 { bottom: 15%; left: 40%; animation-delay: 4s; }
+
+@keyframes login-float-anim {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-20px) rotate(5deg); }
+}
+
+.login-container {
+  position: relative;
+  z-index: 1;
+}
+
+.login-card {
+  width: 420px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  border-radius: 20px;
+  padding: 48px 40px 32px;
+  box-shadow: 0 32px 64px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+.login-brand {
+  text-align: center;
+  margin-bottom: 36px;
+}
+
+.login-logo {
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+  box-shadow: 0 8px 24px rgba(99, 102, 241, 0.4);
+}
+
+.login-form .ant-input-affix-wrapper {
+  border-radius: 10px;
+  height: 44px;
+}
+
+.login-btn {
+  height: 44px !important;
+  border-radius: 10px !important;
+  font-weight: 600;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6) !important;
+  border: none !important;
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.4);
+}
+
+.login-btn:hover {
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5) !important;
+}
+
+.login-footer {
+  text-align: center;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid #f0f0f0;
+}
+
+/* ─── 首页/通用卡片增强 ──────────────────────────────────── */
+.home-stat-card {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06) !important;
+  transition: box-shadow 0.2s, transform 0.2s !important;
+}
+
+.home-stat-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.04) !important;
+}
+
+/* ─── 全局表格优化 ────────────────────────────────────────── */
+.ant-table-thead > tr > th {
+  font-weight: 600 !important;
+  font-size: 13px !important;
+  color: #374151 !important;
+}
+
+.ant-table-tbody > tr > td {
+  font-size: 13px;
+}
+
+/* ─── 全局卡片圆角统一 ──────────────────────────────────── */
+.ant-card {
+  border-radius: 10px;
+}
+
+.ant-card-head {
+  border-bottom: 1px solid #f0f0f0 !important;
+}
+
+/* ─── 全局 Tag 圆角统一 ─────────────────────────────────── */
+.ant-tag {
+  border-radius: 4px;
+}
+
+/* ─── Segmented 控件增强 ─────────────────────────────────── */
+.ant-segmented {
+  border-radius: 8px !important;
+}
+
+/* ─── 滚动条美化 ─────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ─── 全局搜索弹窗动画 ──────────────────────────────────── */
+.global-search-overlay {
+  animation: fadeIn 0.15s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.global-search-overlay > div {
+  animation: slideUp 0.2s ease-out;
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   深色模式补充修复（Dark Mode Fixes）
+   通过 document.body 上的 .fluxion-dark 类统一控制，
+   解决 Modal / Drawer / Dropdown / Select 等 Portal 组件
+   渲染在 body 下时无法被 BasicLayout 内的 .fluxion-dark 覆盖的问题。
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── CSS 变量：NodeCard / NodePalette 等自定义组件使用 ── */
+:root {
+  --fluxion-node-bg: #fff;
+  --fluxion-node-border: #e2e8f0;
+  --fluxion-node-title: #1e293b;
+  --fluxion-node-subtitle: #94a3b8;
+  --fluxion-node-output-bg: #f8fafc;
+  --fluxion-node-output-border: #e2e8f0;
+  --fluxion-node-output-text: #475569;
+  --fluxion-node-handle-border: #fff;
+  --fluxion-node-extra-label-bg: #f1f5f9;
+  --fluxion-node-extra-label-text: #64748b;
+
+  --fluxion-palette-bg: #fafbfc;
+  --fluxion-palette-surface: #fff;
+  --fluxion-palette-border: #e2e8f0;
+  --fluxion-palette-title: #1e293b;
+  --fluxion-palette-text: #64748b;
+  --fluxion-palette-muted: #94a3b8;
+  --fluxion-palette-tag-bg: #f1f5f9;
+  --fluxion-palette-loading-bg: rgba(255, 255, 255, 0.6);
+}
+
+.fluxion-dark {
+  --fluxion-node-bg: #1e293b;
+  --fluxion-node-border: rgba(255, 255, 255, 0.08);
+  --fluxion-node-title: rgba(255, 255, 255, 0.92);
+  --fluxion-node-subtitle: rgba(255, 255, 255, 0.45);
+  --fluxion-node-output-bg: #0f172a;
+  --fluxion-node-output-border: rgba(255, 255, 255, 0.08);
+  --fluxion-node-output-text: rgba(255, 255, 255, 0.65);
+  --fluxion-node-handle-border: #0f172a;
+  --fluxion-node-extra-label-bg: #0f172a;
+  --fluxion-node-extra-label-text: rgba(255, 255, 255, 0.45);
+
+  --fluxion-palette-bg: #0f172a;
+  --fluxion-palette-surface: #1e293b;
+  --fluxion-palette-border: rgba(255, 255, 255, 0.08);
+  --fluxion-palette-title: rgba(255, 255, 255, 0.92);
+  --fluxion-palette-text: rgba(255, 255, 255, 0.65);
+  --fluxion-palette-muted: rgba(255, 255, 255, 0.45);
+  --fluxion-palette-tag-bg: rgba(255, 255, 255, 0.06);
+  --fluxion-palette-loading-bg: rgba(15, 23, 42, 0.6);
+}
+
+/* ── 根节点 / Layout 背景 ── */
+.fluxion-dark,
+.fluxion-dark .ant-layout {
+  background: #0f172a !important;
+}
+
+/* ── Header / Sider 细节补全 ── */
+.fluxion-dark .fluxion-header,
+.fluxion-dark .fluxion-header * {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+.fluxion-dark .fluxion-header .anticon {
+  color: rgba(255, 255, 255, 0.65) !important;
+}
+.fluxion-dark .fluxion-header .ant-avatar {
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+.fluxion-dark .fluxion-header .ant-tag {
+  color: rgba(255, 255, 255, 0.85) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+.fluxion-dark .sider-logo-area {
+  border-bottom-color: rgba(255, 255, 255, 0.08) !important;
+}
+.fluxion-dark .fluxion-sider .ant-menu-item-divider {
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* ── 排版 ── */
+.fluxion-dark .ant-typography-strong,
+.fluxion-dark .ant-typography.ant-typography-strong {
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+.fluxion-dark .ant-typography a {
+  color: #818cf8 !important;
+}
+.fluxion-dark .ant-typography a:hover {
+  color: #a5b4fc !important;
+}
+
+/* ── Card 补充 ── */
+.fluxion-dark .ant-card-hoverable:hover {
+  border-color: rgba(129, 140, 248, 0.3) !important;
+}
+.fluxion-dark .ant-card-bordered {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* ── Table 补充 ── */
+.fluxion-dark .ant-table-tbody > tr.ant-table-row-selected > td,
+.fluxion-dark .ant-table-tbody > tr.ant-table-row-selected:hover > td {
+  background: rgba(129, 140, 248, 0.12) !important;
+}
+.fluxion-dark .ant-table-cell-fix-left,
+.fluxion-dark .ant-table-cell-fix-right {
+  background: #1e293b !important;
+}
+.fluxion-dark .ant-table-column-sorter,
+.fluxion-dark .ant-table-filter-trigger {
+  color: rgba(255, 255, 255, 0.45) !important;
+}
+.fluxion-dark .ant-table-column-sorter-up.active,
+.fluxion-dark .ant-table-column-sorter-down.active,
+.fluxion-dark .ant-table-filter-trigger.active {
+  color: #818cf8 !important;
+}
+.fluxion-dark .ant-table-filter-dropdown {
+  background: #1e293b !important;
+}
+.fluxion-dark .ant-table-filter-dropdown-btns {
+  border-top-color: rgba(255, 255, 255, 0.08) !important;
+}
+.fluxion-dark .ant-table-tbody > tr.ant-table-row:hover > td {
+  background: rgba(255, 255, 255, 0.04) !important;
+}
+
+/* ── Form / Input 状态 ── */
+.fluxion-dark .ant-input:hover,
+.fluxion-dark .ant-input-affix-wrapper:hover,
+.fluxion-dark .ant-select-selector:hover,
+.fluxion-dark .ant-input-number:hover,
+.fluxion-dark .ant-picker:hover {
+  border-color: rgba(255, 255, 255, 0.2) !important;
+}
+.fluxion-dark .ant-input:focus,
+.fluxion-dark .ant-input-focused,
+.fluxion-dark .ant-input-affix-wrapper:focus,
+.fluxion-dark .ant-input-affix-wrapper-focused,
+.fluxion-dark .ant-select-focused .ant-select-selector,
+.fluxion-dark .ant-input-number-focused,
+.fluxion-dark .ant-picker-focused {
+  border-color: #818cf8 !important;
+  box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.2) !important;
+}
+.fluxion-dark .ant-form-item-has-error .ant-input,
+.fluxion-dark .ant-form-item-has-error .ant-input-affix-wrapper,
+.fluxion-dark .ant-form-item-has-error .ant-select-selector {
+  border-color: #f87171 !important;
+}
+.fluxion-dark .ant-form-item-has-error .ant-form-item-explain,
+.fluxion-dark .ant-form-item-has-error .ant-form-item-split {
+  color: #f87171 !important;
+}
+.fluxion-dark .ant-input-disabled,
+.fluxion-dark .ant-select-disabled .ant-select-selector,
+.fluxion-dark .ant-input-number-disabled,
+.fluxion-dark .ant-picker-disabled {
+  background: rgba(255, 255, 255, 0.04) !important;
+  color: rgba(255, 255, 255, 0.35) !important;
+}
+
+/* ── Button 状态 ── */
+.fluxion-dark .ant-btn-primary {
+  background: #3b82f6 !important;
+  border-color: #3b82f6 !important;
+}
+.fluxion-dark .ant-btn-primary:hover {
+  background: #2563eb !important;
+  border-color: #2563eb !important;
+}
+.fluxion-dark .ant-btn-dashed {
+  background: transparent !important;
+  border-color: rgba(255, 255, 255, 0.25) !important;
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+.fluxion-dark .ant-btn-dashed:hover {
+  border-color: #818cf8 !important;
+  color: #a5b4fc !important;
+}
+.fluxion-dark .ant-btn-link {
+  color: #818cf8 !important;
+}
+.fluxion-dark .ant-btn-link:hover {
+  color: #a5b4fc !important;
+}
+.fluxion-dark .ant-btn-dangerous {
+  color: #f87171 !important;
+  border-color: #f87171 !important;
+}
+.fluxion-dark .ant-btn-dangerous.ant-btn-primary {
+  background: #f87171 !important;
+  color: #fff !important;
+}
+.fluxion-dark .ant-btn[disabled],
+.fluxion-dark .ant-btn-disabled {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  color: rgba(255, 255, 255, 0.35) !important;
+}
+
+/* ── Tabs 卡片类型 ── */
+.fluxion-dark .ant-tabs-card > .ant-tabs-nav .ant-tabs-tab {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+.fluxion-dark .ant-tabs-card > .ant-tabs-nav .ant-tabs-tab-active {
+  background: #1e293b !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* ── Modal / Drawer / Popover / Popconfirm ── */
+.fluxion-dark .ant-drawer-content,
+.fluxion-dark .ant-drawer-header {
+  background: #1e293b !important;
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+.fluxion-dark .ant-drawer-header-title,
+.fluxion-dark .ant-drawer-title {
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+.fluxion-dark .ant-drawer-close {
+  color: rgba(255, 255, 255, 0.45) !important;
+}
+.fluxion-dark .ant-popover-inner,
+.fluxion-dark .ant-popconfirm-inner-content {
+  background: #1e293b !important;
+}
+.fluxion-dark .ant-popover-title,
+.fluxion-dark .ant-popover-inner-content {
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+.fluxion-dark .ant-popover-arrow-content {
+  background: #1e293b !important;
+}
+.fluxion-dark .ant-modal-confirm-body .ant-modal-confirm-title,
+.fluxion-dark .ant-modal-confirm-body .ant-modal-confirm-content {
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+
+/* ── Dropdown / Select / DatePicker / TimePicker ── */
+.fluxion-dark .ant-dropdown-menu-item-disabled {
+  color: rgba(255, 255, 255, 0.25) !important;
+}
+.fluxion-dark .ant-select-dropdown {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4) !important;
+}
+.fluxion-dark .ant-picker-panel,
+.fluxion-dark .ant-picker-panel-container {
+  background: #1e293b !important;
+}
+.fluxion-dark .ant-picker-cell,
+.fluxion-dark .ant-picker-time-panel-cell-inner {
+  color: rgba(255, 255, 255, 0.65) !important;
+}
+.fluxion-dark .ant-picker-cell-in-view {
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+.fluxion-dark .ant-picker-cell:hover:not(.ant-picker-cell-selected):not(.ant-picker-cell-disabled) .ant-picker-cell-inner {
+  background: rgba(255, 255, 255, 0.06) !important;
+}
+.fluxion-dark .ant-picker-cell-selected .ant-picker-cell-inner {
+  background: #818cf8 !important;
+}
+.fluxion-dark .ant-picker-header,
+.fluxion-dark .ant-picker-time-panel-header,
+.fluxion-dark .ant-picker-time-panel-column > li.ant-picker-time-panel-cell-selected .ant-picker-time-panel-cell-inner {
+  color: rgba(255, 255, 255, 0.92) !important;
+  border-bottom-color: rgba(255, 255, 255, 0.08) !important;
+}
+.fluxion-dark .ant-picker-header-view button:hover {
+  color: #a5b4fc !important;
+}
+.fluxion-dark .ant-picker-content th {
+  color: rgba(255, 255, 255, 0.45) !important;
+}
+
+/* ── Collapse / Timeline / Descriptions / List / Tree ── */
+.fluxion-dark .ant-collapse {
+  background: transparent !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+.fluxion-dark .ant-collapse > .ant-collapse-item {
+  border-bottom-color: rgba(255, 255, 255, 0.08) !important;
+}
+.fluxion-dark .ant-collapse-header {
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+.fluxion-dark .ant-collapse-content {
+  background: transparent !important;
+  border-top-color: rgba(255, 255, 255, 0.08) !important;
+}
+.fluxion-dark .ant-collapse-content-box {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+.fluxion-dark .ant-timeline-item-tail {
+  border-left-color: rgba(255, 255, 255, 0.1) !important;
+}
+.fluxion-dark .ant-timeline-item-content {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+.fluxion-dark .ant-descriptions-title,
+.fluxion-dark .ant-descriptions-item-label,
+.fluxion-dark .ant-descriptions-item-content {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+.fluxion-dark .ant-descriptions-bordered .ant-descriptions-item-label,
+.fluxion-dark .ant-descriptions-bordered .ant-descriptions-item-content {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+.fluxion-dark .ant-list-item-meta-title,
+.fluxion-dark .ant-list-item-meta-description {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+.fluxion-dark .ant-tree {
+  background: transparent !important;
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+.fluxion-dark .ant-tree-node-content-wrapper:hover {
+  background: rgba(255, 255, 255, 0.06) !important;
+}
+.fluxion-dark .ant-tree-node-selected {
+  background: rgba(129, 140, 248, 0.15) !important;
+}
+
+/* ── Message / Notification ── */
+.fluxion-dark .ant-message-notice-content {
+  background: #1e293b !important;
+  color: rgba(255, 255, 255, 0.92) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4) !important;
+}
+.fluxion-dark .ant-notification-notice {
+  background: #1e293b !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4) !important;
+}
+.fluxion-dark .ant-notification-notice-message {
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+.fluxion-dark .ant-notification-notice-description {
+  color: rgba(255, 255, 255, 0.65) !important;
+}
+.fluxion-dark .ant-notification-notice-close {
+  color: rgba(255, 255, 255, 0.45) !important;
+}
+
+/* ── Switch / Slider / Rate / Badge / Avatar ── */
+.fluxion-dark .ant-switch-checked {
+  background: #818cf8 !important;
+}
+.fluxion-dark .ant-slider-track {
+  background: #818cf8 !important;
+}
+.fluxion-dark .ant-slider-handle {
+  border-color: #818cf8 !important;
+}
+.fluxion-dark .ant-rate-star-full .ant-rate-star-second,
+.fluxion-dark .ant-rate-star-half .ant-rate-star-first {
+  color: #fbbf24 !important;
+}
+.fluxion-dark .ant-avatar {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+
+/* ── 工作流节点卡片（NodeCard）── */
+.fluxion-dark .fluxion-node-card {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2) !important;
+}
+.fluxion-dark .fluxion-node-card:hover {
+  box-shadow: 0 12px 28px -4px rgba(0, 0, 0, 0.4), 0 4px 8px rgba(0, 0, 0, 0.25) !important;
+}
+
+/* ── 左侧函数库面板（NodePalette）── */
+.fluxion-dark .fluxion-designer-left-panel > div:last-child > div {
+  background: var(--fluxion-palette-bg) !important;
+}
+.fluxion-dark .fluxion-designer-left-panel .ant-input {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+.fluxion-dark .fluxion-designer-left-panel .ant-input::placeholder {
+  color: rgba(255, 255, 255, 0.35) !important;
+}
+.fluxion-dark .fluxion-designer-left-panel .anticon-search {
+  color: rgba(255, 255, 255, 0.45) !important;
+}
+
+/* ── 条件编辑器 ── */
+.fluxion-dark .condition-editor-item {
+  background: #1e293b !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+.fluxion-dark .condition-editor-item:hover {
+  border-color: rgba(255, 255, 255, 0.15) !important;
+}
+.fluxion-dark .condition-editor-item .condition-index,
+.fluxion-dark .condition-editor-section-label {
+  color: rgba(255, 255, 255, 0.45) !important;
+}
+.fluxion-dark .condition-editor-item fieldset {
+  background: #0f172a !important;
+}
+
+/* ── 便签节点：在深色画布上稍微压暗 ── */
+.fluxion-dark .react-flow__node-stickyNote > div {
+  filter: brightness(0.92);
+}
+
+/* ── Debug / EdgeConfig 面板 ── */
+.fluxion-dark .fluxion-debug-panel,
+.fluxion-dark .fluxion-debug-panel .ant-card {
+  background: #1e293b !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+.fluxion-dark .fluxion-edge-config-panel,
+.fluxion-dark .fluxion-edge-config-panel .ant-card {
+  background: #1e293b !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* ── 全局滚动条（深色）── */
+.fluxion-dark ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.fluxion-dark ::-webkit-scrollbar-track {
+  background: transparent;
+}
+.fluxion-dark ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+}
+.fluxion-dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}

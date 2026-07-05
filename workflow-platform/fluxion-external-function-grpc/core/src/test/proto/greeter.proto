@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package example;
+
+option java_package = "com.fluxion.external.function.grpc.test";
+option java_outer_classname = "GreeterProto";
+
+service Greeter {
+  rpc SayHello (HelloRequest) returns (HelloReply);
+  rpc Add (AddRequest) returns (AddReply);
+}
+
+message HelloRequest {
+  string name = 1;
+}
+
+message HelloReply {
+  string message = 1;
+}
+
+message AddRequest {
+  int32 a = 1;
+  int32 b = 2;
+}
+
+message AddReply {
+  int32 result = 1;
+}

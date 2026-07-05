@@ -1,0 +1,32 @@
+# ============ Dependencies ============
+node_modules/
+
+# ============ Build output ============
+dist/
+.npm-cache
+
+# ============ Umi.js ============
+src/.umi/
+src/.umi-production/
+src/.umi-test/
+
+# ============ IDE ============
+.idea/
+.vscode/
+*.iml
+
+# ============ OS ============
+.DS_Store
+Thumbs.db
+
+# ============ Local Config ============
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# ============ Logs ============
+*.log
+npm-debug.log*
+pnpm-debug.log*
