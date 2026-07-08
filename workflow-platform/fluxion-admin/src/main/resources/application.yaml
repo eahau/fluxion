@@ -81,6 +81,11 @@ fluxion:
       base-url: http://acl-service:8080  # 远程 ACL 地址
     disabled-management: []  # 禁用的本地管理项：[user, role, permission, tenant, group]
 
+  function-meta:
+    # Admin 节点是 FunctionMeta 的权威源（JDBC 写库 + ConfigPublisher 推送）
+    # 不需要反向监听配置中心推送（watcher 是给 Worker 用的），关闭 auto-binder 路径
+    config-center-enabled: false
+
 # ─── 工作流平台配置 ────────────────────────────────────────────────────────
 workflow:
   # 执行日志存储模式：log（默认，SLF4J） | db（写入 wf_execution_log 表）

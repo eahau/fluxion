@@ -1,4 +1,4 @@
-import { apiGet } from './request';
+import { client, unwrap } from '@/sdk';
 import type { PageResponse } from '@/types/api';
 
 export interface AuditLog {
@@ -21,5 +21,7 @@ export async function getAuditLogs(params?: {
   page?: number;
   pageSize?: number;
 }) {
-  return apiGet<PageResponse<AuditLog>>('/api/admin/audit-logs', params);
+  return unwrap(
+    await client.GET('/api/admin/audit-logs', { params: { query: params ?? {} } }),
+  ) as PageResponse<AuditLog>;
 }

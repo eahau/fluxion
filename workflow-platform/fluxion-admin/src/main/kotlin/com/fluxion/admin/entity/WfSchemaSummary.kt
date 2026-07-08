@@ -3,14 +3,15 @@ package com.fluxion.admin.entity
 import java.time.LocalDateTime
 
 /**
- * Schema 列表专用的「轻量投影 DTO」。
+ * Lightweight projection DTO for the schema list page.
  *
- * 对比 [WfSchema]（完整实体）：
- * - 不包含 schemaJson（MySQL TEXT 类型，平均每个 schema 几 KB~几十 KB，列表页完全不需要）
- * - 仅保留列表页展示/筛选所需的小字段（20 条的 payload 从几百 KB 降到几 KB）
+ * Deliberately excludes `schemaJson` (a large TEXT column averaging KB~tens of KB
+ * per row). JPQL `SELECT NEW` in WfSchemaRepository constructs instances directly
+ * from the result set, bypassing Hibernate's EAGER fetch of the TEXT column and
+ * reducing list-page payload from hundreds of KB to a few KB for 50 rows.
  *
- * 由 Repository 层通过 JPQL `SELECT NEW` 直接构造，避免 Hibernate 加载 WfSchema 实体时
- * 对 schemaJson 的 EAGER 加载（JPA 对基本类型 String 默认 FetchType.EAGER）。
+ * Collaborates with: WfSchemaRepository (JPQL SELECT NEW producer), WfSchemaService
+ * (list endpoint consumer), SchemaMapper (to DTO transformation).
  */
 data class WfSchemaSummary(
     val id: Long,

@@ -6,7 +6,7 @@ import com.fluxion.functionmeta.DefaultFunctionMetaManager
 import com.fluxion.functionmeta.api.FunctionMetaManager
 import com.fluxion.functionmeta.api.FunctionMetaRegistry
 import com.fluxion.functionmeta.registry.InMemoryFunctionMetaRegistry
-import org.slf4j.LoggerFactory
+import org.slf4j.*
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
@@ -41,7 +41,7 @@ import org.springframework.context.annotation.Configuration
 class FunctionMetaAutoConfiguration {
 
     @Bean
-    @ConditionalOnMissingBean
+    @ConditionalOnMissingBean(FunctionMetaRegistry::class)
     fun functionMetaRegistry(): InMemoryFunctionMetaRegistry = InMemoryFunctionMetaRegistry()
 
     @Bean

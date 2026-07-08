@@ -13,11 +13,15 @@ import java.util.Date
 import javax.crypto.SecretKey
 
 /**
- * JWT 令牌签发与校验
+ * Small wrapper around JJWT 0.12.x that issues and validates HS256-signed JWTs for the
+ * admin console.
  *
- * 使用 JJWT 0.12.x API：
- *   - 签名密钥由配置注入，建议生产环境通过环境变量设置
- *   - token 携带用户名、角色/权限声明
+ * Configuration:
+ *  - `workflow.admin.jwt.secret`       – signing key (set via env vars in production).
+ *  - `workflow.admin.jwt.expiration-ms` – token lifetime, default 24 hours.
+ *
+ * Each token bundles the username plus a flat list of Spring `authority` strings (roles
+ * with the `ROLE_` prefix and raw permission names).
  */
 @Component
 class JwtTokenProvider(
@@ -29,11 +33,13 @@ class JwtTokenProvider(
 
     private val key: SecretKey = Keys.hmacShaKeyFor(secret.toByteArray(Charsets.UTF_8))
 
+    /** Issue a JWT from an authenticated Spring `Authentication`. */
     fun generateToken(authentication: Authentication): String {
         val principal = authentication.principal as UserDetails
         return generateToken(principal.username, principal.authorities.map { it.authority })
     }
 
+    /** Issue a JWT from explicit username + authority list (used by ACL SPI). */
     fun generateToken(username: String, authorities: List<String>): String {
         val now = Date()
         val expiry = Date(now.time + expirationMs)
@@ -46,6 +52,7 @@ class JwtTokenProvider(
             .compact()
     }
 
+    /** Return `true` if the token is non-expired, signature-verified and well-formed. */
     fun validateToken(token: String): Boolean {
         return try {
             parseClaims(token)
@@ -55,6 +62,7 @@ class JwtTokenProvider(
         }
     }
 
+    /** Extract the subject (username) from a valid token; `null` on parse failure. */
     fun getUsername(token: String): String? {
         return try {
             parseClaims(token).subject
@@ -63,6 +71,7 @@ class JwtTokenProvider(
         }
     }
 
+    /** Extract the authority list from a valid token; `emptyList()` on parse failure. */
     fun getAuthorities(token: String): List<String> {
         return try {
             parseClaims(token)[AUTHORITIES_CLAIM]

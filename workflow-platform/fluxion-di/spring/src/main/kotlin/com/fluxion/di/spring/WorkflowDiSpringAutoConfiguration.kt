@@ -9,11 +9,13 @@ import org.springframework.context.ApplicationContext
 import org.springframework.context.annotation.Bean
 
 /**
- * Workflow DI Spring Boot 自动配置
+ * Spring Boot auto-configuration for the DI integration layer.
  *
- * 当 classpath 存在 Spring 应用上下文时，自动暴露：
- * - [FunctionInstanceProvider]：用于函数类实例化与依赖注入
- * - [DependencyResolver]：用于脚本函数访问 Spring Bean
+ * Activated whenever a Spring [ApplicationContext] is present in the classpath.
+ * Registers two beans:
+ *  * [FunctionInstanceProvider] -- instantiates [WorkflowFunction] classes using
+ *    the container (by-type lookup, falling back to no-arg constructor + autowireBean).
+ *  * [DependencyResolver] -- allows scripted functions to lookup Spring beans by name or type.
  */
 @AutoConfiguration
 class WorkflowDiSpringAutoConfiguration {

@@ -8,7 +8,7 @@ import com.fluxion.adapter.spi.registry.InstanceInfo
 import org.slf4j.*
 
 /**
- * Apollo 实现 — 实例发现（Admin 侧）
+ * Apollo 瀹炵幇 鈥?瀹炰緥鍙戠幇锛圓dmin 渚э級
  */
 class ApolloInstanceDiscovery : InstanceDiscovery {
 

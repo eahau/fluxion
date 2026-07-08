@@ -12,9 +12,15 @@ import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDateTime
 
 /**
- * 角色服务
+ * Role and permission management service.
  *
- * 负责角色 CRUD 和权限管理
+ * Handles the full [Role]↔[Permission] aggregate lifecycle. Because Role.permissions is
+ * owned with cascade+orphanRemoval this class could technically rely on ORM cascade for
+ * permission updates. Instead it uses the explicit delete-then-insert pattern via
+ * [PermissionRepository] for predictability in unit tests and to avoid subtle dirty-tracking
+ * bugs when the caller passes a fresh list.
+ *
+ * Collaborates with: RoleRepository, PermissionRepository.
  */
 @Service
 class RoleService(
@@ -22,6 +28,10 @@ class RoleService(
     private val permissionRepository: PermissionRepository
 ) {
 
+    /**
+     * Paginated list with optional in-memory keyword filter across roleName/description
+     * (case-insensitive substring match).
+     */
     fun list(keyword: String?, pageable: Pageable): Page<Role> {
         val all = if (keyword.isNullOrBlank()) {
             roleRepository.findAll()
@@ -35,10 +45,15 @@ class RoleService(
         return all.toPage(pageable)
     }
 
+    /** Fetch a role by business primary key. */
     fun get(roleName: String): Role? {
         return roleRepository.findByRoleName(roleName)
     }
 
+    /**
+     * Create a new role along with its permission set. Runs inside a transaction so
+     * any permission-insert failure rolls back the role row too.
+     */
     @Transactional
     fun create(roleName: String, description: String?, permissions: List<String>): Role {
         val role = Role(
@@ -48,7 +63,6 @@ class RoleService(
         )
         val savedRole = roleRepository.save(role)
 
-        // 添加权限
         permissions.forEach { permission ->
             val perm = Permission(roleName = savedRole.roleName, permission = permission)
             permissionRepository.save(perm)
@@ -57,14 +71,18 @@ class RoleService(
         return savedRole
     }
 
+    /**
+     * Update a role's description and permissions. Permission refresh is delete-then-insert
+     * — list order and deduplication are the caller's responsibility.
+     */
     @Transactional
     fun update(roleName: String, description: String?, permissions: List<String>): Role {
         val role = roleRepository.findByRoleName(roleName)
-            ?: throw IllegalArgumentException("Role not found: $roleName")
-        
+            ?: throw IllegalArgumentException("Role not found: `$roleName")
+
         role.description = description
-        
-        // 更新权限：先删除旧的，再添加新的
+
+        // Replace the permission collection atomically
         permissionRepository.deleteByRole(role)
         permissions.forEach { permission ->
             val perm = Permission(role.roleName, permission)
@@ -74,10 +92,12 @@ class RoleService(
         return roleRepository.save(role)
     }
 
+    /** Delete a role by business PK (ORM cascade will also remove role_permissions rows). */
     fun delete(roleName: String) {
         roleRepository.deleteById(roleName)
     }
 
+    /** Pre-check for role-create 409 responses. */
     fun existsByRoleName(roleName: String): Boolean {
         return roleRepository.findByRoleName(roleName) != null
     }

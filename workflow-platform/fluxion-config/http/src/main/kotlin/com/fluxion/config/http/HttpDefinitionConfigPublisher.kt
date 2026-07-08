@@ -5,11 +5,11 @@ import com.fluxion.adapter.spi.registry.InstanceDiscovery
 import com.fluxion.adapter.spi.registry.PublishTarget
 import com.fluxion.config.core.HttpPushClient
 import com.fluxion.core.util.JsonUtil
-import org.slf4j.LoggerFactory
+import org.slf4j.*
 import org.slf4j.info
 
 /**
- * HTTP 默认实现 — Admin 侧定义发布器
+ * HTTP 榛樿瀹炵幇 鈥?Admin 渚у畾涔夊彂甯冨櫒
  */
 class HttpDefinitionConfigPublisher(
     private val instanceDiscovery: InstanceDiscovery
@@ -30,7 +30,7 @@ class HttpDefinitionConfigPublisher(
     override fun publish(workflowId: String, definitionJson: String, version: Int, target: PublishTarget) {
         val instances = HttpPushClient.resolveTargetInstances(target, instanceDiscovery)
         val payload = HttpDefinitionPushPayload(workflowId, definitionJson, version, false)
-        val body = serialize(payload, "push payload for workflow: $workflowId")
+        val body = serialize(payload, "push payload for workflow: `$workflowId")
 
         val (success, fail) = pushClient.push(instances, PUSH_PATH, body, workflowId)
         log.info {
@@ -42,7 +42,7 @@ class HttpDefinitionConfigPublisher(
     override fun unpublish(workflowId: String) {
         val instances = instanceDiscovery.getAllInstances()
         val payload = HttpDefinitionPushPayload(workflowId, null, 0, true)
-        val body = serialize(payload, "unpublish payload for: $workflowId")
+        val body = serialize(payload, "unpublish payload for: `$workflowId")
 
         val (success, fail) = pushClient.push(instances, PUSH_PATH, body, workflowId)
         log.info {

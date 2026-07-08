@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPut, apiDelete } from './request';
+import { client, unwrap } from '@/sdk';
 import type { PageResponse } from '@/types/api';
 
 export interface User {
@@ -23,21 +23,35 @@ export interface UserRequest {
 }
 
 export async function listUsers(params?: { keyword?: string; page?: number; pageSize?: number }) {
-  return apiGet<PageResponse<User>>('/api/admin/users', params);
+  return unwrap(
+    await client.GET('/api/admin/users', { params: { query: params ?? {} } }),
+  ) as PageResponse<User>;
 }
 
 export async function getUser(userId: string) {
-  return apiGet<User>(`/api/admin/users/${userId}`);
+  return unwrap(
+    await client.GET('/api/admin/users/{userId}', { params: { path: { userId } } }),
+  ) as User;
 }
 
 export async function createUser(data: UserRequest) {
-  return apiPost<User>('/api/admin/users', data);
+  return unwrap(
+    await client.POST('/api/admin/users', { body: data as any }),
+  ) as User;
 }
 
 export async function updateUser(userId: string, data: UserRequest) {
-  return apiPut<User>(`/api/admin/users/${userId}`, data);
+  return unwrap(
+    await client.PUT('/api/admin/users/{userId}', {
+      params: { path: { userId } },
+      body: data as any,
+    }),
+  ) as User;
 }
 
 export async function deleteUser(userId: string) {
-  return apiDelete<void>(`/api/admin/users/${userId}`);
+  unwrap(
+    await client.DELETE('/api/admin/users/{userId}', { params: { path: { userId } } }),
+  );
+  return undefined as void;
 }

@@ -7,19 +7,30 @@ import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RestController
 
 /**
- * 认证接口
+ * Login endpoint controller.
  *
- * 支持多种认证提供者（通过 AuthProvider SPI）：
- * - 本地数据库（默认，fluxion.acl.provider=local）
- * - 远程 ACL 服务（fluxion.acl.provider=remote）
- * - LDAP（企业内部统一账号，可扩展）
- * - OAuth2（第三方登录，可扩展）
+ * Authentication is fully delegated to the pluggable [AuthProvider] SPI — concrete
+ * implementations are selected via the `fluxion.acl.provider` config key and cover:
+ *   - LOCAL: JPA-backed username / password table (default)
+ *   - REMOTE: HTTP callout to a standalone ACL microservice
+ *   - LDAP / OAuth2: pluggable extensions wired outside this module
+ *
+ * On successful authenticate the provider issues a signed JWT (or opaque token,
+ * depending on implementation) that the UI attaches as a `Bearer` header for
+ * subsequent admin calls.
+ *
+ * Collaborates with: AuthProvider SPI only.
  */
 @RestController
 class AuthController(
     private val authProvider: AuthProvider
 ) {
 
+    /**
+     * Authenticate user credentials and issue a Bearer token on success.
+     * Returns 401 Unauthorized when the provider reports a failed authentication;
+     * returns the token + type=Bearer on success.
+     */
     @PostMapping("/api/admin/auth/login")
     fun login(@RequestBody request: LoginRequest): ResponseEntity<Map<String, String>> {
         val result = authProvider.authenticate(request.username, request.password)
@@ -30,6 +41,7 @@ class AuthController(
         return ResponseEntity.ok(mapOf("token" to token, "type" to "Bearer"))
     }
 
+    /** Plain username + password request DTO (kept inline — no generated spec for this endpoint yet). */
     data class LoginRequest(
         val username: String,
         val password: String

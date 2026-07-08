@@ -18,7 +18,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 
 /**
- * DbExecuteWorkflowCompiler 鍗曞厓娴嬭瘯銆?
+ * Unit tests for [DbExecuteWorkflowCompiler].
  */
 class DbExecuteWorkflowCompilerTest {
 

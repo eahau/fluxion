@@ -7,7 +7,7 @@ import com.fluxion.adapter.spi.registry.InstanceInfo
 import org.slf4j.*
 
 /**
- * Nacos 实现 — 实例发现（Admin 侧）
+ * Nacos 瀹炵幇 鈥?瀹炰緥鍙戠幇锛圓dmin 渚э級
  */
 class NacosInstanceDiscovery(
     private val namingService: NamingService

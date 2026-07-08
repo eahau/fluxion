@@ -5,23 +5,30 @@ import com.fluxion.schema.model.Schema
 import com.fluxion.schema.model.ValidationResult
 
 /**
- * Schema 校验器，校验数据是否符合指定 Schema 约束。
+ * Schema validator SPI — checks a runtime value against the constraints
+ * declared in a compiled [Schema] and returns a structured [ValidationResult].
  *
- * 格式路由由 [ValidatorBinding] 在 Spring 装配层声明，SPI 本身不感知格式。
+ * One implementation per format (JSON Schema, Protobuf, Avro). Empty schemas
+ * (`Schema.isEmpty == true`) should short-circuit to `ValidationResult.ok()`
+ * without invoking the underlying validator library.
  */
 interface SchemaValidator {
 
     /**
-     * 校验数据是否符合 Schema。
+     * Validates [data] against [schema] and returns the result.
      *
-     * @param schema 已编译的 Schema
-     * @param data 待校验数据
-     * @return 校验结果
+     * Must never throw for validation failures — callers that want exceptions
+     * use [validateStrict] instead. Unexpected parser/library exceptions MAY
+     * propagate (they indicate a corrupt schema or broken validator impl,
+     * not bad user input).
      */
     fun validate(schema: Schema, data: Any?): ValidationResult
 
     /**
-     * 严格模式校验：不通过时抛出 [SchemaValidationException]。
+     * Strict variant — same semantics as [validate] but throws
+     * [SchemaValidationException] on any failure. Convenience for call sites
+     * that prefer exception-style control flow (e.g. at workflow function
+     * boundaries where failing the node is the right outcome).
      */
     fun validateStrict(schema: Schema, data: Any?) {
         val result = validate(schema, data)

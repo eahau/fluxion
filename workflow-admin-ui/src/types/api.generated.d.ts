@@ -834,13 +834,96 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/datasources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 列出所有可用的数据源
+         * @description 返回 admin 自身已配置的 JDBC 数据源名称列表，供前端函数测试页选择。
+         */
+        get: operations["listDatasources"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/datasources/{datasourceId}/tables": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出指定数据源的所有用户表 */
+        get: operations["listDatasourceTables"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/datasources/{datasourceId}/tables/{tableName}/columns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出指定数据源指定表的所有列元数据 */
+        get: operations["listDatasourceTableColumns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description 数据源概要信息 */
+        DatasourceInfo: {
+            /** @description 数据源唯一标识（等于数据源名称） */
+            id?: string;
+            /** @description 展示名称 */
+            name?: string;
+            /** @description 所属域（如 db） */
+            domain?: string;
+            /** @description 数据源类型（如 admin） */
+            type?: string;
+        };
+        /** @description 表列元数据 */
+        DatasourceColumnInfo: {
+            /** @description 列名 */
+            name?: string;
+            /** @description 列名（与 name 同义，兼容前端字段） */
+            columnName?: string;
+            /** @description 数据库类型名 */
+            dataType?: string;
+            /** @description 类型（与 dataType 同义，兼容前端字段） */
+            type?: string;
+            /** @description 列注释 */
+            comment?: string;
+            /** @description 列描述（与 comment 同义，兼容前端字段） */
+            description?: string;
+        };
         ErrorResponse: {
-            /** Format: date-time */
-            timestamp?: string;
+            /**
+             * Format: int64
+             * @description Unix 毫秒时间戳
+             */
+            timestamp?: number;
             status?: number;
             error?: string;
             path?: string;
@@ -991,21 +1074,19 @@ export interface components {
                 [key: string]: unknown;
             };
             /**
-             * @description 入参 Schema 格式标识（json-schema=JSON Schema，protobuf=Protobuf，avro=Avro）
+             * @description 入参 Schema 格式标识（如 json-schema、protobuf、avro，支持扩展自定义格式）
              * @default json-schema
-             * @enum {string}
              */
-            inputSchemaFormat: "json-schema" | "protobuf" | "avro";
+            inputSchemaFormat: string;
             /** @description 出参 Schema 内容（具体语法由 outputSchemaFormat 决定） */
             outputSchema?: {
                 [key: string]: unknown;
             };
             /**
-             * @description 出参 Schema 格式标识（json-schema=JSON Schema，protobuf=Protobuf，avro=Avro）
+             * @description 出参 Schema 格式标识（如 json-schema、protobuf、avro，支持扩展自定义格式）
              * @default json-schema
-             * @enum {string}
              */
-            outputSchemaFormat: "json-schema" | "protobuf" | "avro";
+            outputSchemaFormat: string;
             /**
              * @description 事务配置（TransactionConfig 序列化）。
              *     字段示例：{ "propagationBehavior": 0, "isolationLevel": 2, "timeoutMs": 30000, "transactionName": "create-order" }
@@ -1027,10 +1108,16 @@ export interface components {
             triggers?: components["schemas"]["WorkflowTrigger"][];
             publishTarget?: components["schemas"]["PublishTarget"];
             readonly version?: number;
-            /** Format: date-time */
-            readonly createdAt?: string;
-            /** Format: date-time */
-            readonly updatedAt?: string;
+            /**
+             * Format: int64
+             * @description Unix 毫秒时间戳
+             */
+            readonly createdAt?: number;
+            /**
+             * Format: int64
+             * @description Unix 毫秒时间戳
+             */
+            readonly updatedAt?: number;
             readonly isProtected?: boolean;
         };
         NodeTrace: {
@@ -1169,11 +1256,10 @@ export interface components {
             /** @description 类型标签（逗号分隔，如 INPUT,OUTPUT），支持多类型复用 */
             schemaType: string;
             /**
-             * @description Schema 格式标识（json-schema=JSON Schema Draft-07，protobuf=Protobuf FileDescriptorProto JSON，avro=Avro Schema JSON）
+             * @description Schema 格式标识（如 json-schema、protobuf、avro，支持扩展自定义格式）
              * @default json-schema
-             * @enum {string}
              */
-            schemaFormat: "json-schema" | "protobuf" | "avro";
+            schemaFormat: string;
             /** @description Schema 内容（字符串形式，具体语法由 schemaFormat 决定） */
             schemaJson: string;
             description?: string | null;
@@ -1189,10 +1275,16 @@ export interface components {
             scope: string;
             /** @description 所属应用分组（scope=PRIVATE 时必填） */
             appGroup?: string;
-            /** Format: date-time */
-            readonly createdAt?: string;
-            /** Format: date-time */
-            readonly updatedAt?: string;
+            /**
+             * Format: int64
+             * @description Unix 毫秒时间戳
+             */
+            readonly createdAt?: number;
+            /**
+             * Format: int64
+             * @description Unix 毫秒时间戳
+             */
+            readonly updatedAt?: number;
         };
         FunctionDefinition: {
             readonly id?: string;
@@ -1214,10 +1306,16 @@ export interface components {
             /** @description 来源引用（安装市场函数时指向原始 functionName） */
             readonly sourceRef?: string;
             publishTarget?: components["schemas"]["PublishTarget"];
-            /** Format: date-time */
-            readonly createdAt?: string;
-            /** Format: date-time */
-            readonly updatedAt?: string;
+            /**
+             * Format: int64
+             * @description Unix 毫秒时间戳
+             */
+            readonly createdAt?: number;
+            /**
+             * Format: int64
+             * @description Unix 毫秒时间戳
+             */
+            readonly updatedAt?: number;
         };
         MetricsOverview: {
             /** Format: int64 */
@@ -1247,8 +1345,11 @@ export interface components {
         };
         ErrorLog: {
             id?: string;
-            /** Format: date-time */
-            time?: string;
+            /**
+             * Format: int64
+             * @description Unix 毫秒时间戳
+             */
+            time?: number;
             workflowId?: string;
             workflowName?: string;
             nodeId?: string;
@@ -1436,10 +1537,16 @@ export interface components {
             status?: string;
             /** Format: int64 */
             totalDurationMs?: number;
-            /** Format: date-time */
-            startTime?: string;
-            /** Format: date-time */
-            endTime?: string;
+            /**
+             * Format: int64
+             * @description Unix 毫秒时间戳
+             */
+            startTime?: number;
+            /**
+             * Format: int64
+             * @description Unix 毫秒时间戳
+             */
+            endTime?: number;
         };
         PageResponseExecutionRecord: {
             list?: components["schemas"]["ExecutionRecord"][];
@@ -1454,8 +1561,11 @@ export interface components {
             points?: components["schemas"]["TrendPoint"][];
         };
         TrendPoint: {
-            /** Format: date-time */
-            timestamp?: string;
+            /**
+             * Format: int64
+             * @description Unix 毫秒时间戳
+             */
+            timestamp?: number;
             /** Format: double */
             value?: number;
         };
@@ -1467,8 +1577,11 @@ export interface components {
             resourceId?: string;
             detail?: string;
             ip?: string;
-            /** Format: date-time */
-            timestamp?: string;
+            /**
+             * Format: int64
+             * @description Unix 毫秒时间戳
+             */
+            timestamp?: number;
         };
         PageResponseAuditLog: {
             list?: components["schemas"]["AuditLog"][];
@@ -1486,10 +1599,16 @@ export interface components {
             /** @enum {string} */
             status?: "ACTIVE" | "INACTIVE";
             roles?: string[];
-            /** Format: date-time */
-            createdAt?: string;
-            /** Format: date-time */
-            updatedAt?: string;
+            /**
+             * Format: int64
+             * @description Unix 毫秒时间戳
+             */
+            createdAt?: number;
+            /**
+             * Format: int64
+             * @description Unix 毫秒时间戳
+             */
+            updatedAt?: number;
         };
         UserRequest: {
             username: string;
@@ -1513,10 +1632,16 @@ export interface components {
             code?: string;
             description?: string;
             permissions?: string[];
-            /** Format: date-time */
-            createdAt?: string;
-            /** Format: date-time */
-            updatedAt?: string;
+            /**
+             * Format: int64
+             * @description Unix 毫秒时间戳
+             */
+            createdAt?: number;
+            /**
+             * Format: int64
+             * @description Unix 毫秒时间戳
+             */
+            updatedAt?: number;
         };
         RoleRequest: {
             name: string;
@@ -2866,8 +2991,8 @@ export interface operations {
         parameters: {
             query?: {
                 keyword?: string;
-                startTime?: string;
-                endTime?: string;
+                startTime?: number;
+                endTime?: number;
                 /** @description 页码（从 0 开始） */
                 page?: components["parameters"]["Page"];
                 /** @description 每页条数 */
@@ -2895,8 +3020,8 @@ export interface operations {
             query?: {
                 /** @description 指标类型 */
                 metric?: "requests" | "successRate" | "latency";
-                startTime?: string;
-                endTime?: string;
+                startTime?: number;
+                endTime?: number;
                 /** @description 查询最近 N 小时的趋势数据 */
                 hours?: number;
                 /** @description 聚合粒度 */
@@ -2947,8 +3072,8 @@ export interface operations {
                 operator?: string;
                 action?: string;
                 resourceType?: string;
-                startTime?: string;
-                endTime?: string;
+                startTime?: number;
+                endTime?: number;
                 /** @description 页码（从 0 开始） */
                 page?: components["parameters"]["Page"];
                 /** @description 每页条数 */
@@ -3224,6 +3349,72 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    listDatasources: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 数据源列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatasourceInfo"][];
+                };
+            };
+        };
+    };
+    listDatasourceTables: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 数据源名称（对应 listDatasources 返回的 id） */
+                datasourceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 表名列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[];
+                };
+            };
+        };
+    };
+    listDatasourceTableColumns: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                datasourceId: string;
+                tableName: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 列元数据列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatasourceColumnInfo"][];
+                };
             };
         };
     };

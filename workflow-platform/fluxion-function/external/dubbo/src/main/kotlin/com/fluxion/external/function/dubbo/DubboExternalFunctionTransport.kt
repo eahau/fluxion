@@ -42,7 +42,7 @@ import org.apache.dubbo.rpc.model.ApplicationModel
 import org.apache.dubbo.rpc.model.FrameworkModel
 import org.apache.dubbo.rpc.model.ModuleModel
 import org.apache.dubbo.rpc.service.GenericService
-import org.slf4j.LoggerFactory
+import org.slf4j.*
 import java.util.concurrent.ConcurrentHashMap
 
 /**

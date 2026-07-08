@@ -1,15 +1,21 @@
-dependencies {
-    // 仅依赖 workflow-core 中的基础类型（如需要），自身零框架依赖
-    api(project(":fluxion-core"))
+// fluxion-adapter-http:core - HTTP adapter framework-agnostic core abstractions.
+// Defines HttpRequestProcessor, RouteMatch, AbstractRouteRegistry, RouteConfigStore SPI,
+// HttpRouteDefinition, and request lifecycle hooks. Zero framework dependencies (pure Kotlin).
+plugins {
+    kotlin("jvm")
+    `java-library`
+}
 
-    // Adapter SPI: UnifiedRequest / WorkflowRouter — HttpRequestProcessor uses these
+dependencies {
+    // Core base types (zero-framework) - WorkflowContext, node abstractions, JsonUtil.
+    api(project(":fluxion-core"))
+    // Adapter SPI: UnifiedRequest / WorkflowRouter - HttpRequestProcessor references these.
     api(project(":fluxion-adapter-spi"))
 
-    // Jackson — 仅用于路由定义的序列化/反序列化契约
+    // Jackson Databind - JSON serialization of RouteDefinition and route registry store values.
     implementation("com.fasterxml.jackson.core:jackson-databind")
-
-    // SLF4J
-    implementation("org.slf4j:slf4j-api")
+    // Unified logging extensions.
+    implementation(project(":fluxion-log"))
 }
 
 sourceSets {

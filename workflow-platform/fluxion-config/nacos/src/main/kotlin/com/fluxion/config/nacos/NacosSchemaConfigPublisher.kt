@@ -8,7 +8,7 @@ import com.fluxion.core.util.JsonUtil
 import org.slf4j.*
 
 /**
- * Nacos 实现 — Schema 配置发布器（Admin 侧）
+ * Nacos 瀹炵幇 鈥?Schema 閰嶇疆鍙戝竷鍣紙Admin 渚э級
  */
 class NacosSchemaConfigPublisher(
     private val configService: ConfigService
@@ -22,7 +22,7 @@ class NacosSchemaConfigPublisher(
         const val INDEX_DATA_ID = "workflow.schema.__index__"
     }
 
-    /** 索引更新锁 — 防止并发 publish/unpublish 导致 read-modify-write 竞态 */
+    /** 绱㈠紩鏇存柊閿?鈥?闃叉骞跺彂 publish/unpublish 瀵艰嚧 read-modify-write 绔炴€?*/
     private val indexLock = Any()
 
     override fun publish(snapshot: SchemaConfigSnapshot) {

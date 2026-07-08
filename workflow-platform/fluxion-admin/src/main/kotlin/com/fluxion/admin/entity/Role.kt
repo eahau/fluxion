@@ -11,29 +11,33 @@ import jakarta.persistence.Table
 import java.time.LocalDateTime
 
 /**
- * 角色实体。
+ * Security role entity aligning with Spring Security `roles` table convention.
  *
- * 对应 Spring Security 标准表 `roles`，主键为业务角色名 `role_name`。
+ * Primary key is the business `roleName` string. Permissions are owned (orphan-removal +
+ * cascade ALL) so that persisting a role automatically flushes its permission set.
+ *
+ * Collaborates with: Permission (one-to-many owned collection), User (many-to-many join),
+ * RoleRepository, RoleService.
  */
 @Entity
 @Table(name = "roles")
 class Role(
 
-    /** 角色名，主键（列：`role_name`） */
+    /** Unique role name / business primary key, maps to column `role_name`. */
     @Id
     @Column(name = "role_name", nullable = false, length = 64)
     var roleName: String = "",
 
-    /** 角色描述（列：`description`） */
+    /** Human-readable role description, maps to column `description`. */
     @Column(name = "description", length = 256)
     var description: String? = null,
 
-    /** 创建时间（列：`created_at`） */
+    /** Record creation timestamp, maps to column `created_at`. */
     @Column(name = "created_at", nullable = false)
     var createdAt: LocalDateTime = LocalDateTime.now()
 ) {
 
-    /** 关联权限集合，通过 `role_permissions` 表映射 */
+    /** Permissions owned by this role. Cascade ALL + orphan removal keeps role_permissions in sync. */
     @OneToMany(mappedBy = "role", fetch = FetchType.EAGER, cascade = [CascadeType.ALL], orphanRemoval = true)
     var permissions: MutableSet<Permission> = mutableSetOf()
 
@@ -41,6 +45,5 @@ class Role(
 
     @PreUpdate
     fun preUpdate() {
-        // `roles` 表无 `updated_at` 列，此处仅保持实体一致性，实际由数据库维护时间戳
     }
 }

@@ -2,16 +2,10 @@ package com.fluxion.admin.controller
 
 import com.fluxion.admin.generated.api.DecoratorsApi
 import com.fluxion.admin.generated.model.DecoratorDefinition
-import com.fluxion.core.decorator.DecoratorRegistry
+import com.fluxion.decorator.decorator.DecoratorRegistry
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.RestController
 
-/**
- * 装饰器参数 Schema REST API
- *
- * 返回前端画布可用的节点装饰器及其参数 JSON Schema。
- * 列表由后端 DecoratorRegistry 实际注册情况驱动，只返回当前可用的装饰器。
- */
 @RestController
 class DecoratorsController(
     private val decoratorRegistry: DecoratorRegistry
@@ -26,9 +20,9 @@ class DecoratorsController(
     companion object {
         private val BUILTIN_DECORATORS = listOf(
             DecoratorDefinition(name = "metrics:micrometer").apply {
-                label = "Micrometer 指标"
-                group = "可观测"
-                description = "记录节点执行次数、耗时等指标"
+                label = "Micrometer metrics"
+                group = "Observability"
+                description = "Record node execution count, latency and other metrics"
                 paramSchema = mutableMapOf<String, Any>(
                     "type" to "object",
                     "properties" to emptyMap<String, Any>()
@@ -36,8 +30,8 @@ class DecoratorsController(
             },
             DecoratorDefinition(name = "trace:span").apply {
                 label = "OpenTelemetry Span"
-                group = "可观测"
-                description = "为节点创建独立 Span"
+                group = "Observability"
+                description = "Create a standalone tracing span for each node execution"
                 paramSchema = mutableMapOf<String, Any>(
                     "type" to "object",
                     "properties" to mapOf(
@@ -46,9 +40,9 @@ class DecoratorsController(
                 )
             },
             DecoratorDefinition(name = "ratelimit:slidingWindow").apply {
-                label = "滑动窗口限流"
-                group = "治理"
-                description = "基于滑动窗口对节点执行进行限流，支持本地内存与 Redis 分布式存储"
+                label = "Sliding window rate limit"
+                group = "Governance"
+                description = "Limit node execution rate based on sliding window, supports local memory or Redis distributed storage"
                 paramSchema = mutableMapOf<String, Any>(
                     "type" to "object",
                     "properties" to mapOf(
@@ -61,9 +55,9 @@ class DecoratorsController(
                 )
             },
             DecoratorDefinition(name = "cache:local").apply {
-                label = "本地缓存"
-                group = "缓存"
-                description = "使用本地 Caffeine 缓存节点执行结果"
+                label = "Local cache"
+                group = "Cache"
+                description = "Cache node execution results in-process using Caffeine"
                 paramSchema = mutableMapOf<String, Any>(
                     "type" to "object",
                     "properties" to mapOf(
@@ -73,15 +67,15 @@ class DecoratorsController(
                 )
             },
             DecoratorDefinition(name = "async:ioPool").apply {
-                label = "异步-IO线程池"
-                group = "异步"
-                description = "在 IO 线程池中异步执行节点"
+                label = "Async - IO thread pool"
+                group = "Async"
+                description = "Execute node asynchronously in the IO thread pool"
                 paramSchema = mutableMapOf<String, Any>()
             },
             DecoratorDefinition(name = "logging:default").apply {
-                label = "默认日志"
-                group = "可观测"
-                description = "记录节点执行输入、输出与耗时"
+                label = "Default logging"
+                group = "Observability"
+                description = "Record node execution input, output and elapsed time"
                 paramSchema = mutableMapOf<String, Any>(
                     "type" to "object",
                     "properties" to emptyMap<String, Any>()

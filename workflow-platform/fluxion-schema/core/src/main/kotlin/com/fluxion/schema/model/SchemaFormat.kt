@@ -1,16 +1,20 @@
 package com.fluxion.schema.model
 
 /**
- * Schema 格式标识。
+ * Opaque schema-format identifier — wraps a raw string code so the core
+ * module can route to the correct SPI implementations without hard-coding
+ * a closed enum of formats.
  *
- * 使用值类包装格式码字符串，支持核心内置格式（JSON Schema / Protobuf / Avro）
- * 的同时，允许第三方开发者通过自定义格式码扩展（如 flatbuffer、thrift 等），
- * 无需修改 core 模块的枚举定义。
+ * The wrapper is a Kotlin `value class` so there is zero allocation at
+ * runtime; the string code carries all semantics. Callers construct formats
+ * via [fromCode] / [fromCodeOrNull] which normalize case and return the
+ * shared singleton constants for the three built-in formats (JSON Schema,
+ * Protobuf, Avro) — reference-equality comparisons therefore work for the
+ * common cases.
  *
- * 格式码比较忽略大小写，但建议统一使用小写短横线风格：
- * - `json-schema`
- * - `protobuf`
- * - `avro`
+ * Third-party formats (FlatBuffers, Thrift, XML Schema, …) are supported by
+ * design: passing any non-blank code to [fromCode] returns a new instance
+ * that extension modules can then bind a [SchemaFormatBundle] against.
  */
 @JvmInline
 value class SchemaFormat(val code: String) {
@@ -20,28 +24,29 @@ value class SchemaFormat(val code: String) {
     }
 
     companion object {
-        /** JSON Schema（Draft-07 及兼容版本）。 */
+        /** JSON Schema (draft-07 and compatible versions). */
         val JSON_SCHEMA = SchemaFormat("json-schema")
 
-        /** Protobuf FileDescriptorProto JSON 表示。 */
+        /** Protobuf — represented as a `FileDescriptorProto` JSON serialization. */
         val PROTOBUF = SchemaFormat("protobuf")
 
-        /** Avro Schema JSON 表示。 */
+        /** Apache Avro — standard `.avsc` JSON representation. */
         val AVRO = SchemaFormat("avro")
 
         /**
-         * 根据格式码解析 [SchemaFormat]。
+         * Resolves a format code, returning the shared singleton for known
+         * formats or a new instance for unknown codes.
          *
-         * 对于核心内置格式，返回预定义常量以保证引用相等；
-         * 对于未知格式，返回新构造的 [SchemaFormat] 实例以支持扩展。
+         * @throws IllegalArgumentException if [code] is blank after trimming.
          */
         @JvmStatic
         fun fromCode(code: String): SchemaFormat = fromCodeOrNull(code)
             ?: throw IllegalArgumentException("SchemaFormat code must not be blank")
 
         /**
-         * 安全解析格式码，空字符串或 null 时返回 null（而非抛异常）。
-         * 适用于运行时从请求头或配置中解析，容错优于 [fromCode]。
+         * Lenient resolver — returns `null` for blank / null inputs instead
+         * of throwing. Used when parsing HTTP headers, user input, or config
+         * files where "absent" is a valid state.
          */
         @JvmStatic
         fun fromCodeOrNull(code: String?): SchemaFormat? {

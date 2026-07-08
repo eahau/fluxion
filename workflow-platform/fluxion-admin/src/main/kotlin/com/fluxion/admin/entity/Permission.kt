@@ -11,33 +11,35 @@ import jakarta.persistence.Table
 import java.io.Serializable
 
 /**
- * 角色权限实体。
+ * Role-to-permission join entity for the `role_permissions` intersection table.
  *
- * 对应 Spring Security 标准关联表 `role_permissions`，复合主键为 `(role_name, permission)`。
+ * Uses a composite primary key `(roleName, permission)` via JPA `@IdClass`. The `role`
+ * many-to-one is read-only (insertable=false, updatable=false) because `roleName` is already
+ * managed as part of the composite PK.
+ *
+ * Collaborates with: Role (parent aggregate, owns cascade+orphan lifecycle), PermissionRepository.
  */
 @Entity
 @Table(name = "role_permissions")
 @IdClass(Permission.PermissionId::class)
 class Permission : Serializable {
 
-    /** 角色名，复合主键之一（列：`role_name`） */
+    /** Role name — part of composite PK, maps to column `role_name`. */
     @Id
     @Column(name = "role_name", nullable = false, length = 64)
     var roleName: String = ""
 
-    /** 权限标识，复合主键之一（列：`permission`） */
+    /** Permission identifier string — part of composite PK, maps to column `permission`. */
     @Id
     @Column(name = "permission", nullable = false, length = 100)
     var permission: String = ""
 
-    /** 关联角色，只读映射，用于级联/查询（列：`role_name`） */
+    /** Read-only parent association for JPQL joins. Column `role_name` is owned by the PK field. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "role_name", referencedColumnName = "role_name", insertable = false, updatable = false)
     var role: Role? = null
 
-    /**
-     * 复合主键类。
-     */
+    /** JPA composite primary key class for Permission. */
     data class PermissionId(
         var roleName: String = "",
         var permission: String = ""

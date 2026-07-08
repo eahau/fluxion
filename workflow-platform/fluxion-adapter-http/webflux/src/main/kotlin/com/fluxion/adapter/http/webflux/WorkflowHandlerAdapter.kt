@@ -10,25 +10,33 @@ import org.springframework.web.server.ServerWebExchange
 import reactor.core.publisher.Mono
 
 /**
- * Custom [HandlerAdapter] for [WebFluxWorkflowHandler].
+ * Custom WebFlux [HandlerAdapter] for [WebFluxWorkflowHandler].
  *
- * Bridges Spring WebFlux's [ServerWebExchange] to our handler by:
- *   1. Creating a [ServerRequest] from the exchange (with injected message readers)
- *   2. Delegating to [WebFluxWorkflowHandler.handle]
- *   3. Wrapping the [ServerResponse][org.springframework.web.reactive.function.server.ServerResponse]
- *      in a [HandlerResult] for DispatcherHandler to write the response
+ * Why not just use `RouterFunction` + `HandlerFunction`? The RouterFunction
+ * path relies on `RouterFunctionMapping` setting a `ServerRequest` attribute
+ * before calling the function. Since we bypass that mapping (see
+ * [WorkflowHandlerMapping] — direct-query strategy for O(1) route updates)
+ * we need our own adapter that creates the ServerRequest from the raw
+ * `ServerWebExchange` + injected HTTP message readers.
  *
- * This avoids the `HandlerFunction` path which requires the `RouterFunctions.request` attribute
- * set by `RouterFunctionMapping` infrastructure — our custom `HandlerMapping` bypasses that.
+ * Invocation flow:
+ * 1. DispatcherHandler picks [WorkflowHandlerMapping] → returns [WebFluxWorkflowHandler].
+ * 2. DispatcherHandler scans registered HandlerAdapters → picks this one.
+ * 3. We build a `ServerRequest` using `ServerRequest.create(exchange, readers)`.
+ * 4. We delegate to [WebFluxWorkflowHandler.handle(ServerRequest)] → `Mono<ServerResponse>`.
+ * 5. We wrap the ServerResponse in a `HandlerResult` so DispatcherHandler can
+ *    render the response via the standard `ServerResponse.writeTo(...)` machinery.
+ *
+ * @param messageReaders HTTP message readers provided by Spring's shared `ServerCodecConfigurer`.
  */
 class WorkflowHandlerAdapter(
     private val messageReaders: List<HttpMessageReader<*>>,
 ) : HandlerAdapter {
 
-    /** MethodParameter for [WebFluxWorkflowHandler.handle] return type: Mono<ServerResponse> */
+    /** MethodParameter for the return value slot of [WebFluxWorkflowHandler.handle]. */
     private val returnParam: MethodParameter = MethodParameter.forExecutable(
         WebFluxWorkflowHandler::handle.javaMethod!!,
-        -1  // return value
+        -1
     )
 
     override fun supports(handler: Any): Boolean = handler is WebFluxWorkflowHandler

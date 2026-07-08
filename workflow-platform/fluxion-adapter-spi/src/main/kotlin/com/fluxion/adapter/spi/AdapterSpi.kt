@@ -4,55 +4,59 @@ import com.fluxion.core.value.EngineResult
 import com.fluxion.core.value.NodeExecutionRecord
 
 /**
- * 统一请求模型（协议无关）
- * 适配器层将各种协议的原生请求转换为此类型，再交给 WorkflowRouter
+ * Protocol-agnostic request model used across all transport adapters.
+ *
+ * Each adapter (HTTP, Dubbo, gRPC, Kafka, internal) converts its native
+ * request format into this structure before delegating to [WorkflowRouter].
+ *
+ * @param protocol       Protocol identifier: HTTP / DUBBO / GRPC / KAFKA / INTERNAL
+ * @param workflowId     Workflow ID (resolved by WorkflowRouter from protocol/path/method;
+ *                       may be null in routing-only mode)
+ * @param headers        Request headers (HTTP headers, Dubbo attachments, gRPC metadata)
+ * @param params         Parsed request parameters (sources vary by protocol)
+ * @param rawBody        Raw request body (for debugging; may be null in production)
+ * @param schemaFormat   Schema format identifier: "json-schema" / "protobuf" / "avro".
+ *                       Extracted by adapters from headers like `X-Schema-Format`.
+ *                       Falls back to WorkflowDefinition.inputSchemaFormat or default JSON Schema when null.
+ * @param schemaName     Optional schema name for looking up full Schema definition from SchemaRegistry
+ * @param schemaVersion  Optional schema version number; null = latest version
  */
 data class UnifiedRequest(
-    /** 协议标识：HTTP / DUBBO / GRPC / KAFKA / INTERNAL */
     val protocol: String,
-    /** 工作流 ID（由 WorkflowRouter 根据 protocol/path/method 路由解析，路由模式下可为 null） */
     val workflowId: String?,
-    /** 请求头（HTTP header / Dubbo attachment / gRPC metadata） */
     val headers: Map<String, String>,
-    /** 请求参数（已解析的 Map，不同协议的参数来源不同） */
     val params: Map<String, Any>,
-    /** 原始请求体（调试用，生产环境可为 null） */
     val rawBody: String? = null,
-    /**
-     * Schema 格式标识（"json-schema" / "protobuf" / "avro"）。
-     *
-     * 由适配器从请求头（如 `X-Schema-Format`）或协议 metadata 中提取。
-     * 为 null 时回退到 WorkflowDefinition.inputSchemaFormat 或默认 JSON Schema。
-     */
     val schemaFormat: String? = null,
-    /** Schema 名称（可选，用于从 SchemaRegistry 查找完整 Schema 定义） */
     val schemaName: String? = null,
-    /** Schema 版本号（可选，null 表示最新版本） */
     val schemaVersion: Long? = null
 ) {
     companion object {
-        /** Schema 格式请求头（HTTP header / gRPC metadata / Kafka header / Dubbo attachment） */
         const val HEADER_SCHEMA_FORMAT = "X-Schema-Format"
-        /** Schema 名称请求头 */
         const val HEADER_SCHEMA_NAME = "X-Schema-Name"
-        /** Schema 版本请求头 */
         const val HEADER_SCHEMA_VERSION = "X-Schema-Version"
 
-        /** 内部直接调用工厂（跳过路由解析） */
+        /**
+         * Factory for internal direct invocations that bypass routing resolution.
+         *
+         * @param workflowId Target workflow ID
+         * @param params     Pre-parsed parameter map
+         * @return UnifiedRequest with protocol=INTERNAL
+         */
         @JvmStatic
         fun internal(workflowId: String, params: Map<String, Any>) =
             UnifiedRequest("INTERNAL", workflowId, emptyMap(), params)
 
         /**
-         * 从协议无关的 headers Map 中提取 Schema 元数据，构建 [UnifiedRequest]。
+         * Build a [UnifiedRequest] extracting Schema metadata from a protocol-agnostic
+         * headers Map, avoiding duplicate parsing logic in every adapter.
          *
-         * 各适配器调用此方法，避免每个适配器重复解析 schema header 逻辑。
-         *
-         * @param protocol   协议标识
-         * @param workflowId 工作流 ID（路由模式下可为 null）
-         * @param headers    请求头
-         * @param params     已解析的参数
-         * @param rawBody    原始请求体
+         * @param protocol   Protocol identifier
+         * @param workflowId Workflow ID (may be null in routing mode)
+         * @param headers    Request headers map
+         * @param params     Parsed parameters
+         * @param rawBody    Raw request body (optional)
+         * @return UnifiedRequest with schema fields populated from headers
          */
         @JvmStatic
         fun withSchemaFromHeaders(
@@ -74,38 +78,42 @@ data class UnifiedRequest(
 }
 
 /**
- * 统一响应模型（协议无关）
- * WorkflowRouter 执行完毕后返回此类型，适配器层再转换为协议原生响应
+ * Protocol-agnostic response model returned by [WorkflowRouter].
  *
- * 与 [UnifiedRequest] 对称，使适配器层无需依赖 fluxion-core 的 [EngineResult]
+ * Adapters convert this back to their native response format (HTTP JSON,
+ * Dubbo return value, gRPC Any, etc.).
+ *
+ * Mirrors [UnifiedRequest] at the response layer so adapters do not need
+ * to depend on fluxion-core's [EngineResult] directly.
+ *
+ * @param success          Whether workflow execution succeeded
+ * @param data             Final workflow output data
+ * @param executionId      Execution ID for distributed tracing
+ * @param errorMsg         Error message (populated on failure)
+ * @param trace            Node-level execution trace (for debug / gRPC streaming)
+ * @param outputSchema     Output Schema content (passed through from WorkflowDefinition.outputSchema).
+ *                         Adapters use this to choose serialization:
+ *                         - gRPC: FileDescriptorProto -> DynamicMessage -> Any
+ *                         - HTTP/other adapters may ignore this field
+ * @param outputSchemaFormat Output Schema format: "json-schema" / "protobuf" / "avro".
+ *                           Used with [outputSchema]; defaults to JSON Schema when null.
  */
 data class UnifiedResponse(
-    /** 是否执行成功 */
     val success: Boolean,
-    /** 响应数据（工作流最终输出） */
     val data: Any? = null,
-    /** 执行 ID（用于链路追踪） */
     val executionId: String? = null,
-    /** 错误信息（失败时填充） */
     val errorMsg: String? = null,
-    /** 执行轨迹（调试 / gRPC 流式场景使用） */
     val trace: List<NodeExecutionRecord> = emptyList(),
-    /**
-     * 输出 Schema 内容（由路由器从 WorkflowDefinition.outputSchema 透传）。
-     *
-     * 适配器层据此选择响应序列化方式：
-     * - gRPC：FileDescriptorProto → DynamicMessage → Any
-     * - HTTP/其他适配器忽略此字段
-     */
     val outputSchema: Any? = null,
-    /**
-     * 输出 Schema 格式（"json-schema" / "protobuf" / "avro"）。
-     * 与 [outputSchema] 配合使用，null 时默认 JSON Schema。
-     */
     val outputSchemaFormat: String? = null
 ) {
     companion object {
-        /** 从引擎结果转换 */
+        /**
+         * Convert from the engine-level result to the adapter-level response.
+         *
+         * @param result Engine execution result
+         * @return UnifiedResponse with core fields mapped
+         */
         @JvmStatic
         fun from(result: EngineResult) = UnifiedResponse(
             success = result.success,
@@ -118,16 +126,31 @@ data class UnifiedResponse(
 }
 
 /**
- * 工作流路由器 — 适配器层的核心协调者
+ * Workflow Router — central coordination interface on the adapter layer.
+ *
+ * Adapters (HTTP / RPC / MQ) convert transport-specific requests into a
+ * [UnifiedRequest] and delegate execution to this router. The router is
+ * responsible for workflow lookup, execution, and returning a [UnifiedResponse].
  */
 interface WorkflowRouter {
-    /** 执行工作流（阻塞式，供非协程调用方使用） */
+    /**
+     * Execute a workflow in blocking mode — for non-coroutine callers
+     * (e.g. Dubbo, Kafka consumer, legacy code).
+     *
+     * @param request Protocol-agnostic request
+     * @return Protocol-agnostic response
+     */
     fun execute(request: UnifiedRequest): UnifiedResponse
 
     /**
-     * 执行工作流（协程挂起版，不阻塞调用线程）。
+     * Execute a workflow in suspend mode — non-blocking, for coroutine callers.
      *
-     * 默认实现委托给阻塞式 [execute]，支持协程的实现应覆写此方法。
+     * Default implementation delegates to the blocking [execute] for backward
+     * compatibility. Coroutine-native implementations (e.g. WebFlux) should
+     * override this to avoid blocking the calling thread.
+     *
+     * @param request Protocol-agnostic request
+     * @return Protocol-agnostic response
      */
     suspend fun executeSuspend(request: UnifiedRequest): UnifiedResponse = execute(request)
 }

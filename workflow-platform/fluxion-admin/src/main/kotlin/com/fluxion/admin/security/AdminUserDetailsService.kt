@@ -8,9 +8,11 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException
 import org.springframework.stereotype.Service
 
 /**
- * 后台用户 UserDetailsService
+ * Spring Security `UserDetailsService` implementation backed by the admin `users` table.
  *
- * 从 users 表加载用户，并从 user_roles 和 role_permissions 展开角色与权限。
+ * Loads a user by username and flattens the user → roles → permissions graph into a flat
+ * list of `GrantedAuthority` entries: roles get a `ROLE_` prefix while permissions are
+ * stored as their raw permission string.
  */
 @Service
 class AdminUserDetailsService(
@@ -19,14 +21,12 @@ class AdminUserDetailsService(
 
     override fun loadUserByUsername(username: String): UserDetails {
         val user = userRepository.findByUsername(username)
-            ?: throw UsernameNotFoundException("User not found: $username")
+            ?: throw UsernameNotFoundException("User not found: `$username")
 
         val authorities = mutableListOf<SimpleGrantedAuthority>()
 
-        // 添加角色作为 Authority
         user.roles.forEach { role ->
             authorities.add(SimpleGrantedAuthority("ROLE_${role.roleName.uppercase()}"))
-            // 添加角色的权限作为 Authority
             role.permissions.forEach { permission ->
                 authorities.add(SimpleGrantedAuthority(permission.permission))
             }

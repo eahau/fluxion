@@ -1,3 +1,10 @@
+/**
+ * Produces a uniform [SchemaField] tree from a compiled Avro schema.
+ *
+ * Handles the constructs that appear in typical workflow payloads: RECORD
+ * fields, ARRAY item types, MAP value types, ENUM symbols, and UNION null
+ * wrappers (which determine whether a field is marked required or nullable).
+ */
 package com.fluxion.schema.avro
 
 import com.fluxion.schema.api.SchemaFieldExtractor
@@ -6,10 +13,7 @@ import com.fluxion.schema.model.Schema
 import com.fluxion.schema.model.SchemaField
 
 /**
- * Avro Schema 字段提取器。
- *
- * 将 Avro Schema（record / enum / array / map 等）转换为统一的 [SchemaField] 树，
- * 供前端字段选择器、参数面板等场景使用。
+ * Field extractor implementation for the AVRO format.
  */
 class AvroSchemaFieldExtractor : SchemaFieldExtractor {
 
@@ -37,6 +41,9 @@ class AvroSchemaFieldExtractor : SchemaFieldExtractor {
                 extractFromSchema(unwrapUnion(field.schema()))
             }
             FieldType.ARRAY -> {
+                // Peel off a potential union wrapper before reading the
+                // element schema — `["null", {"type":"array", ...}]` is the
+                // canonical Avro way to express "nullable list of T".
                 val items = field.schema().let { s ->
                     if (s.type == org.apache.avro.Schema.Type.ARRAY) s.elementType
                     else unwrapUnion(s).let { if (it.type == org.apache.avro.Schema.Type.ARRAY) it.elementType else null }
@@ -79,7 +86,9 @@ class AvroSchemaFieldExtractor : SchemaFieldExtractor {
     }
 
     /**
-     * 解包 union 类型：如 ["null", "string"] → string schema。
+     * Unwrap nullable unions (`["null", "string"]`) to the non-null member
+     * type, preserving the schema itself when it is not a union or is entirely
+     * `null`.
      */
     private fun unwrapUnion(schema: org.apache.avro.Schema): org.apache.avro.Schema {
         return if (schema.type == org.apache.avro.Schema.Type.UNION) {
@@ -90,7 +99,8 @@ class AvroSchemaFieldExtractor : SchemaFieldExtractor {
     }
 
     /**
-     * 判断是否为可空字段（union 中包含 null 类型）。
+     * Mark a field as nullable when its schema is (or wraps) a union that
+     * includes the `null` type — Avro's idiomatic equivalent of optional.
      */
     private fun isNullable(schema: org.apache.avro.Schema): Boolean {
         return if (schema.type == org.apache.avro.Schema.Type.UNION) {
@@ -109,7 +119,6 @@ class AvroSchemaFieldExtractor : SchemaFieldExtractor {
         if (effective.type == org.apache.avro.Schema.Type.MAP) {
             meta["valueType"] = resolveType(effective.valueType).name
         }
-        // 保留 Avro 原始 prop 属性
         field.getObjectProps()?.forEach { (k, v) ->
             if (k !in setOf("name", "type", "doc", "default")) meta[k] = v
         }

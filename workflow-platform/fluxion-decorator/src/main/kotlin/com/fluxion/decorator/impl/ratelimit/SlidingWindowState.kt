@@ -3,20 +3,34 @@ package com.fluxion.decorator.impl.ratelimit
 import com.fluxion.decorator.ratelimit.RateLimitConfig
 
 /**
- * 婊戝姩绐楀彛闄愭祦鍣ㄧ姸鎬?鈥?涓嶅彲鍙樺€煎璞°€?
+ * Immutable state of a sliding-window rate limit bucket.
  *
- * 缂栫爜鏍煎紡锛歶sed:lastAcquireTimeMs:fractionalPermitsNumerator
+ * ### Encoding
+ * The state is intentionally compact and serialises as a colon-delimited
+ * triple `used:lastAcquireTimeMs:fractionalPermitsNumerator` which stores
+ * cleanly in a Redis `STRING` and preserves millisecond-level precision.
+ *
+ * The fractional-permits field avoids cumulative rounding drift across
+ * repeated partial-recovery periods: it carries the integer numerator of
+ * the fraction `(pastMs * recoveryPerCd) / cdMs` so the remainder carries
+ * over to the next acquire instead of being truncated.
  */
 data class SlidingWindowState(
+    /** Permits currently consumed in this window. */
     val used: Long,
+    /** Wall-clock ms of the most recent `tryAcquire` call (win or lose). */
     val lastAcquireTimeMs: Long,
+    /** Numerator of unrecovered fractional permits; denominator is `cdSeconds*1000`. */
     val fractionalPermitsNumerator: Long
 ) {
 
     /**
-     * 鍦ㄥ綋鍓嶇姸鎬佷笅灏濊瘯鑾峰彇涓€涓护鐗屻€?
+     * Try to consume one permit, returning the new state and whether the
+     * request was admitted.
      *
-     * @return 鏂扮姸鎬佷笌鏄惁鏀捐鐨勪簩鍏冪粍
+     * This function is pure: callers are responsible for publishing the
+     * returned state atomically (the store layer does this via
+     * `ConcurrentHashMap.compute` / Redis atomic scripts).
      */
     fun tryAcquire(config: RateLimitConfig, now: Long): Pair<SlidingWindowState, Boolean> {
         if (used < config.upLimited) {
@@ -25,6 +39,8 @@ data class SlidingWindowState(
 
         val pastTimeMs = (now - lastAcquireTimeMs).coerceAtLeast(0)
         val cdMs = config.cdSeconds * 1000L
+        // Fractional recovery is accumulated as a single numerator to avoid
+        // repeated float/double rounding errors across many short intervals.
         val totalNumerator = pastTimeMs * config.recoveryPerCd + fractionalPermitsNumerator
         val permits = minOf(config.upLimited.toLong(), totalNumerator / cdMs)
 
@@ -43,11 +59,14 @@ data class SlidingWindowState(
         }
     }
 
+    /** Serialise this state to the standard `used:last:fractional` form. */
     fun encode(): String = "$used:$lastAcquireTimeMs:$fractionalPermitsNumerator"
 
     companion object {
+        /** Fresh state: one permit already consumed, no fractional carry. */
         fun initial(now: Long): SlidingWindowState = SlidingWindowState(1, now, 0)
 
+        /** Parse a state previously produced by [encode]. */
         fun decode(value: String): SlidingWindowState {
             val sep1 = value.indexOf(':')
             require(sep1 != -1) { "Invalid rate limit state format: $value" }

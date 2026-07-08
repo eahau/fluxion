@@ -1,20 +1,14 @@
-package com.fluxion.config.apollo
-
-import com.ctrip.framework.apollo.Config
-import com.ctrip.framework.apollo.ConfigService
-import com.fluxion.adapter.spi.config.ConfigChangeListener
-import com.fluxion.adapter.spi.config.ConfigSubscriber
-import com.fluxion.config.core.AbstractConfigSubscriber
-import java.util.concurrent.atomic.AtomicBoolean
-
 /**
- * Apollo 通用单值配置订阅器 — 封装 namespace 订阅 + 自定义解析的公共逻辑
+ * Single-value Apollo config subscriber — wraps namespace subscription and
+ * custom parsing logic into the generic [ConfigSubscriber] surface used by
+ * the rest of the platform.
  *
- * 本类为具体类（非 abstract），可直接实例化使用。
- * 与 [ApolloKeyedConfigSubscriber] 命名对称：后者处理多键集合，本类处理单值配置。
+ * This is a concrete (non-abstract) class that can be instantiated directly.
+ * It pairs with [ApolloKeyedConfigSubscriber] which handles the multi-key
+ * index-driven pattern; callers pick whichever variant matches their config
+ * shape (monolithic single-namespace configs vs. per-key indexed configs).
  *
- * 新增单值配置只需在 AutoConfiguration 中一行注册：
- *
+ * Typical registration inside a Spring auto-config:
  * ```kotlin
  * @Bean
  * fun myConfigSubscriber() =
@@ -25,14 +19,30 @@ import java.util.concurrent.atomic.AtomicBoolean
  *             maxSize = cfg.getProperty("maxSize", "100").toLong()) })
  * ```
  *
- * 对标 `NacosConfigs.java` 中 `ConfigProvider<T>` 的声明式模式，
- * 但增加了 Apollo namespace 抽象和 Spring DI 集成。
+ * The design mirrors `ConfigProvider<T>` in Nacos backends but adds Apollo
+ * namespace abstraction and clean Spring DI integration.
+ */
+package com.fluxion.config.apollo
+
+import com.ctrip.framework.apollo.Config
+import com.ctrip.framework.apollo.ConfigService
+import com.fluxion.adapter.spi.config.ConfigChangeListener
+import com.fluxion.adapter.spi.config.ConfigSubscriber
+import com.fluxion.config.core.AbstractConfigSubscriber
+import org.slf4j.LoggerFactory
+import org.slf4j.*
+import java.util.concurrent.atomic.AtomicBoolean
+
+/**
+ * Apollo-based single-namespace [ConfigSubscriber] implementation.
  *
- * @param T         配置类型
- * @param namespace  Apollo namespace 名称
- * @param parser     Apollo [Config] → 类型化配置对象的解析函数；
- *                   通过 Config.getProperty() 读取任意属性
- * @param defaultConfig 解析失败时的默认值（可选）
+ * @param T parsed config type
+ * @property namespace Apollo namespace name to watch and read from
+ * @property parser user-supplied function converting an Apollo [Config]
+ *   handle to the strongly typed `T` object; implementations typically
+ *   chain multiple `getProperty(...)` calls with sensible defaults
+ * @property defaultConfig fallback returned when `parser` throws during
+ *   the initial load (useful when a namespace is missing in lower envs)
  */
 open class ApolloConfigSubscriber<T>(
     private val namespace: String,
@@ -50,16 +60,14 @@ open class ApolloConfigSubscriber<T>(
         addListener(listener)
         if (listenerAdded.compareAndSet(false, true)) {
             config.addChangeListener { notifyListeners { it.onChange(parseConfig()) } }
-            log.info("Registered Apollo config listener on namespace [$namespace]")
+            log.info { "Registered Apollo config listener on namespace [$namespace]" }
         }
     }
-
-    // ─── 内部方法 ────────────────────────────────────────────────────
 
     private fun parseConfig(): T = try {
         parser(config)
     } catch (e: Exception) {
-        log.warn("Failed to parse config from Apollo namespace [$namespace]", e)
+        log.warn(e) { "Failed to parse config from Apollo namespace [$namespace]" }
         defaultConfig ?: throw e
     }
 }

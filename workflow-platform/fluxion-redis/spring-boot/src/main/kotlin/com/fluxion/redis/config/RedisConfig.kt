@@ -1,7 +1,7 @@
 package com.fluxion.redis.config
 
 import com.fluxion.core.function.FunctionRegistry
-import com.fluxion.core.ratelimit.RateLimitStore
+import com.fluxion.decorator.ratelimit.RateLimitStore
 import com.fluxion.redis.function.RedisCommandFunction
 import com.fluxion.redis.lettuce.LettuceWorkflowAutoConfiguration
 import com.fluxion.redis.ratelimit.RedisRateLimitStore
@@ -14,19 +14,30 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.context.annotation.Bean
 
 /**
- * Redis 工作流函数 Spring Boot 自动配置
+ * Top-level auto-configuration that wires the Redis-backed integrations into the
+ * workflow engine after a concrete [RedisClientAdapter] is available.
  *
- * 注意：@ConditionalOnBean 只能放在 @Bean 方法级别，
- * 放在类级别会因 AutoConfiguration 处理顺序不确定而可能找不到 RedisClientAdapter。
+ * Runs after the client-specific auto-configurations ([LettuceWorkflowAutoConfiguration],
+ * [RedissonWorkflowAutoConfiguration]) so either one (or an externally supplied bean)
+ * has had a chance to register the adapter. Two higher-level beans are exposed:
  *
- * 本配置不直接引用 RedissonClient/RedisClient 等具体客户端类型，
- * 避免在缺少对应客户端依赖的运行时出现 ClassNotFoundException。
+ *  1. `RedisCommandFunction` — registers `builtin:redisCommand` into the [FunctionRegistry]
+ *     so workflow authors can invoke arbitrary Redis commands from the designer.
+ *  2. `RedisRateLimitStore` — default [RateLimitStore] when the decorator module did not
+ *     register a more specific store (in-memory, JDBC, …).
  */
 @AutoConfiguration(after = [LettuceWorkflowAutoConfiguration::class, RedissonWorkflowAutoConfiguration::class])
 class RedisWorkflowAutoConfiguration {
 
     private val log = LoggerFactory.getLogger(javaClass)
 
+    /**
+     * Register `builtin:redisCommand` into the shared function registry.
+     *
+     * Only activates when a [RedisClientAdapter] bean is present in the context;
+     * the concrete adapter implementation is logged so operators can confirm which
+     * client (Lettuce vs Redisson vs Spring Data) is active at runtime.
+     */
     @Bean
     @ConditionalOnBean(RedisClientAdapter::class)
     fun redisCommandFunction(
@@ -34,11 +45,19 @@ class RedisWorkflowAutoConfiguration {
         redisAdapter: RedisClientAdapter
     ): RedisCommandFunction {
         val function = RedisCommandFunction(redisAdapter)
-        registry.register("builtin:redisCommand", function.meta(), function)
+        registry.register("builtin:redisCommand", function)
         log.info { "Registered builtin:redisCommand (adapter: ${redisAdapter.javaClass.simpleName})" }
         return function
     }
 
+    /**
+     * Fallback [RateLimitStore] backed by a Redis Lua script.
+     *
+     * Only registered when:
+     *  - A [RedisClientAdapter] bean exists, AND
+     *  - No other [RateLimitStore] has been registered by the application or another
+     *    auto-configuration (the decorator module ships an in-memory default).
+     */
     @Bean
     @ConditionalOnBean(RedisClientAdapter::class)
     @ConditionalOnMissingBean(RateLimitStore::class)

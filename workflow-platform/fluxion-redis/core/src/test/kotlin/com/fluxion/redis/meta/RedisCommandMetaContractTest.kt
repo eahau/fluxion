@@ -9,6 +9,14 @@ import com.fluxion.core.value.FunctionMeta
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 
+/**
+ * Contract tests for the [RedisFunctionMetas.REDIS_COMMAND] metadata declaration.
+ *
+ * Ensures the emitted [FunctionMeta] has a non-blank description, a syntactically
+ * valid JSON Schema input payload, and defines the complete set of parameter
+ * names (command, key, args, raw, script, keys, commands) that the runtime
+ * [RedisCommandFunction] actually switches on at runtime.
+ */
 class RedisCommandMetaContractTest {
 
     @Test
@@ -31,7 +39,7 @@ class RedisCommandMetaContractTest {
         try {
             JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V7).getSchema(schemaJson)
         } catch (ex: Exception) {
-            fail("inputSchema is not a valid JSON Schema: $schemaJson", ex)
+            fail("inputSchema is not a valid JSON Schema: `$schemaJson", schemaJsonx)
         }
     }
 

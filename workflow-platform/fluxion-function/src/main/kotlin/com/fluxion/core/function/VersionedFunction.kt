@@ -19,7 +19,9 @@
 package com.fluxion.core.function
 
 import com.fluxion.core.exception.FunctionNotFoundException
-import org.slf4j.LoggerFactory
+import org.slf4j.*
+import org.slf4j.debug
+import org.slf4j.info
 import java.util.concurrent.atomic.AtomicReference
 
 /**

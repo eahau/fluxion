@@ -5,13 +5,18 @@ import com.fluxion.core.model.NodeInput
 import com.fluxion.core.value.FunctionResult
 
 /**
- * 鐏?Mock 閼宠棄濮忕亸浣筋棅娑?[WorkflowFunction]閵?
+ * Decorator that wraps a real [WorkflowFunction] and short-circuits its
+ * execution when an active [MockRule] matches the current invocation.
  *
- * 鐠囥儱鍤遍弫鏉垮瘶鐟佸懍绔存稉顏嗘埂鐎圭偛鍤遍弫甯礉閸?Mock 鐟欏嫬鍨崨鎴掕厬閺冨墎娲块幒銉ㄧ箲閸?Mock 閸濆秴绨查敍?
- * 閺堫亜鎳℃稉顓熸婵梹澧紒娆掝潶閸栧懓顥婇崙鑺ユ殶閹笛嗩攽閵?
+ * Wrapping is done at the `FunctionResolver` level (see
+ * [MockFunctionRegistry]) rather than inside individual function nodes so
+ * the mock layer is **fully transparent**: DAG code, traces, metrics, and
+ * ACL rules all observe the same function identity they would in production
+ * — the behaviour is just switched to a mock response.
  *
- * mockConfig 闁俺绻?provider 閸︺劍鐦″▎?apply() 閺冭泛濮╅幀浣藉箯閸欐牭绱?
- * 闁灝鍘ら弸鍕偓鐘虫閹规洝骞忛棃娆愨偓渚€鍘ょ純顕嗙礉娓氬じ绨弨顖涘瘮閹笛嗩攽閺堢喎濮╅幀浣界殶閺佺鐨熺拠?Mock閵?
+ * Fallback (error recovery) is intentionally *not* mocked — we forward
+ * `fallback` directly to the inner function so operators can still observe
+ * real error-handler behaviour while mocking the happy path.
  */
 class MockWorkflowFunction(
     private val inner: WorkflowFunction<Any>,
@@ -19,8 +24,14 @@ class MockWorkflowFunction(
     private val functionRef: String
 ) : WorkflowFunction<Any> {
 
+    /** Registers as `mock:<ref>` so the tracer/debug UI can tell a mock-wrapped function apart. */
     override val functionName: String = "mock:$functionRef"
 
+    /**
+     * Evaluate the mock engine first; on a match the result is wrapped in
+     * `FunctionResult.success` and returned without touching the inner
+     * function. Otherwise the real function is invoked normally.
+     */
     override fun apply(input: NodeInput): FunctionResult<Any> {
         val mockResult = evaluateMock(mockConfigProvider(), functionRef, input)
         return if (mockResult != null) {
@@ -30,5 +41,6 @@ class MockWorkflowFunction(
         }
     }
 
+    /** Fallback is never mocked — error recovery must exercise the real path. */
     override fun fallback(input: NodeInput, ex: Throwable): FunctionResult<Any> = inner.fallback(input, ex)
 }

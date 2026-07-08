@@ -3,7 +3,7 @@ package com.fluxion.functionmeta.spring.boot
 import com.fluxion.core.function.FunctionRegistry
 import com.fluxion.functionmeta.api.FunctionMetaConfigCenter
 import com.fluxion.functionmeta.api.Subscription
-import org.slf4j.LoggerFactory
+import org.slf4j.*
 import org.springframework.context.ApplicationListener
 import org.springframework.context.event.ContextRefreshedEvent
 import java.util.concurrent.ConcurrentHashMap

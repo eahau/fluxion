@@ -1,20 +1,25 @@
+// fluxion-adapter-rpc:dubbo - Apache Dubbo RPC protocol adapter implementation (zero Spring).
+// Exports and consumes workflow functions via Dubbo GenericService generic invocation interface,
+// enabling cross-language RPC without compiled service interface classes at build time.
 plugins {
     kotlin("jvm")
 }
 
 dependencies {
+    // Core base types.
     implementation(project(":fluxion-core"))
+    // Adapter SPI (UnifiedRequest / WorkflowRouter contracts for RPC protocol adapters).
     implementation(project(":fluxion-adapter-spi"))
 
-    // Dubbo 核心（零 Spring）
+    // Apache Dubbo core framework - GenericService generic invocation interface.
+    // Excludes netty-all aggregator JAR (28 sub-modules) since this module never imports Netty APIs.
     implementation("org.apache.dubbo:dubbo") {
-        // Dubbo 内部依赖 netty，但本模块代码 0 个 netty import，
-        // 排除 netty-all（28 个子模块聚合 jar），大幅精简编译 classpath
         exclude(group = "io.netty", module = "netty-all")
     }
 
+    // Jackson Kotlin + Kotlin reflection for JSON serialization of RPC payloads outside Hessian2.
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
+    // SLF4J logging.
     implementation("org.slf4j:slf4j-api")
 }
-

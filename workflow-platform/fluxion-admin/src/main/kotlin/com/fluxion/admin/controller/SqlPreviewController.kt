@@ -8,10 +8,11 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 
 /**
- * SQL 预览执行接口。
+ * Ad-hoc SQL preview endpoint for the workflow designer UI.
  *
- * 仅允许执行 SELECT 语句，用于工作流设计器中手写 SQL 节点的前端预览，
- * 不触发任何 SideEffect 或工作流执行。
+ * Runs only SELECT statements and is used exclusively to validate hand-written SQL
+ * nodes inside the visual editor before an author publishes the workflow. Nothing
+ * executed here triggers real side-effects or enqueues a workflow execution.
  */
 @RestController
 @RequestMapping("/api/admin/schemas")
@@ -64,7 +65,11 @@ class SqlPreviewController(private val dataSourceProvider: DataSourceProvider) {
     }
 
     /**
-     * 安全检查：仅允许 SELECT 语句，禁止 DML/DDL 以及多语句。
+     * Validate that the submitted SQL is strictly read-only.
+     *
+     * Strips SQL line/block comments before tokenization so obfuscated DML statements
+     * (e.g. `SELECT 1; DELETE FROM x -- comment`) cannot slip through. Rejects scripts
+     * with more than one statement.
      */
     private fun validateReadOnly(sql: String) {
         val withoutComments = sql.replace(Regex("--[^\\n]*|/\\*[\\s\\S]*?\\*/"), " ")
@@ -82,8 +87,10 @@ class SqlPreviewController(private val dataSourceProvider: DataSourceProvider) {
     }
 
     /**
-     * 如果原始 SQL 没有 LIMIT，则追加一个安全上限。
-     * 注意：此实现较简单，复杂子查询中的 LIMIT 不做改写。
+     * Append a `LIMIT` clause to `sql` if one is not already present, ensuring that
+     * accidental full-table scans in the editor do not blow up the admin connection
+     * pool. The implementation is intentionally naive and does not rewrite nested
+     * subqueries.
      */
     private fun ensureLimit(sql: String, maxRows: Int): String {
         val upper = sql.uppercase()

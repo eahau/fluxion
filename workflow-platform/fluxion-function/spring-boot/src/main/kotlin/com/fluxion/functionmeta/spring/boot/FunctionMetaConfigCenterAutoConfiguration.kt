@@ -6,7 +6,9 @@ import com.fluxion.functionmeta.api.FunctionMetaConfigCenterSelector
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
+import org.springframework.context.ApplicationListener
 import org.springframework.context.annotation.Bean
+import org.springframework.context.event.ContextRefreshedEvent
 import org.springframework.core.env.Environment
 
 /**
@@ -44,15 +46,19 @@ class FunctionMetaConfigCenterAutoConfiguration {
         centers: ObjectProvider<FunctionMetaConfigCenter>,
         functionRegistry: ObjectProvider<FunctionRegistry>,
         env: Environment
-    ): FunctionMetaAutoBinder? {
+    ): ApplicationListener<ContextRefreshedEvent> {
         val centerList = centers.stream().toList()
-        val registry = functionRegistry.getIfAvailable() ?: return null
-        if (centerList.isEmpty()) return null
+        val registry = functionRegistry.getIfAvailable() ?: return noopListener
+        if (centerList.isEmpty()) return noopListener
 
         val preferred = env.getProperty("fluxion.function-meta.config-center", "http")
         val selector = FunctionMetaConfigCenterSelector(centerList, preferred)
-        val activeCenter = selector.active ?: return null
+        val activeCenter = selector.active ?: return noopListener
 
         return FunctionMetaAutoBinder(registry, activeCenter)
+    }
+
+    companion object {
+        private val noopListener = ApplicationListener<ContextRefreshedEvent> { }
     }
 }

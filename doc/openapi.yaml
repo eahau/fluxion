@@ -37,6 +37,8 @@ tags:
     description: 用户管理
   - name: Role
     description: 角色管理
+  - name: Datasources
+    description: 数据源元数据查询（表/列浏览）
 
 paths:
   # ============ Auth API ============
@@ -1118,13 +1120,15 @@ paths:
         - name: startTime
           in: query
           schema:
-            type: string
-            format: date-time
+            type: integer
+            format: int64
+            description: Unix 毫秒时间戳
         - name: endTime
           in: query
           schema:
-            type: string
-            format: date-time
+            type: integer
+            format: int64
+            description: Unix 毫秒时间戳
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PageSize'
       responses:
@@ -1150,13 +1154,15 @@ paths:
         - name: startTime
           in: query
           schema:
-            type: string
-            format: date-time
+            type: integer
+            format: int64
+            description: Unix 毫秒时间戳
         - name: endTime
           in: query
           schema:
-            type: string
-            format: date-time
+            type: integer
+            format: int64
+            description: Unix 毫秒时间戳
         - name: hours
           in: query
           schema:
@@ -1217,13 +1223,15 @@ paths:
         - name: startTime
           in: query
           schema:
-            type: string
-            format: date-time
+            type: integer
+            format: int64
+            description: Unix 毫秒时间戳
         - name: endTime
           in: query
           schema:
-            type: string
-            format: date-time
+            type: integer
+            format: int64
+            description: Unix 毫秒时间戳
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PageSize'
       responses:
@@ -1409,6 +1417,72 @@ paths:
         '204':
           description: 删除成功
 
+  # ============ Datasources API ============
+  /api/datasources:
+    get:
+      operationId: listDatasources
+      tags: [Datasources]
+      summary: 列出所有可用的数据源
+      description: |
+        返回 admin 自身已配置的 JDBC 数据源名称列表，供前端函数测试页选择。
+      responses:
+        '200':
+          description: 数据源列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DatasourceInfo'
+
+  /api/datasources/{datasourceId}/tables:
+    get:
+      operationId: listDatasourceTables
+      tags: [Datasources]
+      summary: 列出指定数据源的所有用户表
+      parameters:
+        - name: datasourceId
+          in: path
+          required: true
+          description: 数据源名称（对应 listDatasources 返回的 id）
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 表名列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  /api/datasources/{datasourceId}/tables/{tableName}/columns:
+    get:
+      operationId: listDatasourceTableColumns
+      tags: [Datasources]
+      summary: 列出指定数据源指定表的所有列元数据
+      parameters:
+        - name: datasourceId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: tableName
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 列元数据列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DatasourceColumnInfo'
+
 components:
   parameters:
     Page:
@@ -1485,13 +1559,55 @@ components:
         type: string
 
   schemas:
+    # ============ Datasources ============
+    DatasourceInfo:
+      type: object
+      description: 数据源概要信息
+      properties:
+        id:
+          type: string
+          description: 数据源唯一标识（等于数据源名称）
+        name:
+          type: string
+          description: 展示名称
+        domain:
+          type: string
+          description: 所属域（如 db）
+        type:
+          type: string
+          description: 数据源类型（如 admin）
+
+    DatasourceColumnInfo:
+      type: object
+      description: 表列元数据
+      properties:
+        name:
+          type: string
+          description: 列名
+        columnName:
+          type: string
+          description: 列名（与 name 同义，兼容前端字段）
+        dataType:
+          type: string
+          description: 数据库类型名
+        type:
+          type: string
+          description: 类型（与 dataType 同义，兼容前端字段）
+        comment:
+          type: string
+          description: 列注释
+        description:
+          type: string
+          description: 列描述（与 comment 同义，兼容前端字段）
+
     # ============ 通用响应 ============
     ErrorResponse:
       type: object
       properties:
         timestamp:
-          type: string
-          format: date-time
+          type: integer
+          format: int64
+          description: Unix 毫秒时间戳
         status:
           type: integer
         error:
@@ -1806,13 +1922,15 @@ components:
           type: integer
           readOnly: true
         createdAt:
-          type: string
-          format: date-time
+          type: integer
+          format: int64
           readOnly: true
+          description: Unix 毫秒时间戳
         updatedAt:
-          type: string
-          format: date-time
+          type: integer
+          format: int64
           readOnly: true
+          description: Unix 毫秒时间戳
         isProtected:
           type: boolean
           readOnly: true
@@ -2072,13 +2190,16 @@ components:
           maxLength: 128
           description: 所属应用分组（scope=PRIVATE 时必填）
         createdAt:
-          type: string
-          format: date-time
+          type: integer
+          format: int64
           readOnly: true
+          description: Unix 毫秒时间戳
         updatedAt:
-          type: string
-          format: date-time
+          type: integer
+          format: int64
           readOnly: true
+          description: Unix 毫秒时间戳
+
 
     # ============ Function 相关 ============
     FunctionDefinition:
@@ -2122,13 +2243,16 @@ components:
         publishTarget:
           $ref: '#/components/schemas/PublishTarget'
         createdAt:
-          type: string
-          format: date-time
+          type: integer
+          format: int64
           readOnly: true
+          description: Unix 毫秒时间戳
         updatedAt:
-          type: string
-          format: date-time
+          type: integer
+          format: int64
           readOnly: true
+          description: Unix 毫秒时间戳
+
 
     # ============ Monitor 相关 ============
     MetricsOverview:
@@ -2180,8 +2304,9 @@ components:
         id:
           type: string
         time:
-          type: string
-          format: date-time
+          type: integer
+          format: int64
+          description: Unix 毫秒时间戳
         workflowId:
           type: string
         workflowName:
@@ -2560,11 +2685,14 @@ components:
           type: integer
           format: int64
         startTime:
-          type: string
-          format: date-time
+          type: integer
+          format: int64
+          description: Unix 毫秒时间戳
         endTime:
-          type: string
-          format: date-time
+          type: integer
+          format: int64
+          description: Unix 毫秒时间戳
+
 
     PageResponseExecutionRecord:
       type: object
@@ -2598,8 +2726,9 @@ components:
       type: object
       properties:
         timestamp:
-          type: string
-          format: date-time
+          type: integer
+          format: int64
+          description: Unix 毫秒时间戳
         value:
           type: number
           format: double
@@ -2623,8 +2752,9 @@ components:
         ip:
           type: string
         timestamp:
-          type: string
-          format: date-time
+          type: integer
+          format: int64
+          description: Unix 毫秒时间戳
 
     PageResponseAuditLog:
       type: object
@@ -2664,11 +2794,13 @@ components:
           items:
             type: string
         createdAt:
-          type: string
-          format: date-time
+          type: integer
+          format: int64
+          description: Unix 毫秒时间戳
         updatedAt:
-          type: string
-          format: date-time
+          type: integer
+          format: int64
+          description: Unix 毫秒时间戳
 
     UserRequest:
       type: object
@@ -2727,11 +2859,13 @@ components:
           items:
             type: string
         createdAt:
-          type: string
-          format: date-time
+          type: integer
+          format: int64
+          description: Unix 毫秒时间戳
         updatedAt:
-          type: string
-          format: date-time
+          type: integer
+          format: int64
+          description: Unix 毫秒时间戳
 
     RoleRequest:
       type: object

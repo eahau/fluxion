@@ -9,9 +9,26 @@ import org.springframework.data.jpa.domain.Specification
 import org.springframework.stereotype.Service
 import java.time.LocalDateTime
 
+/**
+ * Append-only audit trail service.
+ *
+ * Reads use JPA [Specification] to dynamically build WHERE clauses from five optional
+ * filters (operator / action / resourceType / startTime / endTime) so the admin audit UI
+ * can mix-and-match without requiring a family of overloaded repository methods.
+ *
+ * Collaborates with: AuditLogRepository (both standard `JpaRepository` and
+ * `JpaSpecificationExecutor`), controllers that mutate admin resources (each writer is
+ * responsible for producing an AuditLog row).
+ */
 @Service
 class AuditLogService(private val repository: AuditLogRepository) {
 
+    /**
+     * Dynamic query page used by the admin audit list view.
+     *
+     * Blank filter values are intentionally skipped rather than coerced, so the UI can
+     * send empty form fields without polluting the SQL predicate list.
+     */
     fun list(
         operator: String?,
         action: String?,
@@ -42,6 +59,7 @@ class AuditLogService(private val repository: AuditLogRepository) {
         return repository.findAll(spec, pageable)
     }
 
+    /** Write a single audit entry. Idempotent via entity id (new rows always have id = 0). */
     fun save(entity: AuditLog): AuditLog {
         return repository.save(entity)
     }

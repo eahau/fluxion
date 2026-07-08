@@ -1,3 +1,12 @@
+/**
+ * Extracts the uniform [SchemaField] tree from a JSON Schema document.
+ *
+ * Handles the JSON Schema constructs that surface in workflow input/output
+ * definitions: `properties`/`required` pairs, `items` for arrays, and local
+ * `$ref` pointers against `#/definitions/...` or `#/properties/...`. A
+ * mutable visited-refs set is threaded through recursive calls so cyclic
+ * schemas terminate instead of overflowing the stack.
+ */
 package com.fluxion.schema.json
 
 import com.fluxion.schema.api.SchemaFieldExtractor
@@ -7,13 +16,8 @@ import com.fluxion.schema.model.SchemaField
 import com.fluxion.schema.util.JsonUtil
 
 /**
- * 从 JSON Schema 提取统一的 [SchemaField] 字段树。
- *
- * 支持：
- * - properties / required 字段提取
- * - array items 提取
- * - `$ref` 内部引用解析（`#/definitions/xxx`、`#/properties/xxx`）
- * - 循环引用检测（避免无限递归）
+ * Walks the raw JSON Schema source text to produce a flattened [SchemaField]
+ * list with nested children for OBJECT/ARRAY branches.
  */
 class JsonSchemaFieldExtractor : SchemaFieldExtractor {
 
@@ -30,7 +34,9 @@ class JsonSchemaFieldExtractor : SchemaFieldExtractor {
         path: String,
         visitedRefs: MutableSet<String>
     ): List<SchemaField> {
-        // 处理 $ref：如果当前节点本身就是一个引用，先解析引用
+        // Resolve top-level $ref first so that schemas like
+        //   {"$ref":"#/definitions/Order"}
+        // still produce a field tree rooted at the referenced definition.
         val resolved = resolveRef(schemaNode, root, visitedRefs) ?: schemaNode
 
         val properties = resolved["properties"] as? Map<String, Map<String, Any>> ?: emptyMap()
@@ -52,7 +58,6 @@ class JsonSchemaFieldExtractor : SchemaFieldExtractor {
     ): SchemaField {
         val currentPath = if (path.isEmpty()) name else "$path.$name"
 
-        // 解析 $ref
         val resolvedProp = resolveRef(prop, root, visitedRefs) ?: prop
 
         val type = resolvedProp["type"] as? String ?: inferType(resolvedProp)
@@ -61,6 +66,8 @@ class JsonSchemaFieldExtractor : SchemaFieldExtractor {
         val nestedFields = when (fieldType) {
             FieldType.OBJECT -> extractProperties(resolvedProp, root, currentPath, visitedRefs)
             FieldType.ARRAY -> {
+                // Wrap single-item schema in a synthetic `properties["*"]` so
+                // the generic extractor can be reused for array elements.
                 val items = resolvedProp["items"] as? Map<String, Any>
                 items?.let {
                     val itemFields = extractProperties(
@@ -82,20 +89,20 @@ class JsonSchemaFieldExtractor : SchemaFieldExtractor {
             description = resolvedProp["description"] as? String,
             format = resolvedProp["format"] as? String,
             nestedFields = nestedFields,
-            metadata = buildMetadata(prop)  // metadata 保留原始 prop，包含 $ref 信息
+            metadata = buildMetadata(prop)
         )
     }
 
     /**
-     * 解析 $ref 引用。
+     * Resolve a JSON Reference pointer (`#/...`) against the document root.
      *
-     * 支持：
-     * - `#/definitions/User` → 从根节点的 definitions 中查找
-     * - `#/properties/address` → 从根节点的 properties 中查找
+     * Only local refs (starting with `#/`) are honoured; external URIs are
+     * skipped and callers fall back to the unresolved node. The visited set
+     * detects A→B→A style cycles; `finally` removes the marker so the same
+     * ref can be safely used across different branches of the tree.
      *
-     * 循环引用检测：如果引用路径已在 visitedRefs 中，返回 null（避免无限递归）。
-     *
-     * @return 解析后的 schema 节点，无法解析或循环引用时返回 null
+     * @return resolved schema map, or `null` if the ref is external, cyclic,
+     *         or points to a non-existent path.
      */
     @Suppress("UNCHECKED_CAST")
     private fun resolveRef(
@@ -105,10 +112,8 @@ class JsonSchemaFieldExtractor : SchemaFieldExtractor {
     ): Map<String, Any>? {
         val ref = node["\$ref"] as? String ?: return null
 
-        // 只处理内部引用（#/ 开头）
         if (!ref.startsWith("#/")) return null
 
-        // 循环引用检测
         if (ref in visitedRefs) return null
         visitedRefs.add(ref)
 

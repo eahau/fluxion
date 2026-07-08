@@ -1,3 +1,13 @@
+/**
+ * Default [SchemaResolver] that resolves Fluxion-standard references
+ * (`schema:<name>`, `protobuf:<name>`, `avro:<name>`) against the local
+ * [SchemaRegistry].
+ *
+ * The current implementation ignores the format-prefix portion of the ref
+ * and delegates purely on [SchemaRef.name] + optional [SchemaRef.version];
+ * future iterations may tighten the contract by using the prefix to assert
+ * the resolved schema's format matches expectations.
+ */
 package com.fluxion.schema.json
 
 import com.fluxion.schema.api.SchemaRegistry
@@ -6,9 +16,7 @@ import com.fluxion.schema.model.Schema
 import com.fluxion.schema.model.SchemaRef
 
 /**
- * Fluxion 引用解析器，支持 `schema:<name>`、`protobuf:<name>`、`avro:<name>`。
- *
- * 当前通过 [SchemaRegistry] 按名称查找，未来可扩展版本号支持。
+ * Resolves [SchemaRef] pointers via the injected [SchemaRegistry].
  */
 class FluxionSchemaResolver(
     private val registry: SchemaRegistry

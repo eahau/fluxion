@@ -25,16 +25,16 @@ import org.springframework.core.env.Environment
 import java.util.Properties
 
 /**
- * Nacos 配置中心 + 注册中心自动装配
+ * Nacos 閰嶇疆涓績 + 娉ㄥ唽涓績鑷姩瑁呴厤
  *
- * 生效条件：
- *   1. classpath 存在 ConfigService（nacos-client jar）
- *   2. 配置 workflow.config.type=nacos
+ * 鐢熸晥鏉′欢锛?
+ *   1. classpath 瀛樺湪 ConfigService锛坣acos-client jar锛?
+ *   2. 閰嶇疆 workflow.config.type=nacos
  *
- * ## 声明式配置注册（对标 NacosConfigs.java）
+ * ## 澹版槑寮忛厤缃敞鍐岋紙瀵规爣 NacosConfigs.java锛?
  *
- * 通过 [NacosConfigFactory] 封装 ConfigService + group，
- * 新增配置只需传业务参数，无需重复基础设施依赖。
+ * 閫氳繃 [NacosConfigFactory] 灏佽 ConfigService + group锛?
+ * 鏂板閰嶇疆鍙渶浼犱笟鍔″弬鏁帮紝鏃犻渶閲嶅鍩虹璁炬柦渚濊禆銆?
  */
 @AutoConfiguration
 @ConditionalOnClass(name = ["com.alibaba.nacos.api.config.ConfigService"])
@@ -49,13 +49,13 @@ class NacosConfigAutoConfiguration {
     fun nacosNamingService(env: Environment): NamingService =
         NamingFactory.createNamingService(buildProperties(env))
 
-    // ─── 配置工厂（一次性注册，消除后续 Bean 的重复参数）────────
+    // 鈹€鈹€鈹€ 閰嶇疆宸ュ巶锛堜竴娆℃€ф敞鍐岋紝娑堥櫎鍚庣画 Bean 鐨勯噸澶嶅弬鏁帮級鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
     @Bean
     fun nacosConfigFactory(configService: ConfigService): NacosConfigFactory =
         NacosConfigFactory(configService)
 
-    // ─── Publisher ──────────────────────────────────────────────────
+    // 鈹€鈹€鈹€ Publisher 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
     @Bean
     fun nacosDefinitionConfigPublisher(configService: ConfigService): DefinitionConfigPublisher =
@@ -69,7 +69,7 @@ class NacosConfigAutoConfiguration {
     fun nacosSchemaConfigPublisher(configService: ConfigService): SchemaConfigPublisher =
         NacosSchemaConfigPublisher(configService)
 
-    // ─── Subscriber（通过 factory 声明式注册）─────────────────────
+    // 鈹€鈹€鈹€ Subscriber锛堥€氳繃 factory 澹版槑寮忔敞鍐岋級鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
     @Bean
     fun nacosDefinitionConfigSubscriber(f: NacosConfigFactory): DefinitionConfigSubscriber =
@@ -99,7 +99,7 @@ class NacosConfigAutoConfiguration {
             default = IdempotencyConfig()
         )
 
-    // ─── 注册中心 ──────────────────────────────────────────────────
+    // 鈹€鈹€鈹€ 娉ㄥ唽涓績 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
     @Bean
     fun nacosInstanceRegistry(namingService: NamingService): InstanceRegistry =

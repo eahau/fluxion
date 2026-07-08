@@ -17,22 +17,26 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 
 /**
- * workflow-admin 专属的核心组件补充配置。
+ * Admin-specific Spring beans that complement the shared core auto-configuration from
+ * `com.fluxion.core.spring.boot.FluxionCoreAutoConfiguration`.
  *
- * 通用核心组件（FunctionRegistry、WorkflowEngine、DagExecutor 等）已迁移到
- * fluxion-core-spring-boot 的 [com.fluxion.core.spring.boot.FluxionCoreAutoConfiguration]，
- * 供控制面（admin）和运行面（runtime）共用。
- *
- * 此类仅保留 admin 特有的 Bean，例如调试服务。
+ * The auto-configuration module already contributes generic pieces such as `FunctionRegistry`,
+ * `WorkflowEngine` and `DagExecutor`, which are reused by both the admin console and runtime
+ * workers. This class adds admin-only wiring, namely:
+ *   - A layered `WorkflowRouter` that wraps the runtime executor with idempotency + distributed
+ *     lock routers (when the corresponding SPI beans are present).
+ *   - A `DebugService` backed by `WfExecutionSnapshotService`, which simultaneously implements
+ *     both `ExecutionLogRepository` and `DefinitionLoader` SPIs for the step-through debugger.
  */
 @Configuration
 class WorkflowCoreConfiguration {
 
     /**
-     * Admin 侧工作流路由器。
+     * Build the admin-side workflow router stack.
      *
-     * 直接复用运行面的 [RuntimeWorkflowRouter]，
-     * 按顺序包装幂等路由器与分布式锁路由器。
+     * Delegates to the runtime `RuntimeWorkflowRouter` for core execution, then conditionally
+     * wraps it (in order) with the idempotency router and distributed-lock router whenever the
+     * underlying SPI implementations are present and non-NOOP.
      */
     @Bean
     fun workflowRouter(
@@ -55,10 +59,6 @@ class WorkflowCoreConfiguration {
         return router
     }
 
-    /**
-     * 调试服务 Bean
-     * 依赖 WfExecutionSnapshotService 同时实现 ExecutionLogRepository 和 DefinitionLoader 两个 SPI
-     */
     @Bean
     fun debugService(
         workflowEngine: WorkflowEngine,

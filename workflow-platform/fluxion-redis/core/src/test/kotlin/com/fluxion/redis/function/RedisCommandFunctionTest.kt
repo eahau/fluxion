@@ -6,6 +6,14 @@ import com.fluxion.redis.spi.RedisRawCommand
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 
+/**
+ * Unit tests for [RedisCommandFunction].
+ *
+ * Covers the two parameter modes (raw CLI string vs structured command/key/args),
+ * template variable resolution, EVAL script key/args splitting, quoted argument
+ * tokenization, and the "raw takes precedence over structured" dispatch rule.
+ * All assertions use a fake in-memory [RedisClientAdapter] so no Redis server is needed.
+ */
 class RedisCommandFunctionTest {
 
     private val fakeAdapter = FakeRedisAdapter()

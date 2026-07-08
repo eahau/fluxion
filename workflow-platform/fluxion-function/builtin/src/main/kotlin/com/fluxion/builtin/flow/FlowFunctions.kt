@@ -6,8 +6,7 @@ import com.fluxion.core.engine.RuleEvaluator
 import com.fluxion.core.function.WorkflowFunction
 import com.fluxion.core.model.NodeInput
 import com.fluxion.core.value.FunctionResult
-import org.slf4j.LoggerFactory
-
+import org.slf4j.*
 /**
  * Built-in conditional branch router (`builtin:conditionBranch`).
  *

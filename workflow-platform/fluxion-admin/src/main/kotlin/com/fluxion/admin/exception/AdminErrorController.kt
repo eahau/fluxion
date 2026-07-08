@@ -8,11 +8,13 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 
 /**
- * Admin 后台统一错误页面控制器。
+ * Fallback servlet error controller for the admin application.
  *
- * 捕获 Spring Boot 默认错误转发（如 404 无匹配处理器、500 内部错误等），
- * 将其转换为与 [GlobalExceptionHandler] 一致的 [AdminErrorResponse] 结构，
- * 确保前端收到的错误格式统一，便于 errorHandler 统一处理。
+ * Intercepts default Spring Boot error dispatches (e.g. 404 for unmapped handlers, 500
+ * from filters, or errors that escape the MVC layer) and normalizes them into the same
+ * [AdminErrorResponse] envelope that [GlobalExceptionHandler] produces. This keeps the
+ * frontend `errorHandler` unaware of whether an error originated inside a controller or
+ * somewhere earlier/later in the filter chain.
  */
 @RestController
 class AdminErrorController : ErrorController {
@@ -24,12 +26,12 @@ class AdminErrorController : ErrorController {
         val path = request.getAttribute("jakarta.servlet.error.request_uri") as? String
             ?: request.requestURI
         val message = when (statusCode) {
-            HttpStatus.NOT_FOUND.value() -> "接口不存在: $path"
-            HttpStatus.FORBIDDEN.value() -> "无权限访问: $path"
-            HttpStatus.UNAUTHORIZED.value() -> "未授权，请先登录"
-            HttpStatus.BAD_REQUEST.value() -> "请求参数错误"
-            HttpStatus.INTERNAL_SERVER_ERROR.value() -> "服务器内部错误，请联系管理员"
-            else -> "请求处理失败"
+            HttpStatus.NOT_FOUND.value() -> "Endpoint not found: $path"
+            HttpStatus.FORBIDDEN.value() -> "Access denied: $path"
+            HttpStatus.UNAUTHORIZED.value() -> "Unauthorized, please login first"
+            HttpStatus.BAD_REQUEST.value() -> "Invalid request parameters"
+            HttpStatus.INTERNAL_SERVER_ERROR.value() -> "Internal server error, please contact administrator"
+            else -> "Request processing failed"
         }
         val code = when (statusCode) {
             HttpStatus.NOT_FOUND.value() -> "NOT_FOUND"

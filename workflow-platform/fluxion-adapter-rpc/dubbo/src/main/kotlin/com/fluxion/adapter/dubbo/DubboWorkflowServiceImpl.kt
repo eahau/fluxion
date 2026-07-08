@@ -5,43 +5,54 @@ import com.fluxion.adapter.spi.WorkflowRouter
 import com.fluxion.core.exception.WorkflowException
 import org.apache.dubbo.rpc.RpcContext
 import org.slf4j.*
-
 /**
- * Dubbo 工作流服务实现（零 Spring）
+ * Apache Dubbo implementation of [DubboWorkflowApi] — zero Spring dependency.
  *
- * 通过 Apache Dubbo 暴露工作流调用能力
+ * Converts Dubbo invocations (params map + attachments) into
+ * [UnifiedRequest] objects and delegates to the protocol-agnostic
+ * [WorkflowRouter].
  *
- * 协议标识：DUBBO
- * 路由规则：
- *   - params 含 `_workflowId` → 跳过路由，直接按 ID 执行
- *   - Dubbo attachments 含 `x-service-key` → 按该键路由（对应 wf_definition.bind_key）
- *   - params 含 `_serviceKey` → 按该键路由（兼容方式）
+ * **Protocol marker on UnifiedRequest:**
+ * - Direct execution via `_workflowId` → `protocol="INTERNAL"` (same marker
+ *   used by HTTP when the caller sets `X-Workflow-Id` header).
+ * - Bind-key routing via `x-service-key`/`_serviceKey` →
+ *   `protocol="DUBBO:<serviceKey>"` so the runtime's route store can do a
+ *   per-adapter lookup if a given service key has multiple transport bindings.
+ *
+ * **Error-surfacing strategy (deliberate design):**
+ * `WorkflowException` (logical failure) and generic `Exception`
+ * (infrastructure failure) are both caught and returned as a plain
+ * `{success:false, errorCode, message}` map rather than being rethrown as a
+ * Dubbo RpcException. This keeps the client-side deserialisation contract
+ * stable across SDK languages — all consumers can branch on `$.success`
+ * instead of language-specific exception-unwrapping.
  */
 class DubboWorkflowServiceImpl(
     private val workflowRouter: WorkflowRouter
 ) : DubboWorkflowApi {
 
     companion object {
-        /** params 中携带此键时跳过路由，直接按 workflowId 执行 */
+        /** Presence of this key in params forces direct execution by workflow id. */
         const val PARAM_WORKFLOW_ID = "_workflowId"
-        /** params 中携带此键时按 bind_key 路由（兼容方式） */
+        /** Fallback compatibility routing key inside the payload. */
         const val PARAM_SERVICE_KEY = "_serviceKey"
-        /** Dubbo attachments 中携带此键时按 bind_key 路由（与 gRPC/HTTP 对齐） */
+        /** Preferred routing key carried in Dubbo per-RPC attachments. */
         const val ATTACHMENT_SERVICE_KEY = "x-service-key"
     }
 
     private val log = LoggerFactory.getLogger(javaClass)
 
     /**
-     * Dubbo 服务接口实现。
+     * Single RPC entry point.
      *
-     * 路由策略（优先级从高到低）：
-     *   1. params 含 `_workflowId` → 直接按 ID 执行（protocol=INTERNAL）
-     *   2. Dubbo attachments 含 `x-service-key` → 按该键路由
-     *   3. params 含 `_serviceKey` → 按该键路由
+     * Routing resolution order (highest → lowest):
+     * 1. `params[PARAM_WORKFLOW_ID]` → direct
+     * 2. `attachments[ATTACHMENT_SERVICE_KEY]` → bind-key (preferred transport-level)
+     * 3. `params[PARAM_SERVICE_KEY]` → bind-key (payload fallback)
      *
-     * @param params 业务参数
-     * @return 工作流执行结果，或错误体 Map
+     * The routing markers are *stripped* from `cleanParams` before passing to
+     * the router so workflow authors see ONLY their own business keys in the
+     * `params` map (no framework-prefixed surprises inside DAG functions).
      */
     override fun execute(params: Map<String, Any>): Any? {
         val attachments = extractDubboAttachments()
@@ -76,7 +87,7 @@ class DubboWorkflowServiceImpl(
         }
     }
 
-    /** 构建统一错误响应体（success=false + errorCode + message）。 */
+    /** Build the canonical error-response envelope shared across all transport adapters. */
     private fun errorBody(errorCode: String, message: String?): Map<String, Any> =
         mapOf(
             "success"   to false,
@@ -85,8 +96,13 @@ class DubboWorkflowServiceImpl(
         )
 
     /**
-     * 提取 Dubbo 隐式参数（attachments）作为 headers
-     * 包含：traceId、userId、tenantId、x-service-key 等透传参数
+     * Extract Dubbo's implicit per-RPC attachments into a string map (used as
+     * [UnifiedRequest.headers]).
+     *
+     * Includes propagated fields the caller may have set (trace-id, user-id,
+     * tenant-id, x-service-key, x-workflow-id …) without requiring a schema
+     * change on the Dubbo service interface. Swallows exceptions defensively
+     * because Dubbo's RpcContext can throw in embedded/test scenarios.
      */
     private fun extractDubboAttachments(): Map<String, String> {
         return try {

@@ -6,9 +6,17 @@ import jakarta.persistence.Table
 import jakarta.persistence.UniqueConstraint
 
 /**
- * 市场安装记录实体。
+ * Marketplace installation record — a per-app-group adoption of a listing.
  *
- * 源表：`wf_marketplace_install`
+ * One row is created each time a user *installs* a WfMarketplaceListing into their
+ * app group. The pair `(listingId, appGroup)` is unique to avoid duplicate installs.
+ * Installing a listing materialises a copy of the original workflow/function into the
+ * tenant's PRIVATE namespace (with `sourceRef` back to the listing).
+ *
+ * Source table: `wf_marketplace_install`.
+ *
+ * Collaborates with: WfMarketplaceInstallRepository, MarketplaceService,
+ * WfMarketplaceListing (install_count increment source).
  */
 @Entity
 @Table(
@@ -19,15 +27,15 @@ import jakarta.persistence.UniqueConstraint
 )
 class WfMarketplaceInstall : BaseEntity() {
 
-    /** 市场 listing ID（列：`listing_id`） */
+    /** Foreign key to WfMarketplaceListing.listingId, maps to column `listing_id`. */
     @Column(name = "listing_id", nullable = false, length = 128)
     var listingId: String = ""
 
-    /** 安装者应用分组（列：`app_group`） */
+    /** App group that performed the install, maps to column `app_group`. */
     @Column(name = "app_group", nullable = false, length = 128)
     var appGroup: String = ""
 
-    /** 安装者用户名（列：`installed_by`） */
+    /** Username that clicked install (for audit), maps to column `installed_by`. */
     @Column(name = "installed_by", length = 64)
     var installedBy: String? = null
 }

@@ -9,23 +9,36 @@ import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.RestController
-import java.time.LocalDateTime
+import java.time.Instant
 import java.time.ZoneId
 
 /**
- * 审计日志 REST API
+ * Append-only audit log viewer REST controller (implements OpenAPI-generated [AuditApi]).
+ *
+ * Supports five filter dimensions (operator / action / resourceType / startTime /
+ * endTime); each optional filter is translated into a JPA Specification by
+ * AuditLogService so the query stays efficient even for high-volume audit tables.
+ *
+ * Collaborates with: AuditLogService (spec-driven page query).
  */
 @RestController
 class AuditController(
     private val auditLogService: AuditLogService
 ) : AuditApi {
 
+    /**
+     * Paginated audit log listing.
+     *
+     * Timestamps arrive from the frontend as epoch-millis and are converted into
+     * LocalDateTime using the system default zone before hitting the service layer.
+     * Page size is capped at 100 to cap the server response.
+     */
     override fun listAuditLogs(
         operator: String?,
         action: String?,
         resourceType: String?,
-        startTime: java.time.OffsetDateTime?,
-        endTime: java.time.OffsetDateTime?,
+        startTime: Long?,
+        endTime: Long?,
         page: Int,
         pageSize: Int
     ): ResponseEntity<PageResponseAuditLog> {
@@ -35,8 +48,8 @@ class AuditController(
             operator = operator,
             action = action,
             resourceType = resourceType,
-            startTime = startTime?.toLocalDateTime(),
-            endTime = endTime?.toLocalDateTime(),
+            startTime = startTime?.let { Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDateTime() },
+            endTime = endTime?.let { Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDateTime() },
             pageable = pageable
         )
         return ResponseEntity.ok(PageResponseAuditLog().apply {
@@ -47,14 +60,15 @@ class AuditController(
         })
     }
 
+    /** Entity → OpenAPI DTO mapper. `createdAt` becomes timestamp-millis for the frontend. */
     private fun toDto(entity: AuditLog): AuditLogDto = AuditLogDto().apply {
         id = entity.id.toString()
         this.operator = entity.operator
         this.action = entity.action
         this.resourceType = entity.resourceType
-        this.resourceId = entity.resourceId
+        resourceId = entity.resourceId
         detail = entity.detail
         ip = entity.ip
-        timestamp = entity.createdAt.atZone(ZoneId.systemDefault()).toOffsetDateTime()
+        timestamp = entity.createdAt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
     }
 }

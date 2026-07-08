@@ -6,9 +6,17 @@ import com.fluxion.adapter.spi.WorkflowRouter
 import org.apache.dubbo.config.annotation.DubboService
 
 /**
- * Dubbo 工作流服务 Spring Boot 暴露
+ * Spring Boot exposed Dubbo service — uses `@DubboService` annotation so the
+ * Dubbo spring-boot starter registers this bean with the Dubbo registry
+ * (ZooKeeper / Nacos / Redis) at boot time.
  *
- * 零 Spring 实现参见 workflow-adapter-rpc-dubbo 的 DubboWorkflowServiceImpl
+ * Implementation is pure delegation to the framework-agnostic
+ * [DubboWorkflowServiceImpl] so the transport business logic stays unit-testable
+ * without booting Spring / Dubbo.
+ *
+ * Version + group pins the service at `workflow/1.0.0` which allows multiple
+ * workflow-engine generations to co-exist in the same registry during a
+ * rolling upgrade without traffic bleed.
  */
 @DubboService(version = "1.0.0", group = "workflow")
 open class DubboWorkflowService(

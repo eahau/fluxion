@@ -1,3 +1,12 @@
+/**
+ * Tests covering [FunctionRegistry] lookup semantics, version hot-swap,
+ * in-flight retention, and namespace-prefix fallback behaviour.
+ *
+ * The suite focuses on concurrency-sensitive paths: a long-running in-flight
+ * invocation on v1 must complete successfully even after v2 is published and
+ * v1 moves into the RETIRING slot, and retiring slots must only be purged
+ * after the in-flight counter drains to zero.
+ */
 package com.fluxion.core.function
 
 import com.fluxion.core.enums.NodeType
@@ -14,6 +23,10 @@ import java.util.concurrent.Executors
 import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
 
+/**
+ * Behavioural tests for [FunctionRegistry] and the embedded [VersionedFunction]
+ * two-slot state machine.
+ */
 class FunctionRegistryTest {
 
     private val registry = FunctionRegistry()
@@ -52,7 +65,8 @@ class FunctionRegistryTest {
         val latch = CountDownLatch(1)
         val started = CountDownLatch(1)
 
-        // v1閿涙岸妯嗘繅鐐插毐閺佸府绱濋惄鏉戝煂 latch 閺€鎹愵攽
+        // v1 blocks inside apply() until latch is counted down, simulating a
+        // slow downstream RPC that spans a version hot-swap.
         val v1 = blockingFunction(started, latch, "v1-result")
         registry.register("script:long", 1, InlineMeta.of("script:long"), v1)
 
@@ -61,18 +75,19 @@ class FunctionRegistryTest {
             registry.resolve("script:long").apply(emptyInput())
         })
 
-        // 缁涘绶?v1 閹笛嗩攽鏉╂稑鍙嗛梼璇差敚
+        // Wait until v1 has entered apply so the version pin is established.
         started.await(1, TimeUnit.SECONDS)
 
-        // 閸欐垵绔?v2閿涘瘉1 鎼存棁绻橀崗?RETIRING
+        // Publish v2 while v1 is still in-flight; v1 must move to RETIRING
+        // rather than being discarded so the pinned invocation can finish.
         registry.register("script:long", 2, InlineMeta.of("script:long"), constantFunction("v2-result"))
         assertEquals(2L, registry.activeVersion("script:long"))
         assertEquals(1L, registry.retiringVersion("script:long"))
 
-        // 閺傛媽鐨熼悽銊ゅ▏閻?v2
+        // New lookups after the swap must observe v2 immediately.
         assertEquals("v2-result", registry.resolve("script:long").apply(emptyInput()).output)
 
-        // 閺€鎹愵攽 v1
+        // Unblock v1 and assert the pinned invocation returned cleanly.
         latch.countDown()
         val v1Result = future.get(1, TimeUnit.SECONDS)
         assertEquals("v1-result", v1Result.output)
@@ -87,11 +102,13 @@ class FunctionRegistryTest {
 
         assertEquals(1L, registry.retiringVersion("script:x"))
 
-        // v1 閺冪姴婀柅鏃囩殶閻㈩煉绱漰urge 閹存劕濮?
+        // With zero in-flight calls the first purge call must drop the slot
+        // and return true so housekeeping stats can be aggregated accurately.
         assertTrue(registry.purgeRetiring("script:x"))
         assertNull(registry.retiringVersion("script:x"))
 
-        // 閸愬秵顐?purge 閺冪姴鍞寸€?
+        // A second purge on an already-empty slot must be a no-op returning
+        // false, matching the documented idempotent semantics.
         assertFalse(registry.purgeRetiring("script:x"))
     }
 
@@ -123,8 +140,13 @@ class FunctionRegistryTest {
         assertEquals("ok", resolved.apply(emptyInput()).output)
     }
 
-    // 閳光偓閳光偓閳光偓 helpers 閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓
+    // --- test helpers ---
 
+    /**
+     * Returns a [WorkflowFunction] that always emits the supplied string.
+     *
+     * @param output constant value returned from [WorkflowFunction.apply]
+     */
     private fun constantFunction(output: String): WorkflowFunction<Any> =
         object : WorkflowFunction<Any> {
             override fun apply(input: NodeInput): FunctionResult<Any> =
@@ -133,6 +155,16 @@ class FunctionRegistryTest {
             override val functionName = "constant"
         }
 
+    /**
+     * Returns a [WorkflowFunction] that blocks inside apply until [latch] is
+     * counted down, signalling readiness via [started] first.
+     *
+     * Used to reproduce race conditions where a version swap happens mid-call.
+     *
+     * @param started counted down immediately on entry to apply()
+     * @param latch caller awaits this latch inside apply()
+     * @param output value returned once the latch is released
+     */
     private fun blockingFunction(
         started: CountDownLatch,
         latch: CountDownLatch,
@@ -148,5 +180,6 @@ class FunctionRegistryTest {
             override val functionName = "blocking"
         }
 
+    /** Convenience helper returning an empty [NodeInput] snapshot. */
     private fun emptyInput() = NodeInput(null)
 }

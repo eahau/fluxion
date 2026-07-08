@@ -20,7 +20,13 @@ import org.mockito.Mockito.`when`
 import java.util.Optional
 
 /**
- * WfDefinitionService 发布阶段预编译测试。
+ * Pre-compile / publish-phase tests for [WfDefinitionService].
+ *
+ * Validates that publishing a DRAFT workflow:
+ *  - Preserves user-defined top-level DAG fields (extraField)
+ *  - Walks the graph and pre-compiles dbExecute nodes with upstream output schemas
+ *  - Extracts named parameter lists from raw SQL so runtime can bind without
+ *    re-parsing the statement on every execution.
  */
 class WfDefinitionServiceCompileTest {
 

@@ -6,19 +6,21 @@ import org.springframework.cache.annotation.EnableCaching
 import org.springframework.scheduling.annotation.EnableAsync
 
 /**
- * 工作流平台管理服务启动类
+ * Fluxion Admin Spring Boot application entry point.
  *
- * 包含：
- *   - workflow-admin REST API（工作流定义/函数/Schema 管理）
- *   - WorkflowEngine + DagExecutor（核心执行引擎）
- *   - WorkflowRouterImpl（协议路由）
- *   - 内置函数自动配置（DB/HTTP/MQ/JSON）
- *   - Redis 函数自动配置（Layer1/2/3）
- *   - 脚本引擎自动配置（Groovy/JS）
+ * Module responsibilities:
+ *   - CRUD and validation for the core workflow domain: `wf_*` (definitions, schemas,
+ *     functions, app-groups) and `sec_*` (users, roles, perms) tables.
+ *   - Exposes the generated OpenAPI REST surface (`src/main/kotlin-generated`) and a
+ *     `DebugService` for step-by-step workflow inspection.
+ *   - Wires the workflow engine (`WfEngine`, `Router`, `Locks`) with admin-specific
+ *     integrations: database-backed registries, JWT + ACL, HTTP-route publishing.
+ *   - Loads Fluxion Redis, Redisson, and Spring-Data-Redis autoconfigurations for
+ *     distributed lock/idempotency backends and optional queue persistence.
  */
 @SpringBootApplication
-@EnableCaching
 @EnableAsync
+@EnableCaching
 class WorkflowAdminApplication
 
 fun main(args: Array<String>) {

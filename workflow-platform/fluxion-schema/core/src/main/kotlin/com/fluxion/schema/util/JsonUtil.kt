@@ -1,3 +1,14 @@
+/**
+ * Shared JSON helpers internal to the `fluxion-schema` module family.
+ *
+ * Centralises a Jackson [ObjectMapper] pre-configured with:
+ * * KotlinModule with `NullIsSameAsDefault` enabled so data classes treat
+ *   absent fields the same as explicit `null` values.
+ * * `FAIL_ON_UNKNOWN_PROPERTIES = false` — schemas evolve independently from
+ *   the parsing code, so unknown fields must never blow up deserialization.
+ * * `WRITE_DATES_AS_TIMESTAMPS = false` — ISO-8601 string dates interop
+ *   better with external consumers and persisted snapshots.
+ */
 package com.fluxion.schema.util
 
 import com.fasterxml.jackson.core.type.TypeReference
@@ -9,9 +20,8 @@ import com.fasterxml.jackson.module.kotlin.KotlinFeature
 import com.fasterxml.jackson.module.kotlin.KotlinModule
 
 /**
- * fluxion-schema 内部使用的 JSON 工具类。
- *
- * 位于 `com.fluxion.schema.util` 包下，供 fluxion-schema 各子模块共享。
+ * Internal utility facade for JSON operations needed by parsers/validators
+ * and format-specific data providers.
  */
 object JsonUtil {
 

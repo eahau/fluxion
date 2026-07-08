@@ -24,7 +24,7 @@ export interface DbTableColumn {
  */
 export async function listDatasources(): Promise<DbDatasourceBrief[]> {
   try {
-    const res = await apiGet<any>('/api/admin/datasources');
+    const res = await apiGet<any>('/api/datasources');
     const arr: any[] = Array.isArray(res) ? res : (res as any)?.list ?? (res as any)?.items ?? (res as any)?.data ?? [];
     return arr.map((o) => (typeof o === 'string' ? { id: o, name: o, domain: 'db' } : { id: o.id ?? o.name, name: o.name ?? o.id, domain: o.domain ?? 'db', type: o.type }));
   } catch (e) {
@@ -37,7 +37,7 @@ export async function listDatasources(): Promise<DbDatasourceBrief[]> {
  */
 export async function listTables(datasourceId: string): Promise<string[]> {
   try {
-    const res = await apiGet<any>(`/api/admin/datasources/${encodeURIComponent(datasourceId)}/tables`);
+    const res = await apiGet<any>(`/api/datasources/${encodeURIComponent(datasourceId)}/tables`);
     const arr: any[] = Array.isArray(res) ? res : (res as any)?.list ?? (res as any)?.items ?? (res as any)?.tables ?? (res as any)?.data ?? [];
     return arr.map((o) => (typeof o === 'string' ? o : o.tableName ?? o.name ?? String(o)));
   } catch (e) {
@@ -51,7 +51,7 @@ export async function listTables(datasourceId: string): Promise<string[]> {
 export async function listTableColumns(tableName: string, datasourceId: string): Promise<DbTableColumn[]> {
   try {
     const res = await apiGet<any>(
-      `/api/admin/datasources/${encodeURIComponent(datasourceId)}/tables/${encodeURIComponent(tableName)}/columns`,
+      `/api/datasources/${encodeURIComponent(datasourceId)}/tables/${encodeURIComponent(tableName)}/columns`,
     );
     const arr: any[] = Array.isArray(res) ? res : (res as any)?.list ?? (res as any)?.columns ?? (res as any)?.fields ?? (res as any)?.data ?? [];
     return arr.map((o) => ({

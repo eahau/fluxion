@@ -15,7 +15,7 @@ package com.fluxion.functionmeta.registry
 
 import com.fluxion.core.value.FunctionMeta
 import com.fluxion.functionmeta.api.FunctionMetaRegistry
-import org.slf4j.LoggerFactory
+import org.slf4j.*
 import java.util.concurrent.ConcurrentHashMap
 
 /**

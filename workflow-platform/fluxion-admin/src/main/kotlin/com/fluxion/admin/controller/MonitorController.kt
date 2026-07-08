@@ -11,18 +11,18 @@ import com.fluxion.admin.generated.model.TraceNode
 import jakarta.validation.Valid
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.RestController
-import java.time.OffsetDateTime
 
 /**
- * 监控 REST API
+ * Observability / monitoring REST API for the admin dashboard.
  *
- * 实现 OpenAPI 生成的 MonitorApi 接口。
+ * Implements the generated OpenAPI `MonitorApi` contract. The current implementation
+ * returns empty zero-state placeholders; a follow-up integration will wire a real
+ * metrics backend (Micrometer + Prometheus or ClickHouse) and execution trace store.
  */
 @RestController
 class MonitorController : MonitorApi {
 
     override fun getMetricsOverview(): ResponseEntity<MetricsOverview> {
-        // TODO: 从实际数据源获取指标
         return ResponseEntity.ok(MetricsOverview().apply {
             totalRequests = 0
             successRate = 100.0
@@ -33,12 +33,11 @@ class MonitorController : MonitorApi {
 
     override fun getMetricsTrend(
         metric: String?,
-        startTime: OffsetDateTime?,
-        endTime: OffsetDateTime?,
+        startTime: Long?,
+        endTime: Long?,
         hours: Int?,
         interval: String?
     ): ResponseEntity<MetricsTrend> {
-        // TODO: 从实际指标数据源（Micrometer / Prometheus）拉取趋势数据
         return ResponseEntity.ok(MetricsTrend().apply {
             this.metric = metric ?: "requests"
             this.interval = interval ?: "1h"
@@ -47,12 +46,10 @@ class MonitorController : MonitorApi {
     }
 
     override fun getNodeLatencies(): ResponseEntity<List<NodeLatency>> {
-        // TODO: 从实际数据源获取节点延迟
         return ResponseEntity.ok(emptyList())
     }
 
     override fun getTrace(executionId: String): ResponseEntity<TraceDetail> {
-        // TODO: 从实际数据源获取链路追踪
         return ResponseEntity.ok(TraceDetail().apply {
             this.executionId = executionId
             workflowName = ""
@@ -64,12 +61,11 @@ class MonitorController : MonitorApi {
 
     override fun listErrorLogs(
         keyword: String?,
-        startTime: OffsetDateTime?,
-        endTime: OffsetDateTime?,
+        startTime: Long?,
+        endTime: Long?,
         page: Int,
         pageSize: Int
     ): ResponseEntity<PageResponseErrorLog> {
-        // TODO: 从实际数据源获取错误日志
         return ResponseEntity.ok(PageResponseErrorLog().apply {
             list = mutableListOf()
             total = 0

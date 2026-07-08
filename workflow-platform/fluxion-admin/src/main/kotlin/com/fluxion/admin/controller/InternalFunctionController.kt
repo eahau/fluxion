@@ -9,10 +9,12 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 
 /**
- * 内部函数分发端点 — HTTP 模式下供 Worker 拉取函数配置
+ * Internal HTTP endpoint that exposes enabled function metadata to worker nodes.
  *
- * 仅在 workflow.config.type=http 时激活。
- * Worker 启动时调用 GET /internal/workflow/function/all 全量拉取。
+ * Part of the lightweight admin-as-config-server path activated by
+ * `workflow.config.type=http`. Workers call `GET /internal/workflow/function/all` once
+ * at bootstrap, or periodically if the polling watcher is enabled, to populate their
+ * `FunctionMetaRegistry` and validate step inputs before execution.
  */
 @RestController
 @RequestMapping("/internal/workflow/function")
@@ -22,7 +24,7 @@ class InternalFunctionController(
 ) {
 
     /**
-     * 全量拉取所有已启用函数配置快照
+     * Return every function snapshot currently marked as `ENABLED` in the admin DB.
      */
     @GetMapping("/all")
     fun loadAll(): List<FunctionConfigSnapshot> {
@@ -30,7 +32,7 @@ class InternalFunctionController(
     }
 
     /**
-     * 获取单个函数配置快照
+     * Return a single function snapshot by canonical `functionName`.
      */
     @GetMapping("/{functionName}")
     fun get(@PathVariable functionName: String): FunctionConfigSnapshot? {

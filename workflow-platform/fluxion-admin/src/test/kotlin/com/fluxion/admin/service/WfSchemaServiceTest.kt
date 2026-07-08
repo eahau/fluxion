@@ -20,10 +20,14 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.core.context.SecurityContextHolder
 
 /**
- * WfSchemaService 单元测试：
- *  - 冻结状态权限校验
- *  - Schema 引用前缀匹配（schema:）
- *  - Schema 引用合法性校验（引用目标存在性）
+ * Unit tests for [WfSchemaService].
+ *
+ * Covers:
+ *  - Frozen state permission checks (edit vs unlock authority)
+ *  - Schema reference prefix extraction (`schema:` only)
+ *  - Schema reference validity checks (target existence in DB)
+ *  - Self-reference tolerance when `selfName` is provided
+ *  - Cascade delete protection when referenced by other schemas
  */
 class WfSchemaServiceTest {
 
@@ -48,12 +52,12 @@ class WfSchemaServiceTest {
         )
     }
 
-    // ───────────────────────────────────────────────
-    // 引用提取测试（extractReferencedSchemaNames）
-    // ───────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────
+    // Reference extraction tests (extractReferencedSchemaNames)
+    // ─────────────────────────────────────────────────────────────────────
 
     @Test
-    fun `extractReferencedSchemaNames 能正确提取 schema 前缀的引用`() {
+    fun `extractReferencedSchemaNames correctly extracts schema prefixed refs`() {
         val json = """
             {
               "type": "object",
@@ -79,8 +83,8 @@ class WfSchemaServiceTest {
     }
 
     @Test
-    fun `extractReferencedSchemaNames 不提取非 schema 前缀的引用`() {
-        // 旧的（错误的） json-schema: 前缀不应当被识别
+    fun `extractReferencedSchemaNames ignores non-schema prefixed refs`() {
+        // Old (incorrect) json-schema: prefix must NOT be recognized
         val json = """
             {
               "type": "object",
@@ -97,7 +101,7 @@ class WfSchemaServiceTest {
     }
 
     @Test
-    fun `extractReferencedSchemaNames 支持紧凑格式和空格格式`() {
+    fun `extractReferencedSchemaNames supports compact and whitespace formats`() {
         val json = """
             {"props":{"x":{"${'$'}ref":"schema:First"},"y": { "${'$'}ref" : "schema:Second" }}}
         """.trimIndent()
@@ -107,14 +111,14 @@ class WfSchemaServiceTest {
     }
 
     @Test
-    fun `extractReferencedSchemaNames 无引用时返回空集合`() {
+    fun `extractReferencedSchemaNames returns empty set when no refs`() {
         val json = """{"type":"object","properties":{"a":{"type":"string"}}}"""
         assertTrue(service.extractReferencedSchemaNames(json).isEmpty())
     }
 
-    // ───────────────────────────────────────────────
-    // 引用合法性校验测试（validateSchemaReferences）
-    // ───────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────
+    // Reference validity tests (validateSchemaReferences)
+    // ─────────────────────────────────────────────────────────────────────
 
     private fun mockSchemasInDb(vararg names: String) {
         `when`(schemaRepository.findAll()).thenReturn(
@@ -125,7 +129,7 @@ class WfSchemaServiceTest {
     }
 
     @Test
-    fun `validateSchemaReferences 所有引用都存在时通过`() {
+    fun `validateSchemaReferences passes when all targets exist`() {
         mockSchemasInDb("User", "Address", "Order")
         val json = """
             {"properties":{
@@ -133,12 +137,12 @@ class WfSchemaServiceTest {
               "a":{"${'$'}ref":"schema:Address"}
             }}
         """.trimIndent()
-        // 不应抛出异常
+        // Must not throw
         service.validateSchemaReferences(json, selfName = null)
     }
 
     @Test
-    fun `validateSchemaReferences 引用不存在时抛出异常`() {
+    fun `validateSchemaReferences throws when refs do not exist`() {
         mockSchemasInDb("User")
         val json = """
             {"properties":{
@@ -151,13 +155,13 @@ class WfSchemaServiceTest {
         val ex = assertThrows(IllegalArgumentException::class.java) {
             service.validateSchemaReferences(json, selfName = null)
         }
-        assertTrue(ex.message!!.contains("Order"), "错误信息应包含不存在的 Order")
-        assertTrue(ex.message!!.contains("Payment"), "错误信息应包含不存在的 Payment")
-        assertFalse(ex.message!!.contains("User"), "错误信息不应包含已存在的 User")
+        assertTrue(ex.message!!.contains("Order"), "error message must contain missing ref Order")
+        assertTrue(ex.message!!.contains("Payment"), "error message must contain missing ref Payment")
+        assertFalse(ex.message!!.contains("User"), "error message must NOT contain existing User")
     }
 
     @Test
-    fun `validateSchemaReferences 自引用在指定 selfName 时允许`() {
+    fun `validateSchemaReferences allows self-ref when selfName is set`() {
         mockSchemasInDb("Other")
         val json = """
             {"properties":{
@@ -165,31 +169,31 @@ class WfSchemaServiceTest {
               "other":{"${'$'}ref":"schema:Other"}
             }}
         """.trimIndent()
-        // selfName = Tree，所以 schema:Tree 作为自引用是允许的（即使 DB 中尚不存在也 OK）
+        // selfName = Tree, so schema:Tree is tolerated as self-reference even if DB does not have it yet
         service.validateSchemaReferences(json, selfName = "Tree")
     }
 
     @Test
-    fun `validateSchemaReferences 自引用在 save 时不允许`() {
-        mockSchemasInDb() // 空库
+    fun `validateSchemaReferences rejects fresh self-ref on save`() {
+        mockSchemasInDb() // empty DB
         val json = """{"properties":{"self":{"${'$'}ref":"schema:FreshNew"}}}"""
-        // save 时 selfName 传 null，因此 FreshNew 不被识别
+        // On save selfName is null, so FreshNew must NOT be tolerated as self-ref
         val ex = assertThrows(IllegalArgumentException::class.java) {
             service.validateSchemaReferences(json, selfName = null)
         }
-        assertTrue(ex.message!!.contains("FreshNew"), "save 时自引用不应被豁免")
+        assertTrue(ex.message!!.contains("FreshNew"), "self-ref during save must not be excused")
     }
 
     @Test
-    fun `validateSchemaReferences 没有引用时直接通过`() {
+    fun `validateSchemaReferences passes through when there are no refs`() {
         mockSchemasInDb()
         service.validateSchemaReferences("""{"type":"object"}""", selfName = null)
-        // 不应抛出
+        // Must not throw
     }
 
-    // ───────────────────────────────────────────────
-    // 冻结权限与服务层入口集成测试
-    // ───────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────
+    // Frozen permission + service layer integration tests
+    // ─────────────────────────────────────────────────────────────────────
 
     private fun setCurrentUserAuthorities(vararg authorities: String) {
         val auth = UsernamePasswordAuthenticationToken(
@@ -210,8 +214,8 @@ class WfSchemaServiceTest {
     }
 
     @Test
-    fun `update 冻结的 schema 无权限时抛出 AccessDeniedException`() {
-        setCurrentUserAuthorities("schema:edit") // 有编辑权限但无解锁权限
+    fun `update frozen schema without unlock authority throws AccessDeniedException`() {
+        setCurrentUserAuthorities("schema:edit") // edit only, no unlock
         val existing = basicSchema("Locked", frozen = true)
         `when`(schemaRepository.findBySchemaName("Locked")).thenReturn(java.util.Optional.of(existing))
         `when`(schemaRepository.findAll()).thenReturn(emptyList())
@@ -220,11 +224,11 @@ class WfSchemaServiceTest {
         val ex = assertThrows(AccessDeniedException::class.java) {
             service.update("Locked", incoming)
         }
-        assertTrue(ex.message!!.contains("已冻结"))
+        assertTrue(ex.message!!.contains("frozen"))
     }
 
     @Test
-    fun `update 冻结的 schema 有 schema unlock 权限时通过`() {
+    fun `update frozen schema with schema unlock authority succeeds`() {
         setCurrentUserAuthorities("schema:unlock")
         val existing = basicSchema("Locked", frozen = true)
         val saved = basicSchema("Locked", frozen = false)
@@ -235,12 +239,12 @@ class WfSchemaServiceTest {
         val incoming = basicSchema("Locked").apply { frozen = false }
         val result = service.update("Locked", incoming)
         assertNotNull(result)
-        // 具备 schema:unlock 才能成功修改 frozen
+        // schema:unlock is required to actually flip frozen
         assertFalse(result.frozen)
     }
 
     @Test
-    fun `delete 冻结的 schema 无权限时抛出 AccessDeniedException`() {
+    fun `delete frozen schema without unlock authority throws AccessDeniedException`() {
         setCurrentUserAuthorities("schema:edit")
         val existing = basicSchema("Locked", frozen = true)
         `when`(schemaRepository.findBySchemaName("Locked")).thenReturn(java.util.Optional.of(existing))
@@ -250,13 +254,13 @@ class WfSchemaServiceTest {
         val ex = assertThrows(AccessDeniedException::class.java) {
             service.delete("Locked")
         }
-        assertTrue(ex.message!!.contains("已冻结"))
+        assertTrue(ex.message!!.contains("frozen"))
     }
 
     @Test
-    fun `save 创建 schema 时校验引用的目标必须存在`() {
+    fun `save validates that referenced schemas exist in DB`() {
         setCurrentUserAuthorities("schema:edit")
-        // 模拟空库
+        // simulate empty DB
         mockSchemasInDb()
         `when`(schemaRepository.save(any())).thenAnswer { it.arguments[0] as WfSchema }
 
@@ -264,7 +268,7 @@ class WfSchemaServiceTest {
             schemaName = "NewOne"
             schemaType = "INPUT"
             schemaFormat = "json-schema"
-            // 引用不存在的 Schema
+            // reference a schema that does not exist
             schemaJson = """{"properties":{"u":{"${'$'}ref":"schema:NotExist"}}}"""
             scope = "PLATFORM"
         }
@@ -272,15 +276,15 @@ class WfSchemaServiceTest {
         val ex = assertThrows(IllegalArgumentException::class.java) {
             service.save(badRefSchema)
         }
-        assertTrue(ex.message!!.contains("NotExist"), "创建 Schema 时非法引用应被拦截")
+        assertTrue(ex.message!!.contains("NotExist"), "creating schema with illegal ref must be rejected")
     }
 
     @Test
-    fun `delete 被其他 Schema 以 schema 前缀引用时抛出引用异常`() {
+    fun `delete throws when schema is referenced by other schemas via schema prefix`() {
         setCurrentUserAuthorities("schema:unlock", "schema:edit")
 
         val target = basicSchema("TargetSchema")
-        // 引用者使用正确的 schema: 前缀（修正后的前缀）
+        // referrer uses the CORRECT schema: prefix (after the prefix fix)
         val referrer = basicSchema("Referrer").apply {
             schemaJson = """{"properties":{"t":{"${'$'}ref":"schema:TargetSchema"}}}"""
         }
@@ -291,23 +295,23 @@ class WfSchemaServiceTest {
         val ex = assertThrows(IllegalArgumentException::class.java) {
             service.delete("TargetSchema")
         }
-        assertTrue(ex.message!!.contains("正在被引用"), "删除被引用的 Schema 应提示正在被引用")
-        assertTrue(ex.message!!.contains("Schema[Referrer]"), "错误信息应包含引用者名称")
+        assertTrue(ex.message!!.contains("referenced"), "deleting referenced schema must report active refs")
+        assertTrue(ex.message!!.contains("Schema[Referrer]"), "error message must include referrer name")
     }
 
     @Test
-    fun `delete 旧 json-schema 前缀的引用不再识别为真正引用`() {
+    fun `delete ignores legacy json-schema prefixed refs and succeeds`() {
         setCurrentUserAuthorities("schema:unlock", "schema:edit")
 
         val target = basicSchema("TargetSchema")
-        // 使用旧（错误）的 json-schema: 前缀，不应再触发引用保护
+        // uses the OLD (incorrect) json-schema: prefix, should NOT trigger ref protection anymore
         val oldStyleReferrer = basicSchema("OldReferrer").apply {
             schemaJson = """{"properties":{"t":{"${'$'}ref":"json-schema:TargetSchema"}}}"""
         }
         `when`(schemaRepository.findBySchemaName("TargetSchema")).thenReturn(java.util.Optional.of(target))
         `when`(schemaRepository.findAll()).thenReturn(listOf(target, oldStyleReferrer))
         `when`(definitionRepository.findAll()).thenReturn(emptyList())
-        // 没有正确的 schema: 前缀引用，delete 应该能正常通过（不抛出"正在被引用"）
+        // No valid schema: prefix references -> delete must succeed without throwing "referenced"
         service.delete("TargetSchema")
     }
 }

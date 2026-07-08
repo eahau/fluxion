@@ -1,18 +1,21 @@
+/**
+ * Avro [SchemaParser] that compiles an Avro schema JSON document into an
+ * [org.apache.avro.Schema] instance wrapped in the unified [Schema] envelope.
+ *
+ * Blank / null raw inputs are normalised to `"{}"` which Avro's own parser
+ * rejects; we map that case to an empty marker that validators treat as
+ * "any value is valid" — mirroring JSON Schema semantics.
+ */
 package com.fluxion.schema.avro
 
 import com.fluxion.schema.api.SchemaParser
 import com.fluxion.schema.model.Schema
 import com.fluxion.schema.model.SchemaFormat
 import org.slf4j.LoggerFactory
+import org.slf4j.*
 
 /**
- * Avro Schema 解析器。
- *
- * 将 Avro Schema JSON 文本编译为 [org.apache.avro.Schema] 对象，
- * 封装在统一的 [Schema] 容器中供后续校验和字段提取使用。
- *
- * 空 Schema（空白字符串 / "{}" / "null"）会被规范化，
- * 与 JSON Schema 的空 Schema 行为保持一致：校验时直接通过。
+ * Compiles Avro JSON schema text into the runtime [Schema] model.
  */
 class AvroSchemaParser : SchemaParser {
 
@@ -29,7 +32,7 @@ class AvroSchemaParser : SchemaParser {
                 parsed = avroSchema
             )
         } catch (e: Exception) {
-            log.error("Failed to parse Avro schema: ${e.message}", e)
+            log.error(e) { "Failed to parse Avro schema: ${e.message}" }
             throw IllegalArgumentException("Invalid Avro schema: ${e.message}", e)
         }
     }
@@ -44,8 +47,9 @@ class AvroSchemaParser : SchemaParser {
     }
 
     /**
-     * 规范化原始输入：将 null / 空字符串 / 空对象统一视为空 Schema `"{}"`，
-     * 与 JSON Schema 的 empty schema 行为保持一致。
+     * Normalise the raw input so blank/null/empty forms map to the JSON
+     * object `"{}"` — an input convention shared with the JSON Schema and
+     * Protobuf parsers.
      */
     private fun normalizeRaw(raw: String): String {
         val trimmed = raw.trim()

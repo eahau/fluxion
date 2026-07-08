@@ -28,8 +28,7 @@ import com.fluxion.core.function.external.ExternalFunctionRequest
 import com.fluxion.core.function.external.ExternalFunctionResponse
 import com.fluxion.core.function.external.ExternalFunctionTransport
 import com.fluxion.core.model.NodeInput
-import org.slf4j.LoggerFactory
-
+import org.slf4j.*
 /**
  * Transport implementation that reuses the builtin `HttpCallFunction` and
  * its pluggable `HttpClientAdapter` SPI.

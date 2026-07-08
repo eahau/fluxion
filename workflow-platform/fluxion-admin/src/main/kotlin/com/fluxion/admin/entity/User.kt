@@ -12,49 +12,54 @@ import jakarta.persistence.Table
 import java.time.LocalDateTime
 
 /**
- * 用户实体。
+ * User account entity matching Spring Security standard `users` table layout.
  *
- * 对应 Spring Security 标准表 `users`，主键为业务用户名 `username`。
+ * Primary key is the business `username` string (not a numeric id) to align with
+ * `JdbcUserDetailsManager` defaults. Roles are loaded eagerly via the `user_roles` join table
+ * so that `UserDetails.getAuthorities()` is populated after a single fetch.
+ *
+ * Collaborates with: Role (many-to-many via user_roles), AdminUserDetailsService (Spring Security
+ * principal loading), UserRepository.
  */
 @Entity
 @Table(name = "users")
 class User(
 
-    /** 用户名，主键（列：`username`） */
+    /** Unique username / business primary key, maps to column `username`. */
     @Id
     @Column(name = "username", nullable = false, length = 64)
     var username: String = "",
 
-    /** 密码，BCrypt 加密（列：`password`） */
+    /** BCrypt-hashed password, maps to column `password`. */
     @Column(name = "password", nullable = false, length = 256)
     var password: String = "",
 
-    /** 是否启用（列：`enabled`） */
+    /** Whether this account is enabled (Spring Security contract), maps to column `enabled`. */
     @Column(name = "enabled", nullable = false)
     var enabled: Boolean = true,
 
-    /** 昵称（列：`nickname`） */
+    /** Human-readable display name, maps to column `nickname`. */
     @Column(name = "nickname", length = 64)
     var nickname: String? = null,
 
-    /** 邮箱（列：`email`） */
+    /** Contact email address, maps to column `email`. */
     @Column(name = "email", length = 128)
     var email: String? = null,
 
-    /** 手机号（列：`phone`） */
+    /** Contact phone number, maps to column `phone`. */
     @Column(name = "phone", length = 32)
     var phone: String? = null,
 
-    /** 创建时间（列：`created_at`） */
+    /** Record creation timestamp, maps to column `created_at`. */
     @Column(name = "created_at", nullable = false)
     var createdAt: LocalDateTime = LocalDateTime.now(),
 
-    /** 更新时间（列：`updated_at`） */
+    /** Record last-update timestamp, maps to column `updated_at`. */
     @Column(name = "updated_at", nullable = false)
     var updatedAt: LocalDateTime = LocalDateTime.now()
 ) {
 
-    /** 关联角色，通过 `user_roles` 中间表映射 */
+    /** Associated roles, joined via `user_roles` intersection table. */
     @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(
         name = "user_roles",

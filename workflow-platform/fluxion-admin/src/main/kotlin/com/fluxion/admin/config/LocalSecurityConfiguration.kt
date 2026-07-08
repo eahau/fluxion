@@ -14,7 +14,12 @@ import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.security.web.SecurityFilterChain
 
 /**
- * Local 开发环境：使用本地 MySQL，但关闭认证/授权，方便 Apifox/curl/前端直接调试。
+ * `local`-profile security configuration: disables all authentication and authorization
+ * so that developers can call endpoints directly via curl, Apifox or the frontend without
+ * logging in.
+ *
+ * Activated only when the active Spring profiles include `local`. Any other profile is
+ * served by `SecurityConfiguration` instead.
  */
 @Configuration
 @Profile("local")

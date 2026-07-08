@@ -11,10 +11,11 @@ import org.springframework.stereotype.Component
 import org.springframework.web.filter.OncePerRequestFilter
 
 /**
- * JWT 认证过滤器
+ * Servlet filter that extracts and verifies a JWT from the `Authorization: Bearer <token>`
+ * header, then populates the Spring `SecurityContext` for downstream method/URL security.
  *
- * 从 Authorization: Bearer <token> 中提取并校验 JWT，
- * 校验通过后写入 Spring SecurityContext。
+ * Delegates actual token verification to the pluggable `AuthProvider` SPI so a deployment can
+ * transparently switch between local JWT and a remote OAuth/OIDC IdP.
  */
 @Component
 class JwtAuthenticationFilter(

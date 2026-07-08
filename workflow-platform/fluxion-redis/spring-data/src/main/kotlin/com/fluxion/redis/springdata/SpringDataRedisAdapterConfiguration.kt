@@ -8,17 +8,27 @@ import org.springframework.context.annotation.Bean
 import org.springframework.data.redis.core.StringRedisTemplate
 
 /**
- * Spring Data Redis 适配器自动配置
+ * Auto-configuration for the Spring Data Redis adapter.
  *
- * 生效条件：
- *   - 类路径存在 StringRedisTemplate（即应用已引入 spring-boot-starter-data-redis）
- *   - 当前没有其它 RedisClientAdapter Bean（ Lettuce / Redisson 适配器优先级更高）
+ * Activates only when:
+ *  - [StringRedisTemplate] is present on the classpath (i.e. the application pulled in
+ *    `spring-boot-starter-data-redis`), AND
+ *  - No other [RedisClientAdapter] bean has been registered yet.
+ *
+ * This adapter has the lowest precedence among the three Redis client adapters; the
+ * Lettuce and Redisson auto-configurations both define explicit `@ConditionalOnMissingBean`
+ * guards on `RedisClientAdapter` and therefore win when their client libraries are
+ * also on the classpath.
  */
 @AutoConfiguration
 @ConditionalOnClass(StringRedisTemplate::class)
 @ConditionalOnMissingBean(RedisClientAdapter::class)
 class SpringDataRedisAdapterConfiguration {
 
+    /**
+     * Create the adapter and hand it the shared `StringRedisTemplate` that Spring Boot
+     * already auto-configured from application properties.
+     */
     @Bean
     fun redisClientAdapter(redisTemplate: StringRedisTemplate): RedisClientAdapter =
         SpringDataRedisAdapter(redisTemplate)

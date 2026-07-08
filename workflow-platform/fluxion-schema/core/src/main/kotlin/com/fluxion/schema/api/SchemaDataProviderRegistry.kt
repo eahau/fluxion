@@ -3,10 +3,14 @@ package com.fluxion.schema.api
 import com.fluxion.schema.model.SchemaFormat
 
 /**
- * [SchemaDataProvider] 注册表 — 根据 [SchemaFormat] 路由到对应的数据访问提供者。
+ * Immutable registry of [SchemaDataProvider] instances keyed by [SchemaFormat].
  *
- * 接受 `Map<SchemaFormat, SchemaDataProvider>` 格式的路由表，查询为 O(1)。线程安全、无状态。
+ * Thin wrapper over `Map<SchemaFormat, SchemaDataProvider>` — O(1) lookup,
+ * thread-safe (stateless once constructed). Spring Boot auto-config builds
+ * this registry by collecting every [SchemaFormatBundle]'s `dataProvider`
+ * and assembling them into a single map.
  *
+ * Usage:
  * ```kotlin
  * val provider = registry.getProvider(SchemaFormat.PROTOBUF)
  * val value = provider.getField(dynamicMessage, "name")
@@ -17,15 +21,15 @@ class SchemaDataProviderRegistry(
 ) {
 
     companion object {
-        /** 空注册表（无 provider），用于测试或不需要 Schema 数据访问的场景。 */
+        /** Empty registry — for tests or deployments that don't use schema data access. */
         @JvmField
         val EMPTY = SchemaDataProviderRegistry()
     }
 
     /**
-     * 获取支持指定格式的 provider。
+     * Returns the provider for [format].
      *
-     * @throws IllegalArgumentException 若没有匹配的 provider
+     * @throws IllegalArgumentException if no provider is registered for the format.
      */
     fun getProvider(format: SchemaFormat): SchemaDataProvider {
         return providerMap[format]
@@ -35,18 +39,12 @@ class SchemaDataProviderRegistry(
             )
     }
 
-    /**
-     * 尝试获取 provider，不存在时返回 null。
-     */
+    /** Safe lookup — returns `null` instead of throwing. */
     fun findProvider(format: SchemaFormat): SchemaDataProvider? = providerMap[format]
 
-    /**
-     * 是否注册了支持指定格式的 provider。
-     */
+    /** True iff a provider is registered for the given format. */
     fun hasProvider(format: SchemaFormat): Boolean = format in providerMap
 
-    /**
-     * 获取所有已注册的 provider 列表。
-     */
+    /** Returns all registered providers (for iteration / diagnostics). */
     fun allProviders(): List<SchemaDataProvider> = providerMap.values.toList()
 }

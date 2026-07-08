@@ -10,23 +10,28 @@ import com.fluxion.decorator.lock.lockWithContext
 import org.slf4j.*
 
 /**
- * 鍒嗗竷寮忛攣瑁呴グ鍣?鈥?鍑芥暟绾т簰鏂ャ€? *
- * 鍦ㄨ妭鐐规墽琛屽墠灏濊瘯鑾峰彇鍒嗗竷寮忛攣锛屾墽琛屽悗锛堟棤璁烘垚鍔熸垨澶辫触锛夐噴鏀俱€? * 閫傜敤浜庡鍚屼竴鍑芥暟鎴栧悓涓€涓氬姟閿殑骞跺彂璋冪敤杩涜涓茶鍖栥€? *
- * 閰嶇疆鍙傛暟锛堥€氳繃 [WorkflowNode.decoratorParams] 鐨?"lock:distributed" 閿級锛? * - `lockKey`: 闈欐€侀攣閿紝浼樺厛绾ф渶楂? * - `lockKeyExpression`: 閿侀敭妯℃澘锛屾敮鎸?`${'$'}{path}` 鍗犱綅绗︼紙path 涓虹偣鍙峰祵濂楄矾寰勶級锛屽彲鐢ㄥ彉閲忥細
- *     input        鈥?褰撳墠鑺傜偣鐨?directInput
- *     nodeId       鈥?鑺傜偣 ID
- *     nodeName     鈥?鑺傜偣鍚嶇О
- *     workflowId   鈥?宸ヤ綔娴?ID
- *     executionId  鈥?鎵ц ID
- *     functionRef  鈥?鍑芥暟寮曠敤
- *   渚嬪锛歚"lock:${'$'}{workflowId}:${'$'}{nodeId}"`
- * - `waitMillis`:  鏈€澶х瓑寰呴攣鏃堕棿锛堟绉掞級锛岄粯璁?0锛堟嬁涓嶅埌绔嬪嵆澶辫触锛? * - `leaseMillis`: 閿佹渶澶ф寔鏈夋椂闂达紙姣锛夛紝榛樿 30000
- * - `retry`:       鑾峰彇澶辫触鍚庣殑閲嶈瘯娆℃暟锛岄粯璁?0
- * - `retryIntervalMillis`: 閲嶈瘯闂撮殧锛堟绉掞級锛岄粯璁?100
- * - `sync`:        鏄惁鍚屾闃诲鑾峰彇閿侊紝榛樿 false锛堜负 true 鏃舵嬁涓嶅埌閿佷竴鐩撮樆濉烇紝鎱庣敤锛? * - `failOnLocked`: 鑾峰彇閿佸け璐ユ椂鏄惁鎶涘紓甯革紝榛樿 true
- * - `prefix`:      閿侀敭鍓嶇紑锛岄粯璁?"fluxion:lock:"
+ * Node-level distributed lock decorator -- serialises concurrent invocations
+ * of the same function for a given business key.
  *
- * 閿侀敭鐢熸垚浼樺厛绾э細lockKey > lockKeyExpression > 榛樿 "{prefix}{nodeId}"
+ * ### Config (key `lock:distributed` in `WorkflowNode.decoratorParams`)
+ *
+ * | Key                   | Description                                                              | Default               |
+ * |-----------------------|--------------------------------------------------------------------------|-----------------------|
+ * | `lockKey`             | Static lock key (highest priority)                                       |                       |
+ * | `lockKeyExpression`   | Template with `${path}` placeholders; vars listed below                 |                       |
+ * | `waitMillis`          | Max time to wait for the lock (ms)                                       | 0 (fail immediately)  |
+ * | `leaseMillis`         | Max lock hold time before auto-expiry (ms)                               | 30000                 |
+ * | `retry`               | Max additional acquire attempts after the first failure                 | 0                     |
+ * | `retryIntervalMillis` | Sleep between retries                                                    | 100                   |
+ * | `sync`                | When `true`, block until the lock is available (caution!)                | false                 |
+ * | `failOnLocked`        | When `false`, skip the lock and run the function anyway on contention    | true                  |
+ * | `prefix`              | Prepended to the generated business key                                  | `fluxion:lock:`       |
+ *
+ * `${path}` template variables: `input`, `nodeId`, `nodeName`, `workflowId`,
+ * `executionId`, `functionRef`.
+ *
+ * Resolution priority for the final lock key:
+ * `lockKey` > `lockKeyExpression` > `{prefix}{nodeId}`.
  */
 class DistributedLockDecorator(
     private val lockProvider: DistributedLockProvider

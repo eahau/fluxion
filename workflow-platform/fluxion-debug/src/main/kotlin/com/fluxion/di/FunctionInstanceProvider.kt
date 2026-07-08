@@ -3,18 +3,34 @@ package com.fluxion.di
 import com.fluxion.core.function.WorkflowFunction
 
 /**
- * 閸戣姤鏆熺€圭偘绶ラ幓鎰返閼?閳ユ柡鈧?DI 鐎圭懓娅掗柅鍌炲帳閸?SPI
+ * DI-agnostic SPI for instantiating [WorkflowFunction] implementations.
  *
- * 鐠愮喕鐭楃亸?[WorkflowFunction] 閻ㄥ嫬鐤勯悳鎵鐎圭偘绶ラ崠鏍电礉楠炴湹绮犳惔鏇炵湴 DI 鐎圭懓娅掗敍鍦玴ring閵嗕笩uice 缁涘绱? * 濞夈劌鍙嗛崗鏈电贩鐠ф牓鈧倸鐤勯悳鎵閸欘亪娓舵竟鐗堟閼奉亜绻侀弨顖涘瘮閻ㄥ嫬鍤遍弫鎵閸ㄥ绱漑FunctionInstanceProviderRegistry]
- * 娴兼碍瀵滄い鍝勭碍閹告垿鈧顑囨稉鈧稉?`supports()` 鏉╂柨娲?true 閻ㄥ嫭褰佹笟娑溾偓鍛偓? */
+ * Allows the engine to delegate function instance creation to the host
+ * application's container (Spring, Guice, Koin, ...) so that constructor
+ * injection, field injection and AOP proxies behave consistently with the
+ * rest of the codebase.
+ *
+ * Providers are registered globally with [FunctionInstanceProviderRegistry];
+ * when the engine needs an instance it walks the registry and calls
+ * [getInstance] on the first entry whose [supports] returns `true`.
+ */
 interface FunctionInstanceProvider {
 
     /**
-     * 閸掋倖鏌囪ぐ鎾冲閹绘劒绶甸懓鍛板厴閸氾箑鐤勬笟瀣閹稿洤鐣鹃惃鍕毐閺佹壆琚妴?     */
+     * Return `true` if this provider can create instances of `functionClass`.
+     *
+     * The Spring provider always returns `true` (catch-all); more specific
+     * providers (e.g. a Groovy-script provider) should return `true` only
+     * for classes they own.
+     */
     fun supports(functionClass: Class<*>): Boolean
 
     /**
-     * 鐎圭偘绶ラ崠鏍у毐閺佹壆琚獮鑸垫暈閸忋儰绶风挧鏍モ偓?     *
-     * 鐎圭偟骞囨惔鏂剧箽鐠囦浇绻戦崶鐐垫畱鐎圭偘绶ュ鎻掔暚閹?DI 濞夈劌鍙嗛敍娑滃閺冪姵纭堕崚娑樼紦閿涘苯绨查幎娑樺毉瀵倸鐖堕妴?     */
+     * Obtain an instance of `functionClass`, fully wired by the DI container.
+     *
+     * Callers may assume the returned instance is safe to cache across
+     * invocations -- i.e. if the underlying container returns a singleton,
+     * the engine sees the same instance every time.
+     */
     fun getInstance(functionClass: Class<out WorkflowFunction<*>>): WorkflowFunction<*>
 }

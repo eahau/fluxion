@@ -1,14 +1,20 @@
 package com.fluxion.schema.model
 
 /**
- * Schema 引用，用于跨 Schema 复用与运行时解析。
+ * Pointer to a registered, named schema — used for cross-schema references
+ * and runtime lookup via [SchemaResolver].
  *
- * 引用格式为 `<format-code>:<name>`，其中 format-code 对应 [SchemaFormat.code]：
- * - `json-schema:UserSchema` → JSON Schema 引用
- * - `protobuf:User`          → Protobuf Schema 引用
- * - `avro:User`              → Avro Schema 引用
+ * Wire format is `<format-code>:<name>` (colon-separated), matching the
+ * convention used in workflow DSLs and admin APIs:
+ * ```
+ * json-schema:User       → JSON Schema named "User"
+ * protobuf:com.foo.User  → Protobuf message "com.foo.User"
+ * avro:OrderRecord       → Avro record "OrderRecord"
+ * ```
  *
- * 任何已注册的自定义格式码（如 `flatbuffer:Msg`）均可自动识别。
+ * An optional numeric `version` field is reserved for future use by
+ * registries that support versioned schemas (the core `InMemorySchemaRegistry`
+ * currently stores only the latest version).
  */
 data class SchemaRef(
     val format: SchemaFormat,
@@ -18,13 +24,15 @@ data class SchemaRef(
     companion object {
 
         /**
-         * 从引用字符串解析 [SchemaRef]。
+         * Parses a `<format>:<name>` reference string.
          *
-         * 格式为 `<format-code>:<name>`，通过 [SchemaFormat.fromCodeOrNull]
-         * 解析格式码，自动适配内置格式与任意扩展格式。
+         * Returns `null` (instead of throwing) on malformed input because
+         * references often come from user-authored workflow configs where
+         * graceful degradation is preferred. Format codes are resolved via
+         * [SchemaFormat.fromCodeOrNull] so custom format codes work out of
+         * the box.
          *
-         * @param ref 引用字符串，如 `json-schema:UserSchema`
-         * @return 解析后的引用，格式无法识别或缺少冒号分隔符时返回 null
+         * @param ref reference string, e.g. `"json-schema:UserSchema"`
          */
         @JvmStatic
         fun parse(ref: String): SchemaRef? {

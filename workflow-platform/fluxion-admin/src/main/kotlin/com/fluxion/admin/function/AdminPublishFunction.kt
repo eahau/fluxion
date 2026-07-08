@@ -8,19 +8,19 @@ import com.fluxion.core.model.NodeInput
 import com.fluxion.core.util.JsonUtil
 import com.fluxion.core.value.FunctionMeta
 import com.fluxion.core.value.FunctionResult
-import org.slf4j.LoggerFactory
-import org.slf4j.info
+import org.slf4j.*
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.stereotype.Component
 
 /**
- * Admin 自举工作流节点函数：发布函数定义。
+ * Admin self-hosted workflow node: publish a function definition.
  *
- * 由内置工作流 [ADMIN_FUNCTION_PUBLISH_WORKFLOW_ID] 调用，
- * 将函数发布逻辑从 Controller 下沉到工作流引擎执行。
+ * Invoked by the built-in meta-workflow referenced by `ADMIN_FUNCTION_PUBLISH_WORKFLOW_ID`,
+ * moving the publish + worker-side push out of the REST controller layer and into the
+ * workflow engine so retries, auditing and side-effects share a single execution path.
  *
- * 作为 Spring Bean 注册，由 [com.fluxion.di.spring.SpringFunctionInstanceProvider]
- * 从应用上下文中直接获取实例。
+ * Exposed as a Spring bean so `com.fluxion.di.spring.SpringFunctionInstanceProvider` can pull
+ * it directly from the application context when instantiating the admin function component.
  */
 @Component
 class AdminPublishFunction @Autowired constructor(
@@ -44,7 +44,7 @@ class AdminPublishFunction @Autowired constructor(
         return FunctionResult.success(dto)
     }
 
-    override fun meta(): FunctionMeta = FunctionMeta.builder(FUNCTION_REF)
+    fun meta() = FunctionMeta.builder(FUNCTION_REF)
         .description("Admin self-hosted workflow: publish a function definition")
         .build()
 

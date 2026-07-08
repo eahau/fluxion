@@ -9,13 +9,32 @@ import com.fluxion.core.model.WorkflowNode
 import com.fluxion.core.value.EngineResult
 import com.fluxion.core.value.NodeExecutionRecord
 import com.fluxion.core.value.RerunResult
-import org.slf4j.LoggerFactory
-import java.util.stream.Collectors
+import org.slf4j.*
+import org.slf4j.info
+import org.slf4j.warn
+import org.slf4j.error
+import org.slf4j.debug
 
 /**
- * 鐠嬪啳鐦張宥呭 閳?閹绘劒绶甸柌宥嗘杹閵嗕焦鏌囬悙骞库偓浣稿礋濮濄儲澧界悰宀€鐡戠拫鍐槸閼宠棄濮? *
- * 閺嶇绺炬导妯哄◢閿涙艾鍩勯悽?ImmutableExecutionState 閻ㄥ嫪绗夐崣顖氬綁閻楄鈧嶇礉
- *          閺冪娀娓堕柌宥嗘煀閹笛嗩攽閸撳秶鐤嗛懞鍌滃仯閸楀啿褰茬划鍓р€橀幁銏狀槻閸掗鎹㈤幇蹇氬Ν閻愬湱濮搁幀浣碘偓? */
+ * Developer-facing debugging and replay service on top of the core engine.
+ *
+ * Provides three orthogonal primitives built on a single immutable state +
+ * trace model:
+ *
+ * 1. **Rerun from node** -- reload a persisted execution, truncate outputs
+ *    after a chosen node, and replay the tail with optional overridden input.
+ *    Used by SREs to recover from transient downstream failures without
+ *    restarting the entire workflow.
+ *
+ * 2. **Single-step execution** -- execute exactly one node, return a new
+ *    [DebugSnapshot]; used by the admin console debugger UI.
+ *
+ * 3. **Continue-to-breakpoint** -- step forward until either the next
+ *    breakpoint node is reached or the workflow terminates.
+ *
+ * The service deliberately avoids storing session state itself: callers keep
+ * [DebugSnapshot] (serializable, cheap) and pass it back in.
+ */
 class DebugService(
     private val engine: WorkflowEngine,
     private val executionLogRepository: ExecutionLogRepository,
@@ -23,13 +42,26 @@ class DebugService(
 ) {
     private val log = LoggerFactory.getLogger(DebugService::class.java)
 
-    // 閳光偓閳光偓閳光偓 Rerun 閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓
+    // ------------------------------------------------------------------
+    // Rerun
+    // ------------------------------------------------------------------
 
     /**
-     * 娴犲孩瀵氱€规俺濡悙鐟扮磻婵鍣搁弨鐐⒔鐞涘被鈧?     *
-     * 閸掆晝鏁ら崢鐔奉潗閹笛嗩攽閻樿埖鈧胶娈戞稉宥呭讲閸欐ê鎻╅悡褝绱濋幁銏狀槻閻╊喗鐖ｉ懞鍌滃仯娑斿澧犻惃鍕閺堝濡悙纭呯翻閸戠尨绱?     * 閻掕泛鎮楁禒搴ｆ窗閺嶅洩濡悙鐟扮磻婵鍣搁弬鐗堝⒔鐞涘苯鎮楃紒顓″Ν閻愮櫢绱欓弨顖涘瘮鐟曞棛娲婃潏鎾冲弳閿涘鈧?     *
-     * @param executionId    閸樼喎顫愰幍褑顢戦惃?ID
-     * @param targetNodeId   娴犲骸鎽㈡稉顏囧Ν閻愮懓绱戞慨瀣櫢閺€?     * @param overrideInput  鐟曞棛娲婃潏鎾冲弳閿涘潱ull 閸掓瑤濞囬悽銊ュ妞硅精濡悙纭呯翻閸戠尨绱?     * @return 闁插秵鏂佺紒鎾寸亯閿涘牆鎯堥弬鎵畱閺堚偓缂佸牏濮搁幀浣告嫲閹笛嗩攽鏉炪劏鎶楅敍?     */
+     * Resume a previously completed / failed execution starting from
+     * `targetNodeId`.
+     *
+     * All node outputs *before* `targetNodeId` are carried over verbatim
+     * from the archived state; anything at or after `targetNodeId` is
+     * re-executed. If `overrideInput` is provided it is fed as the direct
+     * input to `targetNodeId`; otherwise the original predecessor output
+     * is reused.
+     *
+     * @param executionId    id of the original archived execution
+     * @param targetNodeId   first node to re-execute
+     * @param overrideInput  optional override for the target node's input
+     * @param functionRegistry function resolver (defaults to the engine's own)
+     * @return the replay result containing the final state + new trace
+     */
     suspend fun rerunFromNode(
         executionId: String,
         targetNodeId: String,
@@ -58,25 +90,29 @@ class DebugService(
 
         val nodesToRerun = def.nodes.subList(targetIndex, def.nodes.size)
 
-        log.info("Rerunning from node [{}] in execution [{}], {} nodes to execute",
-            targetNodeId, executionId, nodesToRerun.size)
+        log.info { "Rerunning from node [$targetNodeId] in execution [$executionId], ${nodesToRerun.size} nodes to execute" }
 
         return engine.executePartial(nodesToRerun, directInput, replayState, functionRegistry)
     }
 
-    // 閳光偓閳光偓閳光偓 Step / Continue 閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓
+    // ------------------------------------------------------------------
+    // Step / Continue
+    // ------------------------------------------------------------------
 
     /**
-     * 閸楁洘顒為幍褑顢戦敍姘⒔鐞涘奔绗呮稉鈧稉顏囧Ν閻愮懓鎮楅弳鍌氫粻閵?     *
-     * @param snap  瑜版挸澧犵拫鍐槸韫囶偆鍙?     * @return 閺傛壆娈戠拫鍐槸韫囶偆鍙庨敍鍧xtNodeIndex + 1閿?     */
+     * Execute exactly the next pending node recorded in `snap` and return
+     * an updated snapshot (with a paused-at marker if the new *next* node
+     * is a breakpoint).
+     */
     suspend fun step(snap: DebugSnapshot, functionRegistry: FunctionResolver = engine.functionRegistry): DebugSnapshot {
         val def = definitionLoader.load(snap.workflowId)
         return doStep(snap, def, functionRegistry)
     }
 
     /**
-     * 缂佈呯敾閹笛嗩攽閻╂潙鍩岄柆鍥у煂閺傤厾鍋ｉ幋鏍т紣娴ｆ粍绁︾紒鎾存将閵?     *
-     * @param snap  瑜版挸澧犵拫鍐槸韫囶偆鍙?     * @return 閺傛壆娈戠拫鍐槸韫囶偆鍙庨敍鍧usedAtNodeId 娑撳秳璐?null 鐞涖劎銇氶崑婊冩躬閺傤厾鍋ｉ敍?     */
+     * Step forward repeatedly until either the workflow ends or we land on
+     * a node whose id is present in `snap.breakpoints`.
+     */
     suspend fun continueToBreakpoint(snap: DebugSnapshot, functionRegistry: FunctionResolver = engine.functionRegistry): DebugSnapshot {
         val def = definitionLoader.load(snap.workflowId)
         var current = snap
@@ -89,11 +125,20 @@ class DebugService(
         return current
     }
 
-    // 閳光偓閳光偓閳光偓 Snapshot 閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓
+    // ------------------------------------------------------------------
+    // Snapshot construction
+    // ------------------------------------------------------------------
 
     /**
-     * 娴犲孩澧界悰宀€绮ㄩ弸婊冨灡瀵ゅ搫鍨垫慨瀣殶鐠囨洖鎻╅悡褋鈧?     *
-     * 鐏?EngineResult.finalState 鐏忎浇顥婃稉?DebugSnapshot閿?     * 閺€顖涘瘮鐠佸墽鐤嗛弬顓犲仯闂嗗棗鎮庨崪?Mock 闁板秶鐤嗛妴?     */
+     * Convert a complete [EngineResult] (e.g. from a fresh DAG run) into a
+     * [DebugSnapshot] suitable for the step/continue primitives below.
+     *
+     * @param result           completed engine result
+     * @param workflowId       owning workflow id
+     * @param workflowVersion  workflow version -- must match subsequent loads
+     * @param breakpoints      node ids that trigger a pause on entry
+     * @param mockConfig       active MockConfig (injected into [DebugContext])
+     */
     fun createSnapshot(
         result: EngineResult,
         workflowId: String,
@@ -111,9 +156,11 @@ class DebugService(
         nextNodeIndex = result.trace.size
     )
 
-    // 閳光偓閳光偓閳光偓 Private Helpers 閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓
+    // ------------------------------------------------------------------
+    // Private Helpers
+    // ------------------------------------------------------------------
 
-    /** 閹笛嗩攽閸楁洘顒為敍鍫濆敶闁劍鏌熷▔鏇礆閿涙碍浠径宥勭瑐娑撳鏋冮妴浣瑰⒔鐞涘矁濡悙骞库偓浣规纯閺傛壆濮搁幀?*/
+    /** Execute a single step: compute direct input, run the node, append the record, return new context. */
     private suspend fun doStep(snap: DebugSnapshot, def: WorkflowDefinition, functionRegistry: FunctionResolver): DebugSnapshot {
         val ctx = DebugSnapshot.restore(snap, def)
         val idx = ctx.nextNodeIndex
@@ -158,15 +205,24 @@ class DebugService(
         return state.getNodeOutput(def.nodes[idx - 1].id)
     }
 
-    // 閳光偓閳光偓閳光偓 SPI Interfaces 閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓
+    // ------------------------------------------------------------------
+    // SPI Interfaces
+    // ------------------------------------------------------------------
 
-    /** 閹笛嗩攽閺冦儱绻旀禒鎾冲亶 SPI閿涘牏鏁?workflow-admin 鐎圭偟骞囬敍?*/
+    /**
+     * Repository SPI used by [rerunFromNode] to look up the archived
+     * execution result and its owning workflow id. Implemented by the
+     * admin console module (workflow-admin).
+     */
     interface ExecutionLogRepository {
         fun findByExecutionId(executionId: String): EngineResult?
         fun findWorkflowIdByExecutionId(executionId: String): String?
     }
 
-    /** 瀹搞儰缍斿ù浣哥暰娑斿濮炴潪钘夋珤 SPI閿涘牏鏁?workflow-admin 鐎圭偟骞囬敍?*/
+    /**
+     * Workflow-definition loader SPI. Implemented by the admin console
+     * module (workflow-admin) which reads definitions from its database.
+     */
     interface DefinitionLoader {
         fun load(workflowId: String): WorkflowDefinition
     }

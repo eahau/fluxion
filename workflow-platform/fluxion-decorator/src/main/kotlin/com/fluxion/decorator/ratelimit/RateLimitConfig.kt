@@ -1,8 +1,15 @@
 package com.fluxion.decorator.ratelimit
 
 /**
- * 濠婃垵濮╃粣妤€褰涢梽鎰ウ闁板秶鐤嗛妴? *
- * @param upLimited     缁愭褰涢崘鍛付婢堆嗩嚞濮瑰倹鏆熼敍鍫滅瑐闂勬劧绱? * @param cdSeconds     閹垹顦查崨銊︽埂閿涘牏顫楅敍? * @param recoveryPerCd 濮ｅ繋閲滈幁銏狀槻閸涖劍婀￠幁銏狀槻閻ㄥ嫪鎶ら悧灞炬殶閿涘矂绮拋銈囩搼娴?[upLimited]
+ * Immutable parameters that describe a sliding-window rate limit bucket.
+ *
+ * The parameters intentionally mirror the admin console UI fields; values are
+ * validated at construction via `require` so bad configuration surfaces early.
+ *
+ * @param upLimited     maximum number of requests allowed inside the window
+ * @param cdSeconds     length of the cooldown window in seconds
+ * @param recoveryPerCd number of permits restored every `cdSeconds` (defaults
+ *                      to `upLimited`, i.e. full reset after one cooldown)
  */
 data class RateLimitConfig(
     val upLimited: Int,

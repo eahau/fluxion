@@ -16,30 +16,36 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.regex.Pattern
 
 /**
- * Kafka 工作流事件消费者（基于原生 KafkaConsumer，零 Spring 依赖）
+ * Kafka event consumer that dispatches inbound messages to the workflow engine.
  *
- * 消费规则：
- *   - Topic 命名规范：workflow.{bindKey}（对应 wf_definition.bind_key 的 MQ 类型）
- *   - 消息格式：JSON，包含 workflowId（可选）和 params
- *   - 消息 Header：workflow-id（可选）、trace-id（透传）、reply-topic（可选）
+ * Zero Spring dependency — built directly on the native KafkaConsumer so it can
+ * run embedded in non-Spring deployments. Thread-per-task (Java 21+ virtual
+ * threads) is used for the single poll-loop thread.
  *
- * 执行结果处理：
- *   - 若消息含 reply-topic Header → 将结果发布到 reply-topic
- *   - 否则 → 仅记录日志（fire-and-forget 模式）
+ * **Topic convention:** subscribes via regex to `workflow.<bindKey>` topics,
+ * where `<bindKey>` is the `wf_definition.bind_key` value set for MQ-type
+ * workflows by the operator console.
  *
- * 错误处理：
- *   - WorkflowException → 记录 warn 日志，发送到 DLT（Dead Letter Topic），手动 commit
- *   - 系统异常 → 记录 error 日志，不 commit（触发 Kafka 重试）
+ * **Message envelope (JSON body):**
+ * ```
+ * { "workflowId": "optional", "params": {...} }
+ * ```
  *
- * 生命周期：
- *   - [start]：订阅 topic pattern，启动消费线程
- *   - [stop]：wakeup consumer，关闭线程池和 consumer
+ * **Kafka Headers we inspect:**
+ * - `workflow-id`  – workflow override (takes precedence over body)
+ * - `trace-id`     – propagated to routing/execution layer
+ * - `reply-topic`  – if present, execution result is published back here
  *
- * @param consumer 原生 KafkaConsumer（由调用方创建并配置）
- * @param publisher MQ 发布器，用于发送 reply-topic 和 DLT 消息
- * @param workflowRouter 工作流路由器
- * @param topicPattern 订阅的 topic 正则（默认 `workflow\..*`）
- * @param pollTimeout 单次 poll 超时时间（默认 100ms）
+ * **Error handling contract (deliberate two-tier strategy):**
+ * - `WorkflowException` → logical error. Route to Dead-Letter Topic (`.DLT`),
+ *   then commit offset. We do NOT want infinite retries of a bad payload.
+ * - Any other exception → infrastructure error. Leave offset UN-committed so
+ *   Kafka's `auto.offset.reset` policy can retry after consumer restart.
+ *
+ * **Lifecycle:**
+ * - [start] – subscribe topic pattern, start virtual consumer thread.
+ * - [stop]  – `wakeup()` the consumer (clean way to break a blocked poll),
+ *   shut down executor, close the KafkaConsumer.
  */
 class KafkaWorkflowConsumer(
     private val consumer: KafkaConsumer<String, String>,
@@ -52,13 +58,13 @@ class KafkaWorkflowConsumer(
     private val log = LoggerFactory.getLogger(javaClass)
     private val running = AtomicBoolean(false)
 
-    /** 消费循环执行器（虚拟线程，Java 21+） */
+    /** Single-thread virtual-thread executor for the poll loop. */
     private val executor = Executors.newThreadPerTaskExecutor(
         Thread.ofVirtual().name("kafka-workflow-consumer", 0).factory()
     )
 
     /**
-     * 启动消费者
+     * Start the consumer. Idempotent — subsequent calls no-op if already running.
      */
     fun start() {
         if (running.compareAndSet(false, true)) {
@@ -69,7 +75,11 @@ class KafkaWorkflowConsumer(
     }
 
     /**
-     * 停止消费者（优雅关闭）
+     * Gracefully shut the consumer down.
+     *
+     * Uses `KafkaConsumer.wakeup()` (thread-safe call) to interrupt a blocking
+     * `poll()` rather than interrupting the thread, which would abort any
+     * in-flight commit.
      */
     fun stop() {
         if (running.compareAndSet(true, false)) {
@@ -84,10 +94,11 @@ class KafkaWorkflowConsumer(
     }
 
     /**
-     * 消费主循环（在虚拟线程上运行）。
+     * Main poll loop — runs on a dedicated virtual thread.
      *
-     * 不断 poll Kafka 记录并逐条处理，
-     * 收到 WakeupException 时检查 running 标志决定是否退出。
+     * WakeupException handling: a wake-up during poll ONLY means "exit cleanly
+     * please" if `running` has been flipped to false. Otherwise it is a spurious
+     * wake-up and we continue looping.
      */
     private fun consumeLoop() {
         try {
@@ -107,14 +118,15 @@ class KafkaWorkflowConsumer(
     }
 
     /**
-     * 处理单条 Kafka 消息。
+     * Process a single Kafka record.
      *
-     * 流程：提取 headers → 解析 payload → 构建 UnifiedRequest → 调用路由器
-     *       → 若有 reply-topic 则发布结果 → commitSync
-     *
-     * 错误处理：
-     *   - WorkflowException → 发 DLT + commitSync（不重试）
-     *   - 系统异常 → 不 commit（让 Kafka 重试）
+     * Pipeline:
+     * 1. Extract headers (binary → String map)
+     * 2. Parse JSON payload (fallback to `{rawMessage: value}` on parse error)
+     * 3. Determine workflowId: header > body > null (then topic-based resolution)
+     * 4. Build [UnifiedRequest] and delegate to [WorkflowRouter.execute]
+     * 5. If `reply-topic` header was present → publish result JSON
+     * 6. commitSync (unless we're in the system-exception path)
      */
     private fun process(record: ConsumerRecord<String, String>) {
         val topic = record.topic()
@@ -133,7 +145,6 @@ class KafkaWorkflowConsumer(
 
             val result = workflowRouter.execute(unified)
 
-            // 若有 reply-topic，将执行结果发布到指定 topic
             val replyTopic = headers["reply-topic"]
             if (!replyTopic.isNullOrBlank()) {
                 val replyPayload = JsonUtil.serialize(
@@ -146,19 +157,26 @@ class KafkaWorkflowConsumer(
             consumer.commitSync()
 
         } catch (ex: WorkflowException) {
+            // Logical error — poison the message to DLT, commit the original offset
             log.warn { "Kafka workflow error [${ex.errorCode}] on topic [$topic]: ${ex.message}" }
             sendToDeadLetterTopic(topic, record, ex.errorCode, ex.message ?: "")
             consumer.commitSync()
 
         } catch (ex: Exception) {
+            // Infrastructure error — do NOT commit; rely on Kafka to re-deliver
             log.error(ex) { "Kafka unexpected error on topic [$topic]: ${ex.message}" }
-            // 不 commit：让 Kafka 根据 auto.offset.reset 策略重试
         }
     }
 
     /**
-     * 发送到 Dead Letter Topic（DLT）
-     * DLT Topic 命名：{originalTopic}.DLT
+     * Publish a failed record to the Dead-Letter Topic.
+     *
+     * DLT topic naming: `{originalTopic}.DLT`
+     *
+     * The original record is wrapped in an envelope preserving the source
+     * topic/key/offset/value plus the failure code/message/timestamp so an
+     * operator replay tool has enough context to re-inject the message
+     * after a fix is deployed.
      */
     private fun sendToDeadLetterTopic(
         originalTopic: String,
@@ -185,7 +203,11 @@ class KafkaWorkflowConsumer(
         }
     }
 
-    /** 解析 JSON 消息体，解析失败时降级为 {rawMessage: value}。 */
+    /**
+     * Parse JSON message body. On parse failure returns a single-key map so
+     * downstream `workflowRouter` still has access to the raw bytes for
+     * debug/DLT analysis rather than NPE-ing on a null params map.
+     */
     private fun parsePayload(value: String): Map<String, Any> {
         return try {
             JsonUtil.toMap(value)
@@ -194,7 +216,11 @@ class KafkaWorkflowConsumer(
         }
     }
 
-    /** 将 Kafka 消息 headers 提取为 String-String Map（二进制值转 String）。 */
+    /**
+     * Flatten Kafka headers (binary multi-map) into a String→String map.
+     * Duplicate keys are last-write-wins, which mirrors the common MQ
+     * convention of single-valued headers.
+     */
     private fun buildHeaders(record: ConsumerRecord<String, String>): Map<String, String> {
         val headers = mutableMapOf<String, String>()
         record.headers().forEach { header ->

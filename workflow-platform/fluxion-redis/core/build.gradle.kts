@@ -1,12 +1,23 @@
+// fluxion-redis:core - Redis capability domain core SPI module.
+// Defines RedisClientAdapter SPI, RedisCommandFunction (built-in workflow function),
+// and shared Redis abstractions. Backed by pluggable client adapters (Lettuce / Redisson / Spring Data).
+plugins {
+    kotlin("jvm")
+    `java-library`
+}
+
 dependencies {
-    // workflow-core SPI（WorkflowFunction / FunctionResult / NodeInput 等）
-    // api: lettuce/redisson 子模块需要访问 workflow-core 的 lazy 日志扩展函数
+    // Core SPI modules (api): Lazy logger functions + RedisClientAdapter impl submodules need these types.
     api(project(":fluxion-core"))
+    api(project(":fluxion-function"))
+    api(project(":fluxion-decorator"))
 
-    // SLF4J — 日志 API（无绑定，零框架）
-    implementation("org.slf4j:slf4j-api")
+    // Unified logging extensions.
+    implementation(project(":fluxion-log"))
 
+    // ===== Testing Dependencies =====
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
+    // JSON schema validator used in tests for Redis response schema assertions.
     testImplementation("com.networknt:json-schema-validator")
 }
 

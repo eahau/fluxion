@@ -1,23 +1,27 @@
 package com.fluxion.redis.ratelimit
 
-import com.fluxion.core.ratelimit.RateLimitConfig
-import com.fluxion.core.ratelimit.RateLimitStore
+import com.fluxion.decorator.ratelimit.RateLimitConfig
+import com.fluxion.decorator.ratelimit.RateLimitStore
 import com.fluxion.redis.spi.RedisClientAdapter
-import org.slf4j.LoggerFactory
-import org.slf4j.debug
-import org.slf4j.warn
+import org.slf4j.*
 import java.security.MessageDigest
 
 /**
- * 基于 Redis + Lua 的滑动窗口限流存储。
+ * Redis-backed sliding-window / token-bucket rate-limit store implemented on top of
+ * an atomic Lua script.
  *
- * 整条“读状态-计算-写状态”逻辑通过 Lua 脚本在 Redis 服务端原子执行，
- * 兼容 Lettuce / Redisson / Spring Data Redis 等 [RedisClientAdapter] 实现。
+ * The entire read-state → compute → write-state operation is executed server-side by
+ * `rate-limit.lua` for correctness under concurrent access from multiple workers. The
+ * implementation is client-agnostic and relies on any [RedisClientAdapter] (Lettuce,
+ * Redisson, Spring Data Redis, …).
  *
- * Lua 脚本位于 classpath 资源文件 `com/fluxion/redis/ratelimit/rate-limit.lua`，
- * 默认由运维方预先通过 `SCRIPT LOAD` 加载到 Redis（集群需加载到每个主节点）。
- * 应用启动时从 classpath 读取脚本并计算 SHA1，运行时优先使用 `EVALSHA` 调用；
- * 若服务端不存在该脚本，自动回退到 `EVAL` 传输完整脚本。
+ * ## Script handling strategy
+ *
+ * On class init the Lua text is loaded from classpath (`/rate-limit.lua`) and its
+ * SHA1 digest is computed locally. At runtime the fast path calls `EVALSHA`; if the
+ * server answers with a `NOSCRIPT` error the store falls back to a full `EVAL` and
+ * the next call re-enters the fast path. In clustered deployments this behavior
+ * tolerates replicas / new shards that never received the original `SCRIPT LOAD`.
  */
 class RedisRateLimitStore(private val adapter: RedisClientAdapter) : RateLimitStore {
 
@@ -47,6 +51,8 @@ class RedisRateLimitStore(private val adapter: RedisClientAdapter) : RateLimitSt
         }
     }
 
+    // Prefer EVALSHA → on explicit NOSCRIPT, transparently retry with the full script.
+    // Any other exception propagates to the caller (see the caller's allow-fallback).
     private fun evalWithFallback(keys: List<String>, args: List<String>): Any? {
         return try {
             adapter.evalSha(scriptSha, keys, args)
@@ -60,6 +66,9 @@ class RedisRateLimitStore(private val adapter: RedisClientAdapter) : RateLimitSt
         }
     }
 
+    // Walk the exception cause chain and look for the literal NOSCRIPT token that every
+    // Redis dialect (Lettuce, Jedis, Redisson, Spring Data) eventually surfaces inside
+    // the error message when a script SHA is unknown to the server.
     private fun isNoScriptError(e: Throwable): Boolean {
         var t: Throwable? = e
         while (t != null) {
@@ -69,6 +78,8 @@ class RedisRateLimitStore(private val adapter: RedisClientAdapter) : RateLimitSt
         return false
     }
 
+    // Different adapters return script results as Boolean / Long / Int / List<*> / "1"
+    // string; normalize to a plain true/false at the store boundary.
     private fun toBoolean(result: Any?): Boolean = when (result) {
         is Boolean -> result
         is Number -> result.toInt() == 1
@@ -83,7 +94,7 @@ class RedisRateLimitStore(private val adapter: RedisClientAdapter) : RateLimitSt
 
         private fun loadScript(): String {
             val stream = RedisRateLimitStore::class.java.getResourceAsStream(RESOURCE_PATH)
-                ?: throw IllegalStateException("Rate limit Lua script not found in classpath: $RESOURCE_PATH")
+                ?: throw IllegalStateException("Rate limit Lua script not found in classpath: `$RESOURCE_PATH")
             return stream.bufferedReader(Charsets.UTF_8).use { it.readText() }
         }
 

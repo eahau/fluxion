@@ -12,8 +12,7 @@ import com.fluxion.schema.model.SchemaFormat
 import com.fluxion.schema.json.JsonSchemaFieldExtractor
 import com.fluxion.schema.json.JsonSchemaParser
 import com.fluxion.schema.json.JsonSchemaValidator
-import org.slf4j.LoggerFactory
-
+import org.slf4j.*
 /**
  * Built-in JSON-Schema based parameter validation (`builtin:paramValidate`).
  *

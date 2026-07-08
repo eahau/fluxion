@@ -1,3 +1,11 @@
+/**
+ * JSON Schema (draft V7) validator backed by the networknt
+ * `json-schema-validator` library.
+ *
+ * Translates networknt's `Set<ValidationMessage>` output into the project's
+ * uniform [ValidationResult] structure, preserving instance/schema locations
+ * so UIs can render per-field errors next to the originating input control.
+ */
 package com.fluxion.schema.json
 
 import com.fluxion.schema.api.SchemaValidator
@@ -7,13 +15,15 @@ import com.fluxion.schema.model.ValidationError
 import com.fluxion.schema.model.ValidationResult
 import com.fluxion.schema.util.JsonUtil
 import org.slf4j.LoggerFactory
+import org.slf4j.*
 
 /**
- * JSON Schema 校验器实现。
+ * Validates Jackson-compatible data trees against a pre-compiled networknt
+ * JsonSchema.
  *
- * 基于 networknt/json-schema-validator，支持 V7 规范。
- * 校验结果包含结构化错误信息（路径、错误类型、Schema 路径），
- * 便于前端做字段级错误展示。
+ * Empty schemas short-circuit to OK; this mirrors the "no constraints"
+ * semantics of `{}` in JSON Schema and keeps validation for ad-hoc, weakly
+ * structured inputs consistent.
  */
 class JsonSchemaValidator : SchemaValidator {
 
@@ -46,7 +56,7 @@ class JsonSchemaValidator : SchemaValidator {
                 ValidationResult.failDetailed(details)
             }
         } catch (e: Exception) {
-            log.error("Schema validation error: ${e.message}", e)
+            log.error(e) { "Schema validation error: ${e.message}" }
             ValidationResult.fail(listOf("Schema validation internal error: ${e.message}"))
         }
     }

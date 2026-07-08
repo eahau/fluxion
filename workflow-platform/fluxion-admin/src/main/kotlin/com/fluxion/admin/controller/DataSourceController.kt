@@ -4,20 +4,20 @@ import com.fluxion.admin.generated.api.DatasourcesApi
 import com.fluxion.admin.generated.model.DatasourceColumnInfo
 import com.fluxion.admin.generated.model.DatasourceInfo
 import com.fluxion.admin.service.TableMetadataService
-import org.slf4j.LoggerFactory
-import org.slf4j.warn
+import org.slf4j.*
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.RestController
 
 /**
- * DB 閺佺増宓佸┃鎰帗閺佺増宓侀弻銉嚄 REST API閵?
+ * REST API that exposes registered JDBC datasources and their table/column metadata.
  *
- * 鐎圭偟骞?OpenAPI 閻㈢喐鍨氶惃?[DatasourcesApi] 閹恒儱褰涢敍宀€鈥樻穱婵嗗閸氬海顏總鎴犲娑撯偓閼锋番鈧?
- * 娓氭稑澧犵粩?`db-function-test` Feature閿涘牆鍤遍弫鐗堢ゴ鐠囨洟銆夐棃顫礆娴ｈ法鏁ら敍?
- * 閻劋绨崝銊︹偓渚€鈧瀚ㄩ弫鐗堝祦濠ф劕鑻熷ù蹇氼潔鐞涖劎绮ㄩ弸?閸掓ぞ淇婇幁顖樷偓?
+ * Implements the generated OpenAPI contract `DatasourcesApi`; used primarily by the
+ * `db-function-test` feature in the workflow designer, where an author can browse
+ * catalogs to pick a table and then ask the `builtin-sql` node to generate a default
+ * SELECT or invoke a validation preview.
  *
- * 婵傛垹瀹崇€规矮绠熼崷?`doc/openapi.yaml`閿涘湒atasources tag閿涘绱濋悽?OpenAPI Generator 閻㈢喐鍨?
- * [DatasourcesApi] / [DatasourceInfo] / [DatasourceColumnInfo]閵?
+ * DTO shapes (`DatasourceInfo`, `DatasourceColumnInfo`) are generated from the
+ * `datasources` tag inside `doc/openapi.yaml` via OpenAPI Generator.
  */
 @RestController
 class DataSourceController(
@@ -27,7 +27,7 @@ class DataSourceController(
     private val log = LoggerFactory.getLogger(javaClass)
 
     /**
-     * 閼惧嘲褰囬幍鈧張澶婂讲閻劎娈戦弫鐗堝祦濠ф劕鍨悰銊ｂ偓?
+     * Return every datasource currently registered in the admin `DataSourceProvider`.
      */
     override fun listDatasources(): ResponseEntity<List<DatasourceInfo>> {
         val names = tableMetadataService.listDataSources()
@@ -43,20 +43,25 @@ class DataSourceController(
     }
 
     /**
-     * 閼惧嘲褰囬幐鍥х暰閺佺増宓佸┃鎰畱閹碘偓閺堝鏁ら幋鐤€冮崥宥冣偓?
+     * List table names for a given datasource.
+     *
+     * Swallows JDBC / driver exceptions and returns an empty list because the UI wants
+     * to degrade gracefully when a datasource is temporarily offline.
      */
     override fun listDatasourceTables(datasourceId: String): ResponseEntity<List<String>> {
         return try {
             val tables = tableMetadataService.listTables(datasourceId)
             ResponseEntity.ok(tables)
         } catch (e: Exception) {
-            log.warn("Failed to list tables for datasource [{}]: {}", datasourceId, e.message)
+            log.warn { "Failed to list tables for datasource [$datasourceId]: ${e.message}" }
             ResponseEntity.ok(emptyList())
         }
     }
 
     /**
-     * 閼惧嘲褰囬幐鍥х暰閺佺増宓佸┃鎰瘹鐎规俺銆冮惃鍕閺堝鍨崗鍐╂殶閹诡喓鈧?
+     * List column definitions for a specific `datasourceId.tableName` pair.
+     *
+     * Swallows JDBC exceptions with the same empty-list fallback as `listDatasourceTables`.
      */
     override fun listDatasourceTableColumns(
         datasourceId: String,

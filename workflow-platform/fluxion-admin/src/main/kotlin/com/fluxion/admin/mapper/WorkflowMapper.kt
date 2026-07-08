@@ -7,15 +7,23 @@ import org.springframework.stereotype.Service
 import java.time.ZoneId
 
 /**
- * Workflow 定义实体与 DTO 之间的手写映射器
+ * Manual mapper between workflow-definition entities and the OpenAPI-generated
+ * `WorkflowDefinition` DTO.
  *
- * 复杂转换（JSON、枚举、时间）通过 JsonMapperHelper 完成。
+ * JSON parsing, enum coercion and time conversions are delegated to `JsonMapperHelper`.
  */
 @Service
 class WorkflowMapper(
     private val jsonMapperHelper: JsonMapperHelper
 ) {
 
+    /**
+     * Project a persisted `WfDefinition` into the detail/list DTO.
+     *
+     * Decomposes the stored `dag_json`, decorator JSONs and legacy columns back into
+     * strongly-typed DTO fields. The `publishTarget` field prefers the new dedicated
+     * column but falls back to the deprecated `targetGroups` JSON for pre-migration rows.
+     */
     fun toDto(entity: WfDefinition): WorkflowDefinition = WorkflowDefinition(
         name = entity.workflowName,
         category = jsonMapperHelper.categoryToEnum(entity.category),
@@ -36,14 +44,17 @@ class WorkflowMapper(
         transactionConfig = jsonMapperHelper.transactionModeToConfig(entity.transactionMode)?.toMutableMap()
         workflowDecorators = jsonMapperHelper.workflowDecoratorsJsonToList(entity.workflowDecorators)
         workflowDecoratorParams = jsonMapperHelper.workflowDecoratorParamsJsonToMap(entity.workflowDecoratorParams)
-        createdAt = entity.createdAt.atZone(ZoneId.systemDefault()).toOffsetDateTime()
-        updatedAt = entity.updatedAt.atZone(ZoneId.systemDefault()).toOffsetDateTime()
+        createdAt = entity.createdAt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        updatedAt = entity.updatedAt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
         publishTarget = jsonMapperHelper.stringToPublishTarget(entity.publishTarget)
             ?: jsonMapperHelper.fallbackPublishTarget(entity.targetGroups)
         version = entity.version
         isProtected = entity.isProtected
     }
 
+    /**
+     * Create a new `WfDefinition` entity from an incoming create DTO.
+     */
     fun toEntity(dto: WorkflowDefinition): WfDefinition = WfDefinition().apply {
         workflowId = dto.id ?: ""
         workflowName = dto.name ?: ""
@@ -68,6 +79,9 @@ class WorkflowMapper(
         triggersConfig = dto.triggers?.takeIf { it.isNotEmpty() }?.let { JsonUtil.serialize(it) }
     }
 
+    /**
+     * Apply update DTO fields onto an existing managed entity.
+     */
     fun updateEntity(dto: WorkflowDefinition, entity: WfDefinition) {
         entity.workflowId = dto.id ?: entity.workflowId
         entity.workflowName = dto.name ?: entity.workflowName

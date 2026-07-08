@@ -1,13 +1,17 @@
 package com.fluxion.adapter.http.core
 
 /**
- * Route resolution result — framework-agnostic.
+ * Immutable result of an HTTP route resolution pass — framework-agnostic.
  *
- * Returned by both Spring MVC and WebFlux registry implementations
- * when a request path matches a registered route pattern.
+ * Both the Spring MVC interceptor path and the WebFlux `HandlerMapping`
+ * path produce the same structure so the downstream handler can share the
+ * parameter-merging logic (`mergeParams`) across stacks.
  *
- * @param workflowId   Target workflow ID to execute
- * @param pathVariables Extracted URI variables (e.g. /api/users/{id} → id=123)
+ * @param workflowId    Primary key of the matched workflow — this is what
+ *                      gets handed to [WorkflowRouter.executeSuspend].
+ * @param pathVariables URI template bindings extracted by pattern matching
+ *                      (e.g. `/api/users/{id}` → `{id=123}`). Empty map for
+ *                      exact-match routes with no template variables.
  */
 data class RouteMatch(
     val workflowId: String,

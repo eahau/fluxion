@@ -1,3 +1,22 @@
+/**
+ * Spring Boot auto-configuration for `fluxion-schema:core`.
+ *
+ * Always registers the JSON-Schema format bundle plus the core
+ * [SchemaManager] facade backed by an [InMemorySchemaRegistry]. Format
+ * extensions for Avro and Protobuf are shipped as separate spring-boot
+ * sub-modules that contribute their own [SchemaFormatBundle] beans:
+ * * `fluxion-schema:avro:spring-boot`
+ * * `fluxion-schema:protobuf:spring-boot`
+ *
+ * [SchemaManager] collects every [SchemaFormatBundle] on the context and
+ * assembles O(1) lookup maps per SPI (parser/validator/extractor/codec/
+ * dataProvider) so adding new formats is purely additive.
+ *
+ * When a [SchemaConfigSubscriber] bean is present on the classpath (provided
+ * by the `fluxion-config` adapter), the nested [SchemaHotReloadConfiguration]
+ * activates and wires a [SchemaConfigApplier] that performs the initial bulk
+ * load plus continuous incremental push updates.
+ */
 package com.fluxion.schema.spring.boot
 
 import com.fluxion.adapter.spi.config.SchemaConfigSubscriber
@@ -16,6 +35,7 @@ import com.fluxion.schema.json.JsonSchemaValidator
 import com.fluxion.schema.model.SchemaFormat
 import com.fluxion.schema.registry.InMemorySchemaRegistry
 import org.slf4j.LoggerFactory
+import org.slf4j.*
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
@@ -25,25 +45,10 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.core.env.Environment
 
-/**
- * fluxion-schema 核心 Spring Boot 自动装配。
- *
- * 注册 JSON Schema 格式 Bundle、[SchemaManager] 门面和 [InMemorySchemaRegistry]。
- * Avro / Protobuf 扩展由各自独立的 spring-boot 子模块装配：
- * - `fluxion-schema:avro:spring-boot`
- * - `fluxion-schema:protobuf:spring-boot`
- *
- * [SchemaManager] 收集所有 [SchemaFormatBundle]，按格式拆分构建 O(1) 路由表。
- *
- * 当 classpath 存在 [SchemaConfigSubscriber]（由 fluxion-config 模块提供）时，
- * 自动注册 [SchemaConfigApplier]，实现 Schema 热更新。
- */
 @Configuration
 @EnableConfigurationProperties(SchemaProperties::class)
 @ConditionalOnProperty(prefix = "fluxion.schema", name = ["enabled"], havingValue = "true", matchIfMissing = true)
 class FluxionSchemaAutoConfiguration {
-
-    // ─── JSON Schema Bundle（始终注册）──────────────────────
 
     @Bean
     @ConditionalOnMissingBean(name = ["jsonSchemaBundle"])
@@ -55,8 +60,6 @@ class FluxionSchemaAutoConfiguration {
         codec = JsonSchemaCodec(),
         dataProvider = JsonSchemaDataProvider()
     )
-
-    // ─── Registry / Resolver ────────────────────────────────
 
     @Bean
     @ConditionalOnMissingBean
@@ -76,8 +79,6 @@ class FluxionSchemaAutoConfiguration {
         return schemaRegistry?.let { FluxionSchemaResolver(it) }
     }
 
-    // ─── SchemaManager ─────────────────────────────────────
-
     @Bean
     @ConditionalOnMissingBean
     fun schemaManager(
@@ -90,8 +91,15 @@ class FluxionSchemaAutoConfiguration {
         registry = registry
     )
 
-    // ─── Worker 侧 Schema 热更新（仅当 SchemaConfigSubscriber 存在时激活）──
-
+    /**
+     * Worker-side hot-reload wiring.
+     *
+     * Activates only when the config-adapter SPI classes are on the
+     * classpath AND a concrete [SchemaConfigSubscriber] bean has been
+     * registered (Nacos, Apollo, or internal HTTP registry adapter).
+     * The resulting [SchemaConfigApplier] performs the initial bulk
+     * schema load and then subscribes to incremental push updates.
+     */
     @Configuration
     @ConditionalOnClass(name = ["com.fluxion.adapter.spi.config.SchemaConfigSubscriber"])
     @ConditionalOnBean(SchemaConfigSubscriber::class)
@@ -114,7 +122,7 @@ class FluxionSchemaAutoConfiguration {
                 scope = scope
             )
             applier.init()
-            log.info("SchemaConfigApplier initialized for scope=$scope")
+            log.info { "SchemaConfigApplier initialized for scope=$scope" }
             return applier
         }
     }

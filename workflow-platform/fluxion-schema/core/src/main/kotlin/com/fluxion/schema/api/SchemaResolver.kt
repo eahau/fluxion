@@ -4,23 +4,27 @@ import com.fluxion.schema.model.Schema
 import com.fluxion.schema.model.SchemaRef
 
 /**
- * Schema 引用解析器，负责将 [SchemaRef] 解析为具体的 [Schema] 对象。
+ * Reference resolver — converts a [SchemaRef] (or its string form) into the
+ * actual compiled [Schema] it points to.
+ *
+ * The default implementation in Spring Boot auto-config simply delegates to
+ * the configured [SchemaRegistry]; custom resolvers can add cross-service
+ * lookup, lazy-fetch from HTTP endpoints, etc.
  */
 interface SchemaResolver {
 
     /**
-     * 解析引用。
+     * Resolves a typed [SchemaRef].
      *
-     * @param ref Schema 引用
-     * @return 解析后的 Schema，未找到时返回 null
+     * @return the matching schema, or `null` if the ref cannot be resolved.
      */
     fun resolve(ref: SchemaRef): Schema?
 
     /**
-     * 解析引用字符串。
+     * Resolves a `format:name` reference string.
      *
-     * @param ref 引用字符串，如 `json-schema:UserSchema`
-     * @return 解析后的 Schema，无法识别或未找到时返回 null
+     * Default implementation parses via [SchemaRef.parse] and delegates to
+     * [resolve]. Returns `null` on malformed refs rather than throwing.
      */
     fun resolve(ref: String): Schema? {
         val schemaRef = SchemaRef.parse(ref) ?: return null

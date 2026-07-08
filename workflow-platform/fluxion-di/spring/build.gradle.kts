@@ -1,18 +1,23 @@
+// fluxion-di:spring - Spring Framework-based dependency integration bridge module.
+// Bridges fluxion-debug DI abstractions (FunctionInstanceProvider, DependencyResolver) to
+// Spring ApplicationContext bean factory for Spring Boot-based runtime environments.
 plugins {
     kotlin("jvm")
     kotlin("plugin.spring")
 }
 
 dependencies {
-    // DI SPI：使用 api 传递暴露，便于引用方直接使用 FunctionInstanceProvider / DependencyResolver 类型
+    // Core base types (api - downstream modules get transitive compile access to core types).
     api(project(":fluxion-core"))
+    // Debug/DI abstractions (api - exposes FunctionInstanceProvider/DependencyResolver transitively).
+    api(project(":fluxion-debug"))
+    // Unified logging extensions.
+    implementation(project(":fluxion-log"))
 
-    // Spring Boot 自动装配
+    // Spring Boot AutoConfigure mechanism + @Configuration class support.
     implementation("org.springframework.boot:spring-boot-autoconfigure")
 
-    // SLF4J
-    implementation("org.slf4j:slf4j-api")
-
+    // Spring Boot Test starter for DI integration tests against Spring TestContext.
     testImplementation("org.springframework.boot:spring-boot-starter-test")
 }
 

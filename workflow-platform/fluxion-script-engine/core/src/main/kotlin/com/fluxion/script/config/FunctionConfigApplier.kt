@@ -12,12 +12,35 @@ import com.fluxion.script.function.ExternalWorkflowFunction
 import com.fluxion.script.function.ScriptWorkflowFunction
 import com.fluxion.script.groovy.GroovyScriptFunction
 import org.slf4j.*
-
 /**
- * Worker 侧函数配置应用器。
+ * Worker-side bridge between the config center (Apollo / Nacos / in-memory)
+ * and the engine's live [FunctionRegistry] — converts push-based
+ * `FunctionConfigSnapshot` events into register / unregister calls.
  *
- * 接收配置中心（HTTP / Apollo / Nacos）推送的函数快照，
- * 将 SCRIPT / EXTERNAL 函数注册到本地 FunctionRegistry，实现热更新。
+ * Invocation flow:
+ * 1. At startup `init()` is called (by the Spring Boot auto-config or test harness).
+ * 2. We pull all initial snapshots via [FunctionConfigSubscriber.loadAll].
+ * 3. Each snapshot is converted to a concrete `WorkflowFunction` + `FunctionMeta`
+ *    and registered with [registry] keyed by `version` so hot-redeploy
+ *    retains previous versions for in-flight workflows.
+ * 4. After the initial load, `ExternalFunctionTransportRegistry.prepare` is
+ *    called with all external configs so HTTP/Dubbo/gRPC transport
+ *    implementations can pre-build connection pools / stubs.
+ * 5. We then call [FunctionConfigSubscriber.watch] and any subsequent
+ *    push-based updates arrive through [onChange].
+ *
+ * Supported `functionType` values:
+ * - `SCRIPT_GROOVY` / `GROOVY` → wraps as [ScriptWorkflowFunction] (delegates
+ *   to the single shared [GroovyScriptFunction] engine at execution time).
+ * - `EXTERNAL` → wraps as [ExternalWorkflowFunction] (delegates to the
+ *   transport-specific `ExternalFunctionTransport` resolved by protocol).
+ * - Unknown values are logged and skipped (keeps old clients from breaking
+ *   when future function types are introduced).
+ *
+ * App-group scoping: if `appGroup` is non-null and the snapshot is NOT
+ * global, the function is only applied when the snapshot's target-group
+ * set contains the configured app group. Allows a single config center
+ * namespace to serve multiple fleet partitions (canary / staging / prod).
  */
 class FunctionConfigApplier(
     private val subscriber: FunctionConfigSubscriber,
@@ -29,7 +52,14 @@ class FunctionConfigApplier(
 
     private val log = LoggerFactory.getLogger(javaClass)
 
-    /** 加载全量快照并注册监听器（应用启动时调用） */
+    /**
+     * Load the full snapshot set from [subscriber], register every function
+     * into [registry], pre-warm external transports, and start the
+     * push-based watcher.
+     *
+     * MUST be called exactly once after construction; the Spring Boot
+     * auto-config handles this automatically.
+     */
     fun init() {
         val snapshots = subscriber.loadAll()
         val externalConfigs = mutableListOf<com.fluxion.core.function.external.ExternalFunctionConfig>()
@@ -37,11 +67,19 @@ class FunctionConfigApplier(
             applySnapshot(snap, ChangeType.PUBLISH, externalConfigs)
         }
         transportRegistry.prepare(externalConfigs)
-        log.info("FunctionConfigApplier initialized with ${snapshots.size} functions")
+        log.info { "FunctionConfigApplier initialized with ${snapshots.size} functions" }
         subscriber.watch(this)
     }
 
-    /** 响应配置变更事件（发布/更新/删除） */
+    /**
+     * Single push-event handler — applies a single snapshot diff.
+     *
+     * REMOVE events go straight to [removeFunction]. PUBLISH / UPDATE
+     * events pass through [applySnapshot] (which handles scope + enabled
+     * checks internally) and then force [transportRegistry.prepare] so
+     * newly-introduced outbound protocols get their connection pools
+     * pre-warmed.
+     */
     override fun onChange(functionName: String, snapshot: FunctionConfigSnapshot, changeType: ChangeType) {
         when (changeType) {
             ChangeType.PUBLISH, ChangeType.UPDATE -> {
@@ -54,18 +92,31 @@ class FunctionConfigApplier(
     }
 
     /**
-     * 将快照应用到本地注册中心。
+     * Apply a single snapshot to the local registry.
      *
-     * 处理流程：应用群过滤 → 启用状态检查 → 构建函数实例 → 注册（带版本号，支持热更新）。
-     * 若 [externalConfigs] 不为空且当前快照为 EXTERNAL 类型，会把解析后的配置追加进去，
-     * 供后续 [transportRegistry.prepare] 统一预建远程端点。
+     * Pipeline (short-circuits on each condition):
+     * 1. Scope check — if app group filtering is on and the function is
+     *    pinned to other groups, skip entirely.
+     * 2. Enabled check — if `snapshot.enabled=false` the function should
+     *    NOT be callable; forward to [removeFunction] for cleanup.
+     * 3. Normalise name by function-type prefix (`script:` / `external:`).
+     * 4. Build [FunctionMeta] from description + param/output schemas.
+     * 5. Build concrete `WorkflowFunction` implementation by type switch.
+     * 6. Register with version so in-flight workflows retain pinned versions.
+     *
+     * @param snapshot         Current config-snapshot pushed by the subscriber.
+     * @param changeType       PUBLISH / UPDATE (used only for structured logging).
+     * @param externalConfigs  Accumulator — EXTERNAL snapshots append their
+     *                         parsed config to this list so the caller can
+     *                         batch-invoke `transportRegistry.prepare` after
+     *                         the loop (single bulk warmup).
      */
     private fun applySnapshot(
         snapshot: FunctionConfigSnapshot,
         changeType: ChangeType,
         externalConfigs: MutableList<com.fluxion.core.function.external.ExternalFunctionConfig> = mutableListOf()
     ) {
-        // 订阅端按应用群过滤
+        // Skip when worker's app-group is not in the snapshot's target set.
         if (appGroup != null && !snapshot.isGlobal()) {
             if (snapshot.targetGroups?.contains(appGroup) != true) {
                 log.debug { "Skipping function ${snapshot.functionName} — targetGroups ${snapshot.targetGroups} does not include appGroup [$appGroup]" }
@@ -73,6 +124,7 @@ class FunctionConfigApplier(
             }
         }
 
+        // Disabled entries behave exactly like REMOVE (unregister live versions).
         if (!snapshot.enabled) {
             removeFunction(snapshot.functionName)
             return
@@ -91,7 +143,7 @@ class FunctionConfigApplier(
             "SCRIPT_GROOVY", "GROOVY" -> {
                 val script = snapshot.scriptBody
                 if (script.isNullOrBlank()) {
-                    log.warn("Skipping script function [$functionName] — scriptBody is empty")
+                    log.warn { "Skipping script function [$functionName] — scriptBody is empty" }
                     return
                 }
                 ScriptWorkflowFunction(
@@ -122,19 +174,28 @@ class FunctionConfigApplier(
         }
 
         registry.register(functionName, snapshot.version, meta, function)
-        log.info("Applied function [$functionName] type=${snapshot.functionType} version=${snapshot.version} change=$changeType")
+        log.info { "Applied function [$functionName] type=${snapshot.functionType} version=${snapshot.version} change=$changeType" }
     }
 
-    /** 注销函数及其前缀变体（script:/external:） */
+    /**
+     * Remove a function (both bare name and common type-prefixed variants).
+     *
+     * We unregister both the raw name AND `script:`/`external:` prefixed
+     * forms to be robust against operators accidentally registering with
+     * or without the prefix at different points in time.
+     */
     private fun removeFunction(functionName: String) {
         registry.unregister(functionName)
-        // 同时尝试按常见前缀注销
-        registry.unregister("script:$functionName")
-        registry.unregister("external:$functionName")
+        registry.unregister("script:`$functionName")
+        registry.unregister("external:`$functionName")
         log.info { "Removed function [$functionName] from registry" }
     }
 
-    /** 根据函数类型添加标准前缀（script: / external:） */
+    /**
+     * Ensure published function names carry a type-specific prefix so two
+     * functions (e.g. a script "userLookup" and an external "userLookup")
+     * don't collide in the shared registry namespace.
+     */
     private fun normalizeName(functionName: String, functionType: String): String {
         return when (functionType.uppercase()) {
             "SCRIPT_GROOVY", "GROOVY" -> {

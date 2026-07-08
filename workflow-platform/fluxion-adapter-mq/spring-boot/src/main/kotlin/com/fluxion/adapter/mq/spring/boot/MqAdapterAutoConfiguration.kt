@@ -20,22 +20,32 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.context.SmartLifecycle
 import org.springframework.context.annotation.Bean
 import java.time.Duration
-import java.util.*
+import java.util.Properties
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * MQ 适配器 Spring Boot 自动装配入口
+ * Spring Boot auto-configuration for the MQ (Kafka) transport adapter.
  *
- * 当前支持 Kafka，未来可在此扩展 RabbitMQ / RocketMQ 等装配逻辑。
+ * Gate conditions:
+ * - `KafkaProducer` + `KafkaConsumer` are on the runtime classpath (i.e. the
+ *   app includes the native kafka-clients jar — NOT spring-kafka).
+ * - Property `workflow.adapter.mq.kafka.enabled=true` (defaults OFF so
+ *   HTTP-only deployments don't pull in the consumer thread + producer).
  *
- * 触发条件：
- *   - classpath 存在 KafkaProducer 与 KafkaConsumer
- *   - 配置 workflow.adapter.mq.kafka.enabled = true（默认关闭）
- * 提供 Bean：
- *   - KafkaProducer<String, String>
- *   - KafkaConsumer<String, String>
- *   - MqPublisher（KafkaMqPublisher 实现）
- *   - KafkaWorkflowConsumer（由 SmartLifecycle 在容器启动后启动消费线程）
+ * Beans provided:
+ * 1. `KafkaProducer<String,String>` — with `acks=all`, `retries=3` for strong durability.
+ * 2. `KafkaConsumer<String,String>` — manual commit (auto-commit=false),
+ *    earliest-offset reset so new consumer groups replay from the start.
+ * 3. `MqPublisher` (KafkaMqPublisher impl) — used by both the workflow
+ *    consumer (reply-topic + DLT publishes) and user workflows.
+ * 4. `KafkaWorkflowConsumer` — the core subscriber/executor component.
+ * 5. `SmartLifecycle` wrapper — binds the consumer lifecycle to the Spring
+ *    context: start() on context refreshed, stop() on context close. Also
+ *    closes the Kafka producer on stop.
+ *
+ * Extensibility: replacing RabbitMQ or RocketMQ in a future release is a
+ * matter of writing a parallel auto-config with `@ConditionalOnClass` for
+ * those client classes and exposing `MqPublisher` + the consumer.
  */
 @AutoConfiguration
 @ConditionalOnClass(KafkaProducer::class, KafkaConsumer::class)
@@ -49,6 +59,13 @@ class MqAdapterAutoConfiguration {
 
     private val log = LoggerFactory.getLogger(javaClass)
 
+    /**
+     * Build the shared Kafka producer.
+     *
+     * Producer is intentionally configured conservatively:
+     * - `acks=all` — require all in-sync replicas before ack (safe defaults for workflow replies).
+     * - `retries=3` — retry transient produce failures before surfacing to caller.
+     */
     @Bean
     @ConditionalOnMissingBean
     fun kafkaProducer(
@@ -63,10 +80,19 @@ class MqAdapterAutoConfiguration {
         return KafkaProducer(props)
     }
 
+    /** Wrap the producer as the transport-agnostic MqPublisher SPI. */
     @Bean
     @ConditionalOnMissingBean(MqPublisher::class)
     fun kafkaMqPublisher(producer: KafkaProducer<String, String>): MqPublisher = KafkaMqPublisher(producer)
 
+    /**
+     * Build the shared Kafka consumer.
+     *
+     * Manual commit is REQUIRED (`enable.auto.commit=false`) because the
+     * consumer's commit boundary is per-record and conditional (we only
+     * commit after successful processing OR after DLT routing — never after
+     * infrastructure errors that should be retried).
+     */
     @Bean
     @ConditionalOnMissingBean
     fun kafkaConsumer(
@@ -85,6 +111,7 @@ class MqAdapterAutoConfiguration {
         return KafkaConsumer(props)
     }
 
+    /** Build the workflow consumer (stateless; delegates to WorkflowRouter). */
     @Bean
     @ConditionalOnMissingBean
     fun kafkaWorkflowConsumer(
@@ -102,7 +129,17 @@ class MqAdapterAutoConfiguration {
     )
 
     /**
-     * 管理 KafkaWorkflowConsumer 生命周期：容器启动后开始消费，关闭前停止消费。
+     * Bind [KafkaWorkflowConsumer] lifecycle to Spring via `SmartLifecycle`.
+     *
+     * Why not `@EventListener(ContextRefreshedEvent)` + `@PreDestroy`?
+     * SmartLifecycle gives us deterministic ordering via `phase` — we run
+     * VERY late (phase = Int.MAX_VALUE - 1000) so WorkflowRouter + all
+     * function registrations are guaranteed ready before we start
+     * consuming from Kafka. On shutdown we run early enough to drain
+     * in-flight polls before the rest of the context is torn down.
+     *
+     * Also implements [DisposableBean] as safety net for edge-case manual
+     * context destruction paths.
      */
     @Bean
     fun kafkaConsumerLifecycle(
@@ -128,6 +165,8 @@ class MqAdapterAutoConfiguration {
 
         override fun isRunning(): Boolean = running.get()
 
+        // Phase position: very late start / very early stop so consumer is
+        // last-up-first-down relative to the function/runtime beans.
         override fun getPhase(): Int = Integer.MAX_VALUE - 1000
 
         override fun destroy() = stop()

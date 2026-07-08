@@ -29,16 +29,30 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping
 
 /**
- * HTTP Spring MVC 适配器统一自动装配入口
+ * Unified Spring Boot auto-configuration for the Spring MVC flavour of the
+ * HTTP adapter.
  *
- * 装配内容：
- *   - Spring MVC 动态路由核心（handler / registry / interceptor / initializer）
- *   - Apollo 路由配置存储（可选，classpath 存在 apollo-client 时启用）
- *   - Nacos 路由配置存储（可选，Spring 容器中存在 Nacos ConfigService 时启用）
+ * Assembles three logical groups of beans:
+ * 1. **Core MVC dynamic routing** — handler bean, route registry, interceptor,
+ *    and ApplicationReadyEvent initialiser that wires everything once Spring
+ *    MVC is fully booted (so `RequestMappingHandlerMapping` is ready to accept
+ *    dynamic registrations).
+ * 2. **Apollo route-config store** — auto-wired when `apollo-client` is on the
+ *    classpath (ConditionalOnClass) and no competing `RouteConfigStore` exists.
+ * 3. **Nacos route-config store** — auto-wired when Spring Cloud registers a
+ *    `Nacos ConfigService` bean (ConditionalOnBean) and no competing store exists.
  *
- * 引入方式：
- *   implementation(project(":workflow-adapter-http-springmvc-spring-boot"))
- *   并按需引入 workflow-adapter-http-springmvc-apollo 或 workflow-adapter-http-springmvc-nacos
+ * Deployment dependency pattern:
+ * ```
+ * // Required base (MVC runtime)
+ * implementation(project(":workflow-adapter-http-springmvc-spring-boot"))
+ * // Pick at most ONE of these two:
+ * implementation(project(":workflow-adapter-http-springmvc-apollo"))
+ * implementation(project(":workflow-adapter-http-springmvc-nacos"))
+ * ```
+ *
+ * Activation: only runs when `DispatcherServlet` is on the classpath, i.e.
+ * Spring MVC servlet stack is being used (vs WebFlux reactive).
  */
 @AutoConfiguration
 @ConditionalOnClass(DispatcherServlet::class)
@@ -46,12 +60,24 @@ class HttpSpringMvcAdapterAutoConfiguration {
 
     private val log = LoggerFactory.getLogger(javaClass)
 
+    /**
+     * Singleton handler bean — all dynamic routes point to the [MvcWorkflowHandler.handle]
+     * method on this bean. Lazy consumers (registries) inject it directly.
+     */
     @Bean
     @ConditionalOnMissingBean
     fun mvcWorkflowHandler(
         workflowRouter: WorkflowRouter
     ): MvcWorkflowHandler = MvcWorkflowHandler(workflowRouter)
 
+    /**
+     * MVC-specific route registry.
+     *
+     * Injecting `RequestMappingHandlerMapping` with `@Lazy` avoids a circular
+     * reference during auto-config startup because the handler-mapping is
+     * itself initialised by a `BeanPostProcessor` that needs the MVC context
+     * to be nearly complete.
+     */
     @Bean
     @ConditionalOnMissingBean
     fun mvcRouteRegistry(
@@ -60,7 +86,11 @@ class HttpSpringMvcAdapterAutoConfiguration {
     ): MvcRouteRegistry = MvcRouteRegistry(requestMappingHandlerMapping, dynamicHandler)
 
     /**
-     * 启动完成后加载路由并开始监听
+     * Bootstrap lifecycle: on `ApplicationReadyEvent`, perform initial route
+     * load then attach the incremental watch stream to the config center.
+     *
+     * Conditional on a `RouteConfigStore` bean being provided (by the Apollo
+     * or Nacos sub-configuration, or by user custom code).
      */
     @Bean
     @ConditionalOnBean(RouteConfigStore::class)
@@ -75,6 +105,11 @@ class HttpSpringMvcAdapterAutoConfiguration {
         routeConfigStore.watch(routeRegistry)
     }
 
+    /**
+     * Register the route-interceptor on every URL path so pre-resolved
+     * [RouteMatch] is available in the request attributes when the handler
+     * runs. Order 0 runs before any application-level interceptors.
+     */
     @Bean
     fun workflowMvcConfigurer(routeRegistry: MvcRouteRegistry): WebMvcConfigurer =
         object : WebMvcConfigurer {
@@ -86,7 +121,8 @@ class HttpSpringMvcAdapterAutoConfiguration {
         }
 
     /**
-     * Apollo 路由配置存储自动装配
+     * Apollo-specific `RouteConfigStore` — activated when `apollo-client` is
+     * on the classpath AND no other `RouteConfigStore` has been wired yet.
      */
     @Configuration
     @ConditionalOnClass(ApolloConfigService::class)
@@ -104,7 +140,9 @@ class HttpSpringMvcAdapterAutoConfiguration {
     }
 
     /**
-     * Nacos 路由配置存储自动装配
+     * Nacos-specific `RouteConfigStore` — activated when Spring Cloud has
+     * already registered a `Nacos ConfigService` bean (so we don't force the
+     * user to include a hard dep on Nacos just for the adapter to compile).
      */
     @Configuration
     @ConditionalOnBean(NacosConfigService::class)
@@ -121,7 +159,12 @@ class HttpSpringMvcAdapterAutoConfiguration {
 }
 
 /**
- * 工作流路由拦截器
+ * Servlet interceptor that pre-resolves the incoming request against the
+ * [MvcRouteRegistry] and stores the [RouteMatch] into request attributes.
+ *
+ * This runs **before** `RequestMappingHandlerMapping` in the interceptor
+ * chain (order = 0), so `MvcWorkflowHandler` can read the match without
+ * re-executing pattern matching.
  */
 private class WorkflowRouteInterceptor(
     private val registry: MvcRouteRegistry

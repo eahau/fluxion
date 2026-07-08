@@ -3,33 +3,40 @@ package com.fluxion.schema.api
 import com.fluxion.schema.model.Schema
 
 /**
- * Schema 注册表，用于按名称查找已注册的 Schema。
+ * Schema registry SPI — lookup of named, versioned schemas by name.
  *
- * 支持多版本并存：同一名称的 Schema 可以有多个版本，
- * 通过 [get] 方法的 `version` 参数指定具体版本，
- * 不传则返回最新版本。
+ * Implementations range from the simple in-process [InMemorySchemaRegistry]
+ * shipped with the core module to external-backed registries (database,
+ * config center, schema registry service). The engine uses the registry for
+ * `validateByName` and for resolving `schema:`-prefixed references in
+ * workflow definitions.
+ *
+ * Versioning is optional — the interface takes `version: Long? = null` and
+ * returns the latest version when `null` is passed. Implementations that
+ * don't track versions (e.g. [InMemorySchemaRegistry]) simply ignore the
+ * version parameter and return the latest.
  */
 interface SchemaRegistry {
 
     /**
-     * 根据名称获取 Schema。
+     * Fetches a schema by name.
      *
-     * @param name    Schema 名称
-     * @param version 版本号，null 表示最新版本
-     * @return Schema 对象，未找到时返回 null
+     * @param name    schema lookup name (the `schema:<name>` suffix).
+     * @param version optional version, `null` = latest.
+     * @return the matching [Schema], or `null` if not found.
      */
     fun get(name: String, version: Long? = null): Schema?
 
     /**
-     * 列出所有已注册 Schema（每个名称只返回最新版本）。
+     * Lists every registered schema — one entry per unique name, always the
+     * latest version. Used by the admin UI to populate the schema browser.
      */
     fun list(): List<Schema>
 
     /**
-     * 列出指定 Schema 的所有版本号（从旧到新排序）。
-     *
-     * @param name Schema 名称
-     * @return 版本号列表，不存在时返回空列表
+     * Lists all known version numbers for a named schema, ordered oldest to
+     * newest. Implementations without version tracking return an empty list
+     * (the default).
      */
     fun listVersions(name: String): List<Long> = emptyList()
 }

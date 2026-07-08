@@ -1,3 +1,13 @@
+/**
+ * [SchemaCodec] implementation for the Protobuf wire format plus
+ * Protobuf-style JSON (via `protobuf-java-util` [JsonFormat]).
+ *
+ * All conversions route through [DynamicMessage] so the codec works with
+ * arbitrary runtime descriptors and never requires compiled message classes.
+ * Accepted input shapes on the serialize path: [DynamicMessage] itself,
+ * pre-formatted Protobuf JSON strings, or generic Map/POJO structures that
+ * first get Jackson-serialized then merged via JsonFormat.parser.
+ */
 package com.fluxion.schema.protobuf
 
 import com.fluxion.schema.api.SchemaCodec
@@ -7,28 +17,10 @@ import com.google.protobuf.Descriptors
 import com.google.protobuf.DynamicMessage
 import com.google.protobuf.util.JsonFormat
 import org.slf4j.LoggerFactory
+import org.slf4j.*
 
 /**
- * Protobuf Schema 编解码器。
- *
- * 支持二进制（Protobuf wire format）和 JSON 两种序列化格式。
- * 基于 [DynamicMessage] 实现，无需代码生成，支持运行时动态 Schema。
- *
- * ### 数据类型约定
- *
- * - **serialize 输入**：支持 `DynamicMessage`、`Map<String, Any?>`、JSON 字符串
- * - **deserialize 输出**：返回 `DynamicMessage`，可通过 [ProtobufSchemaDataProvider] 访问字段
- * - **toJson 输出**：Protobuf JSON 格式字符串（使用 protobuf-java-util 的 JsonFormat）
- * - **fromJson 输入**：Protobuf JSON 格式字符串，输出 `DynamicMessage`
- *
- * ### 使用示例
- *
- * ```kotlin
- * val codec = ProtobufSchemaCodec()
- * val bytes = codec.serialize(dataMap, schema)       // Map → 二进制
- * val message = codec.deserialize(bytes, schema)      // 二进制 → DynamicMessage
- * val json = codec.toJson(message, schema)            // DynamicMessage → JSON
- * ```
+ * Binary + JSON serialization codec for schemas of format PROTOBUF.
  */
 class ProtobufSchemaCodec : SchemaCodec {
 
@@ -70,7 +62,7 @@ class ProtobufSchemaCodec : SchemaCodec {
         return builder.build()
     }
 
-    // ─── 内部工具方法 ──────────────────────────────────────────────
+    // ── Internal helpers ──────────────────────────────────────────────────
 
     private fun getDescriptor(schema: Schema): Descriptors.Descriptor {
         require(schema.format == SchemaFormat.PROTOBUF) {
@@ -81,12 +73,12 @@ class ProtobufSchemaCodec : SchemaCodec {
     }
 
     /**
-     * 将任意格式的数据转换为 DynamicMessage。
+     * Coerce an arbitrary value into a [DynamicMessage] conforming to
+     * [descriptor].
      *
-     * 支持：
-     * - DynamicMessage：直接返回（验证类型匹配）
-     * - String：Protobuf JSON 格式，解析为 DynamicMessage
-     * - 其他（Map / POJO）：先序列化为 JSON，再解析为 DynamicMessage
+     * * DynamicMessage → type-check then reuse.
+     * * String        → assume Protobuf JSON, merge with JsonFormat.parser.
+     * * Otherwise     → Jackson-serialize then JSON-merge.
      */
     private fun toDynamicMessage(data: Any, descriptor: Descriptors.Descriptor): DynamicMessage {
         return when (data) {

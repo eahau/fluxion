@@ -1,15 +1,27 @@
+/**
+ * Aggregates every SPI implementation that exists for a single [SchemaFormat].
+ *
+ * Each format sub-module (json / avro / protobuf / custom) ships one bundle
+ * bean (often via Spring auto-configuration), which [DefaultSchemaManager]
+ * and the data-provider registry then split apart into O(1) lookup tables.
+ * Leaving a component `null` simply indicates the capability is not offered
+ * for that format — the manager surface an appropriate error for callers who
+ * try to use the missing SPI.
+ */
 package com.fluxion.schema.api
 
 import com.fluxion.schema.model.SchemaFormat
 
 /**
- * 将某一 [SchemaFormat] 的全套 SPI 组件捆绑在一起。
+ * Immutable value object grouping the six format-specific SPIs together so
+ * Spring/DI contexts can contribute capabilities per format with one bean.
  *
- * 每个格式模块（json / avro / protobuf / 自定义）只需提供一个 Bundle Bean，
- * 由 [com.fluxion.schema.DefaultSchemaManager] 和 [SchemaDataProviderRegistry]
- * 自动拆分构建 O(1) 路由表。
- *
- * 未提供的组件为 null，该格式在对应能力上不可用。
+ * @property format       the schema format this bundle describes.
+ * @property parser       compiles raw text into a parsed schema object.
+ * @property validator    validates runtime payloads against a compiled schema.
+ * @property extractor    walks a compiled schema to produce a [SchemaField] tree.
+ * @property codec        binary/JSON serialisation codec for schema messages.
+ * @property dataProvider generic field access on values of this format.
  */
 data class SchemaFormatBundle(
     val format: SchemaFormat,

@@ -8,11 +8,13 @@ import java.util.concurrent.Executor
 import kotlin.coroutines.CoroutineContext
 
 /**
- * OTel Context 璺ㄧ嚎绋嬩紶鎾嫤鎴櫒
+ * [TaskInterceptor] that propagates the current OpenTelemetry `Context`
+ * across both coroutine dispatchers and `Executor`-based thread pools.
  *
- * 鍙傝€?OTel Context.wrap(Executor) 妯″紡锛?
- *   鍦?wrap() 璋冪敤鏃舵崟鑾?Context.current()锛?
- *   鍦?dispatch 鏃?makeCurrent()锛岀‘淇?IO 绾跨▼涓?OTel 涓婁笅鏂囧彲鐢ㄣ€?
+ * Implementation mirrors the canonical OTel pattern:
+ *  - Capture `Context.current()` at the moment [wrap] is called.
+ *  - Re-attach it (via `makeCurrent().use { ... }`) when the wrapped
+ *    dispatcher / executor actually runs the user's block.
  */
 class OtelContextTaskInterceptor : TaskInterceptor {
 
@@ -22,6 +24,7 @@ class OtelContextTaskInterceptor : TaskInterceptor {
         return object : CoroutineDispatcher() {
             override fun dispatch(context: CoroutineContext, block: Runnable) {
                 dispatcher.dispatch(context) {
+                    // Auto-closeable Scope restores the previous context on exit.
                     otelContext.makeCurrent().use { block.run() }
                 }
             }

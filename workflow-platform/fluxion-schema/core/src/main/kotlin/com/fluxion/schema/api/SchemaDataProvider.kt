@@ -1,47 +1,49 @@
 package com.fluxion.schema.api
 
 /**
- * Schema 格式感知的数据访问策略。
+ * Format-aware data access strategy SPI — provides uniform field-level
+ * access across JSON Schema (Map-based), Protobuf (DynamicMessage), and
+ * Avro (GenericRecord) payloads.
  *
- * 为不同 Schema 格式（JSON / Protobuf / Avro）提供统一的字段级数据访问能力。
- * 每种格式对应一个实现，由 [SchemaDataProviderRegistry] 根据格式路由选择。
+ * One implementation per schema format, bound via [SchemaFormatBundle] and
+ * selected at runtime by [SchemaDataProviderRegistry] using the schema's
+ * [SchemaFormat] code. The registry lookup is O(1) — a flat Map.
  *
- * 格式路由由 [DataProviderBinding] 在 Spring 装配层声明，SPI 本身不感知格式。
- *
- * ### 典型使用场景
- *
- * 工作流节点接收到 `directInput` 后，根据 Schema 格式选择不同的数据访问方式：
- * - JSON Schema → `Map<String, Any?>` 的 `get(key)` 访问
- * - Protobuf → `DynamicMessage.getField(FieldDescriptor)` 访问
- * - Avro → `GenericRecord.get(key)` 访问
- *
- * @see SchemaDataProviderRegistry
+ * Typical workflow pattern: after a node receives `directInput`, the engine
+ * selects the provider matching the node's declared input-schema format and
+ * uses it for field reads, e.g.:
+ * ```
+ * val provider = registry.getProvider(inputSchema.format)
+ * val userId = provider.getField(directInput, "userId")
+ * ```
  */
 interface SchemaDataProvider {
 
     /**
-     * 从数据对象中获取指定字段的值。
+     * Reads one field from [data].
      *
-     * @param data  数据对象（具体类型由格式决定：Map / DynamicMessage / GenericRecord 等）
-     * @param field 字段名
-     * @return 字段值，不存在时返回 null
+     * @param data  format-native payload — Map, DynamicMessage, GenericRecord, …
+     * @param field field name (dotted paths are NOT supported by this SPI;
+     *               the caller walks the nested structure itself).
+     * @return the field value, or `null` if absent / null in the source.
      */
     fun getField(data: Any, field: String): Any?
 
-    /**
-     * 判断数据对象中是否存在指定字段。
-     */
+    /** True iff [data] contains the named field (even if the value is null). */
     fun hasField(data: Any, field: String): Boolean
 
     /**
-     * 将数据对象转换为通用 Map 表示。
+     * Fully converts [data] into a plain `Map<String, Any?>`.
      *
-     * 用于跨格式兼容（如模板渲染、JEXL 表达式求值等需要 Map 结构的场景）。
+     * Used for cross-format compatibility — JEXL evaluation, Mustache-style
+     * template rendering, Jackson serialization, and other scenarios that
+     * require a real Map rather than per-field access.
+     *
+     * NOTE: this is the expensive path; call it only when you genuinely need
+     * the full map. Prefer [getField] / [hasField] for hot-path reads.
      */
     fun toMap(data: Any): Map<String, Any?>
 
-    /**
-     * 获取数据对象中所有可用字段名。
-     */
+    /** Returns the set of all field names present in [data]. */
     fun getFieldNames(data: Any): Set<String>
 }

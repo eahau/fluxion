@@ -1,3 +1,6 @@
+// fluxion-config:nacos - Alibaba Nacos configuration center backend implementation.
+// Implements ConfigCenterProvider SPI using Nacos Config Client SDK (non-Spring Cloud version),
+// keeping runtime footprint minimal without Spring Cloud Commons abstractions.
 plugins {
     java
 }
@@ -11,12 +14,15 @@ sourceSets {
 }
 
 dependencies {
+    // Adapter SPI: base subscriber / change event contracts.
     implementation(project(":fluxion-adapter-spi"))
+    // Config core SPI: ConfigCenterProvider + data model interfaces.
     implementation(project(":fluxion-config:core"))
 
-    // Nacos Config SDK（非 Spring Cloud Starter，保持轻量）
+    // Nacos Config Client SDK (non-Spring Cloud) - config subscription + listener support.
     implementation("com.alibaba.nacos:nacos-client")
-
+    // Jackson Databind for JSON configuration body serialization.
     implementation("com.fasterxml.jackson.core:jackson-databind")
-    implementation("org.slf4j:slf4j-api")
+    // Unified logging extensions (lazy lambda wrappers over SLF4J).
+    implementation(project(":fluxion-log"))
 }

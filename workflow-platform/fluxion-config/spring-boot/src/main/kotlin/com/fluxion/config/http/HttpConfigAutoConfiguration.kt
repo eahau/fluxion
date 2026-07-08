@@ -20,13 +20,13 @@ import org.springframework.context.annotation.Primary
 import org.springframework.core.env.Environment
 
 /**
- * HTTP 配置中心 + 注册中心自动装配
+ * HTTP 閰嶇疆涓績 + 娉ㄥ唽涓績鑷姩瑁呴厤
  */
 @AutoConfiguration
 @ConditionalOnProperty(name = ["workflow.config.type"], havingValue = "http", matchIfMissing = true)
 class HttpConfigAutoConfiguration {
 
-    // ─── Admin 角色 Bean ────────────────────────────────────────────
+    // 鈹€鈹€鈹€ Admin 瑙掕壊 Bean 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
     @Configuration
     @ConditionalOnProperty(name = ["workflow.instance.role"], havingValue = "admin")
@@ -66,7 +66,7 @@ class HttpConfigAutoConfiguration {
         ): SchemaConfigPublisher = HttpSchemaConfigPublisher(instanceDiscovery)
     }
 
-    // ─── Worker 角色 Bean ───────────────────────────────────────────
+    // 鈹€鈹€鈹€ Worker 瑙掕壊 Bean 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
     @Configuration
     @ConditionalOnProperty(name = ["workflow.instance.role"], havingValue = "worker")

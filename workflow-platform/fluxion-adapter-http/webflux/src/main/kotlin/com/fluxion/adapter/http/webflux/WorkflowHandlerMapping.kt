@@ -1,26 +1,38 @@
 package com.fluxion.adapter.http.webflux
 
+import org.slf4j.*
 import org.springframework.core.Ordered
 import org.springframework.web.reactive.HandlerMapping
 import org.springframework.web.server.ServerWebExchange
 import reactor.core.publisher.Mono
 
 /**
- * WebFlux 动态路由 HandlerMapping。
+ * Dynamic WebFlux [HandlerMapping] for workflow routes.
  *
- * 实现 [Ordered]（order=1），确保在 DispatcherHandler 的 HandlerMapping 链中
- * 优先于 Spring 默认的 ResourceHandlerMapping 被匹配。
+ * Plugs into the standard `DispatcherHandler` handler-resolution chain at
+ * `Ordered#order = 1`. The ordering is carefully chosen:
+ * ```
+ * RequestMappingHandlerMapping (0) — compile-time @RequestMapping
+ *   → WorkflowHandlerMapping (1)  ← THIS; dynamic workflow routes
+ *     → RouterFunctionMapping (-1)
+ *       → ResourceHandlerMapping (LOWEST)
+ * ```
  *
- * 匹配到路由后直接返回 [WebFluxWorkflowHandler] 实例，由 [WorkflowHandlerAdapter] 负责调用。
- * 不使用 HandlerFunction（它依赖 RouterFunction 基础设施设置的 request 属性）。
+ * Placement right AFTER `@RequestMapping` ensures that hand-written controllers
+ * take precedence over dynamic workflow routes (application code always wins
+ * over platform-defined URLs).
  *
- * 优先级链：
- *   RequestMappingHandlerMapping (0) → **WorkflowHandlerMapping (1)** → RouterFunctionMapping (-1) → ResourceHandlerMapping (LOWEST)
+ * Resolution works by delegating directly to [WebFluxRouteRegistry.resolveRoute].
+ * If a match is found the same handler singleton — [WebFluxWorkflowHandler] — is
+ * returned every time, with the resolved [RouteMatch] pre-stashed in
+ * `exchange.attributes` so the handler can consume it without re-resolving.
  */
 class WorkflowHandlerMapping(
     private val routeRegistry: WebFluxRouteRegistry,
     private val handler: WebFluxWorkflowHandler,
 ) : HandlerMapping, Ordered {
+
+    private val log = LoggerFactory.getLogger(javaClass)
 
     override fun getOrder(): Int = 1
 
@@ -28,7 +40,10 @@ class WorkflowHandlerMapping(
         val method = exchange.request.method.name()
         val path = exchange.request.uri.path
         return Mono.justOrEmpty(routeRegistry.resolveRoute(method, path))
-            .doOnNext { match -> exchange.attributes[WebFluxWorkflowHandler.ATTR_ROUTE_MATCH] = match }
+            .doOnNext { match ->
+                log.debug { "WebFlux workflow route matched: ${method} ${path} -> workflowId=${match.workflowId}" }
+                exchange.attributes[WebFluxWorkflowHandler.ATTR_ROUTE_MATCH] = match
+            }
             .map { handler as Any }
     }
 }

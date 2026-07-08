@@ -11,7 +11,7 @@ import com.fluxion.schema.api.SchemaBackedMap
 import com.fluxion.schema.api.SchemaDataProviderRegistry
 import com.fluxion.schema.api.SchemaRegistry
 import com.fluxion.schema.model.SchemaFormat
-import com.google.protobuf.Any
+import com.google.protobuf.Any as ProtoAny
 import com.google.protobuf.DescriptorProtos
 import com.google.protobuf.Descriptors
 import com.google.protobuf.DynamicMessage
@@ -24,23 +24,28 @@ import org.slf4j.*
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * gRPC 工作流服务实现（零 Spring）
+ * gRPC workflow service implementation (zero Spring).
  *
- * 实现 proto 定义的 WorkflowService：
- *   - Execute: 同步单次执行，请求/响应均为 `google.protobuf.Any`
- *   - ExecuteStream: 流式执行，推送节点级别事件
+ * Handles two RPCs:
+ * 1. **`execute(google.protobuf.Any)`** → `google.protobuf.Any`
+ *    Standard request/response. Caller passes a protobuf `Any` whose `type_url`
+ *    identifies the registered workflow's input-schema name. We translate to
+ *    [UnifiedRequest], run the workflow via [WorkflowRouter], then encode the
+ *    result back — either as the caller-specified PROTOBUF output schema OR
+ *    (if no proto output schema exists) as `google.protobuf.Struct` (arbitrary
+ *    JSON → proto bridging via `JsonFormat.parser`).
  *
- * ### 协议设计
- * - **请求参数**：`Any` — `type_url` 标识输入 schema，`value` 为序列化字节
- * - **响应数据**：`Any` — 服务端从 `WorkflowDefinition.outputSchema` 自动构建 DynamicMessage
- * - **路由标识**：通过 gRPC metadata 传递（`x-workflow-id` / `x-service-key`）
- * - **错误处理**：通过 gRPC 原生 `StatusRuntimeException` 返回，无需 message 包装
+ * 2. **`executeStream(google.protobuf.Any)`** → `stream WorkflowStreamEvent`
+ *    Server-side streaming of DAG execution progress. Each node completion
+ *    emits one event (`NODE_COMPLETE` or `NODE_ERROR`); the stream terminates
+ *    with a single `WORKFLOW_DONE` event carrying the final workflow result.
+ *    Used by callers that need real-time per-node progress on long-running
+ *    workflows (e.g. multi-step async DAGs).
  *
- * 约定：SchemaRegistry 中的 schema 名称必须与 protobuf message 全限定名一致。
- *
- * @param workflowRouter    工作流路由器
- * @param schemaRegistry    Schema 注册表，用于动态解析/构建 DynamicMessage
- * @param providerRegistry  Schema 数据提供者注册表，null 时 DynamicMessage 降级为 Map
+ * Schema resolution is cached keyed by the resolved full type URL so a given
+ * PROTOBUF descriptor is built at most once per JVM (builds are expensive
+ * because they require `Descriptors.FileDescriptor.buildFrom` which validates
+ * the schema).
  */
 class GrpcWorkflowServiceImpl(
     private val workflowRouter: WorkflowRouter,
@@ -49,26 +54,22 @@ class GrpcWorkflowServiceImpl(
 ) : WorkflowServiceGrpc.WorkflowServiceImplBase() {
 
     companion object {
-        /** gRPC metadata key：工作流 ID（直接执行，跳过路由） */
+        /** gRPC metadata key for direct execution by workflow id. */
         const val HEADER_WORKFLOW_ID = "x-workflow-id"
-        /** gRPC metadata key：服务键（按 bind_key 路由） */
+        /** gRPC metadata key for bind-key routing (matches HTTP/Dubbo convention). */
         const val HEADER_SERVICE_KEY = "x-service-key"
-
-        /** Any.type_url 前缀 */
+        /** Standard prefix used by `google.protobuf.Any` type URLs. */
         private const val TYPE_URL_PREFIX = "type.googleapis.com/"
     }
 
     private val log = LoggerFactory.getLogger(javaClass)
-
-    // ─── Execute RPC ──────────────────────────────────────────────
+    /** Cache of compiled protobuf descriptors, keyed by schema name / type url. */
+    private val descriptorCache: ConcurrentHashMap<String, Descriptors.Descriptor> = ConcurrentHashMap()
 
     /**
-     * gRPC Execute RPC 实现（同步单次执行）。
-     *
-     * 成功：将工作流输出序列化为 DynamicMessage → Any 返回
-     * 失败：抛出 StatusRuntimeException
+     * Unary execute — request Any, response Any.
      */
-    override fun execute(payload: Any, responseObserver: StreamObserver<Any>) {
+    override fun execute(payload: ProtoAny, responseObserver: StreamObserver<ProtoAny>) {
         try {
             val unified = buildUnifiedRequest(payload)
             val result = workflowRouter.execute(unified)
@@ -91,19 +92,20 @@ class GrpcWorkflowServiceImpl(
         }
     }
 
-    // ─── ExecuteStream RPC ────────────────────────────────────────
-
     /**
-     * 流式执行：执行工作流并推送节点级别事件
-     * 每个节点完成时推送一个 NODE_COMPLETE 事件
-     * 全部完成后推送 WORKFLOW_DONE 并关闭流
+     * Streaming execute — request Any, stream of WorkflowStreamEvent.
+     *
+     * Walks the post-execution `trace` list stored on `UnifiedResponse` — the
+     * runtime has already populated the entire trace synchronously before we
+     * return (this method is a transport-layer streamer, NOT a reactive
+     * back-pressure aware subscriber). For a true per-node subscriber the
+     * caller should instead wire a DAG-node-level event listener.
      */
-    override fun executeStream(payload: Any, responseObserver: StreamObserver<WorkflowStreamEvent>) {
+    override fun executeStream(payload: ProtoAny, responseObserver: StreamObserver<WorkflowStreamEvent>) {
         try {
             val unified = buildUnifiedRequest(payload)
             val result = workflowRouter.execute(unified)
 
-            // 推送各节点完成事件
             result.trace.forEach { record ->
                 val eventType = if (record.status.name == "FAILED")
                     WorkflowStreamEvent.EventType.NODE_ERROR
@@ -119,7 +121,6 @@ class GrpcWorkflowServiceImpl(
                         .build()
                 )
             }
-            // 推送工作流完成事件
             responseObserver.onNext(
                 WorkflowStreamEvent.newBuilder()
                     .setEventType(WorkflowStreamEvent.EventType.WORKFLOW_DONE)
@@ -134,16 +135,13 @@ class GrpcWorkflowServiceImpl(
         }
     }
 
-    // ─── 请求解析 ─────────────────────────────────────────────────
+    // ----- Request assembly ---------------------------------------------------
 
     /**
-     * 将 Any payload + metadata 转换为 UnifiedRequest。
-     *
-     * 路由策略（从 gRPC metadata 读取）：
-     *   - x-workflow-id 非空 → 直接按 ID 执行（跳过路由）
-     *   - x-service-key 非空 → 按 bind_key 路由
+     * Convert a protobuf-Any payload + gRPC metadata into [UnifiedRequest].
+     * Routing mirrors HTTP/Dubbo: prefer `x-workflow-id` over `x-service-key`.
      */
-    private fun buildUnifiedRequest(payload: Any): UnifiedRequest {
+    private fun buildUnifiedRequest(payload: ProtoAny): UnifiedRequest {
         val params = parseProtobufPayload(payload)
         val metadata = extractMetadata()
         val workflowId = metadata[HEADER_WORKFLOW_ID].orEmpty()
@@ -152,32 +150,33 @@ class GrpcWorkflowServiceImpl(
         return if (workflowId.isNotBlank()) {
             UnifiedRequest.withSchemaFromHeaders("INTERNAL", workflowId, metadata, params)
         } else {
-            UnifiedRequest.withSchemaFromHeaders("GRPC:$serviceKey", null, metadata, params)
+            UnifiedRequest.withSchemaFromHeaders("GRPC", serviceKey, metadata, params)
         }
     }
 
     /**
-     * 动态解析 Any payload 为 SchemaBackedMap(DynamicMessage)。
+     * Parse `google.protobuf.Any` into a Map<String, Any> view.
      *
-     * 流程：
-     * 1. 从 Any.type_url 末段提取 message 全限定名作为 schema 名称
-     * 2. 从 SchemaRegistry 获取 FileDescriptorProto
-     * 3. 构建 Descriptors.Descriptor（缓存）
-     * 4. DynamicMessage.parseFrom() 解析二进制
-     * 5. SchemaBackedMap.wrap() 包装为 schema 感知 Map
+     * Pipeline:
+     * 1. `type_url.last('/')` → registered schema name.
+     * 2. Look up schema in [schemaRegistry] (must be `PROTOBUF` format).
+     * 3. Build/retrieve cached protobuf Descriptor.
+     * 4. Parse raw bytes into [DynamicMessage].
+     * 5. Wrap via [SchemaBackedMap.wrap] so downstream functions see a Map
+     *    API backed by the real protobuf message (zero-copy field reads).
      */
-    private fun parseProtobufPayload(payload: Any): Map<String, Any> {
+    private fun parseProtobufPayload(payload: ProtoAny): Map<String, Any> {
         require(payload.typeUrl.isNotBlank()) { "Any.type_url is required" }
 
         val schemaName = payload.typeUrl.substringAfterLast('/')
 
         val schema = schemaRegistry.get(schemaName)
-            ?: throw IllegalArgumentException("Schema not found in registry: $schemaName")
+            ?: throw IllegalArgumentException("Schema not found in registry: `$schemaName")
         require(schema.format == SchemaFormat.PROTOBUF) {
             "Schema [$schemaName] is not PROTOBUF format: ${schema.format}"
         }
 
-        val descriptor = descriptorCache.computeIfAbsent(schemaName) {
+        val descriptor = descriptorCache.computeIfAbsent(schemaName) { _: String ->
             buildDescriptor(schema.parsed)
         }
 
@@ -188,45 +187,35 @@ class GrpcWorkflowServiceImpl(
         return SchemaBackedMap.wrap(message, provider) as Map<String, Any>
     }
 
-    // ─── 响应构建 ─────────────────────────────────────────────────
+    // ----- Response encoding --------------------------------------------------
 
     /**
-     * 将工作流输出数据构建为 Any。
+     * Encode a workflow result as `google.protobuf.Any`.
      *
-     * 格式自动推断（不依赖 outputSchemaFormat 字段）：
-     * - 从 outputSchema 内容结构自动判断是否为 protobuf（FileDescriptorProto）
-     * - protobuf → DynamicMessage → Any（完全动态，无需编译期类）
-     * - 其他 → google.protobuf.Struct（通用 key-value）
-     *
-     * 设计原则：Schema 内容本身是权威源，格式是内容的固有属性，无需外部标签。
+     * Strategy by output-schema availability:
+     * - If the workflow declared a PROTOBUF output schema → build dynamic proto
+     *   response using that schema (callers get strong typing on the wire).
+     * - Otherwise → round-trip result through JSON into `google.protobuf.Struct`
+     *   (universal fallback that carries any JSON-serializable map).
      */
-    private fun buildResponseAny(result: UnifiedResponse): Any {
-        val data = result.data ?: return Any.getDefaultInstance()
+    private fun buildResponseAny(result: UnifiedResponse): ProtoAny {
+        val data = result.data ?: return ProtoAny.getDefaultInstance()
         val schema = result.outputSchema
 
         if (schema != null && isProtobufSchema(schema)) {
             return buildProtobufResponse(data, schema)
         }
 
-        // 降级：非 protobuf outputSchema 时，使用 Struct（通用 key-value）
         return buildStructResponse(data)
     }
 
-    /**
-     * 将 Map 数据序列化为 DynamicMessage → Any。
-     *
-     * 流程：
-     * 1. 从 outputSchema 解析 FileDescriptorProto（SchemaRegistry 或 inline）
-     * 2. 构建 Descriptor（缓存）
-     * 3. 通过 JsonFormat 将数据 merge 到 DynamicMessage Builder
-     * 4. 包装为 Any（type_url = package.messageName）
-     */
-    private fun buildProtobufResponse(data: kotlin.Any, outputSchema: kotlin.Any): Any {
+    /** Encode the result against the caller-supplied protobuf output schema. */
+    private fun buildProtobufResponse(data: Any, outputSchema: Any): ProtoAny {
         val fileDescProto = resolveOutputFileDescriptor(outputSchema)
         val messageName = resolveMessageName(fileDescProto)
         val typeUrl = "$TYPE_URL_PREFIX$messageName"
 
-        val descriptor = descriptorCache.computeIfAbsent(typeUrl) {
+        val descriptor = descriptorCache.computeIfAbsent(typeUrl) { _: String ->
             buildDescriptor(fileDescProto)
         }
 
@@ -235,40 +224,32 @@ class GrpcWorkflowServiceImpl(
         JsonFormat.parser().merge(json, builder)
         val message = builder.build()
 
-        return Any.newBuilder()
+        return ProtoAny.newBuilder()
             .setTypeUrl(typeUrl)
             .setValue(message.toByteString())
             .build()
     }
 
-    /**
-     * 降级响应：将数据包装为 google.protobuf.Struct → Any。
-     * 适用于未配置 protobuf outputSchema 的工作流。
-     */
-    private fun buildStructResponse(data: kotlin.Any): Any {
+    /** Encode arbitrary data via `google.protobuf.Struct` (JSON ↔ proto bridge). */
+    private fun buildStructResponse(data: Any): ProtoAny {
         val json = JsonUtil.serialize(data)
         val structBuilder = Struct.newBuilder()
         JsonFormat.parser().merge(json, structBuilder)
         val struct = structBuilder.build()
 
-        return Any.newBuilder()
+        return ProtoAny.newBuilder()
             .setTypeUrl("${TYPE_URL_PREFIX}google.protobuf.Struct")
             .setValue(struct.toByteString())
             .build()
     }
 
+    // ----- Schema helpers -----------------------------------------------------
+
     /**
-     * 从 Schema 内容自动推断是否为 protobuf 格式。
-     *
-     * 检测规则（各格式结构特征天然正交，不会误判）：
-     * - FileDescriptorProto 实例 → protobuf（来自 SchemaRegistry.parsed）
-     * - Map 包含 "messageType" 键 → protobuf（FileDescriptorProto JSON 表示）
-     * - String 包含 "messageType" → protobuf（FileDescriptorProto JSON 文本）
-     * - 其他 → 非 protobuf（JSON Schema / Avro 等）
-     *
-     * 扩展：新增格式时只需添加对应的检测方法，不改 enum、不改 DB。
+     * Best-effort detector — accepts FileDescriptorProto directly, a
+     * pre-serialised JSON string, or a Map mirror of the proto JSON form.
      */
-    private fun isProtobufSchema(schema: kotlin.Any): Boolean {
+    private fun isProtobufSchema(schema: Any): Boolean {
         return when (schema) {
             is DescriptorProtos.FileDescriptorProto -> true
             is Map<*, *> -> schema.containsKey("messageType")
@@ -277,20 +258,12 @@ class GrpcWorkflowServiceImpl(
         }
     }
 
-    /**
-     * 从 outputSchema 内容解析 FileDescriptorProto。
-     *
-     * 支持两种来源：
-     * - SchemaRegistry 已注册的 Schema（parsed = FileDescriptorProto）
-     * - 内联 Map/String（通过 JsonFormat 解析）
-     */
-    private fun resolveOutputFileDescriptor(outputSchema: kotlin.Any): DescriptorProtos.FileDescriptorProto {
-        // 1. 已是 FileDescriptorProto（来自 SchemaRegistry.parsed）
+    /** Normalise an arbitrary output-schema carrier into a FileDescriptorProto. */
+    private fun resolveOutputFileDescriptor(outputSchema: Any): DescriptorProtos.FileDescriptorProto {
         if (outputSchema is DescriptorProtos.FileDescriptorProto) {
             return outputSchema
         }
 
-        // 2. Map 或 String（内联 schema），通过 JSON 解析
         val json = when (outputSchema) {
             is String -> outputSchema
             is Map<*, *> -> JsonUtil.serialize(outputSchema)
@@ -304,10 +277,7 @@ class GrpcWorkflowServiceImpl(
         return builder.build()
     }
 
-    /**
-     * 从 FileDescriptorProto 提取消息全限定名。
-     * 格式：package.MessageName（用于 Any.type_url）
-     */
+    /** Pick the first declared message type as the response message (convention). */
     private fun resolveMessageName(fileDescProto: DescriptorProtos.FileDescriptorProto): String {
         require(fileDescProto.messageTypeCount > 0) {
             "FileDescriptorProto contains no message type definitions"
@@ -316,13 +286,11 @@ class GrpcWorkflowServiceImpl(
         return "$pkg${fileDescProto.getMessageType(0).name}"
     }
 
-    // ─── Descriptor 构建 ──────────────────────────────────────────
-
     /**
-     * 从 FileDescriptorProto 构建 Descriptors.Descriptor。
-     * 取第一个 messageType 作为主 message 定义。
+     * Compile a `FileDescriptorProto` into a live `Descriptors.Descriptor` for
+     * the first declared message type. Throws if descriptor validation fails.
      */
-    private fun buildDescriptor(parsed: kotlin.Any): Descriptors.Descriptor {
+    private fun buildDescriptor(parsed: Any): Descriptors.Descriptor {
         val fileDescriptorProto = parsed as? DescriptorProtos.FileDescriptorProto
             ?: throw IllegalArgumentException("Schema parsed object is not a FileDescriptorProto")
         require(fileDescriptorProto.messageTypeCount > 0) {
@@ -338,21 +306,21 @@ class GrpcWorkflowServiceImpl(
         return fileDescriptor.messageTypes.first()
     }
 
-    // ─── 工具方法 ─────────────────────────────────────────────────
+    // ----- Metadata / error helpers ------------------------------------------
 
-    /**
-     * 从 gRPC Context 中提取 metadata
-     * 由 GrpcMetadataInterceptor 从 HTTP/2 headers 注入
-     */
+    /** Read the captured metadata map (set by [GrpcMetadataInterceptor]) from gRPC Context. */
     private fun extractMetadata(): Map<String, String> =
         GrpcMetadataInterceptor.METADATA_CONTEXT_KEY.get() ?: emptyMap()
 
     /**
-     * 将异常转换为 gRPC StatusRuntimeException。
+     * Translate generic + workflow exceptions into gRPC canonical Status codes.
      *
-     * - WorkflowException → INTERNAL，携带 errorCode 描述
-     * - IllegalArgumentException → INVALID_ARGUMENT
-     * - 其他 → INTERNAL
+     * Intentional mapping:
+     * - `WorkflowException` → `INTERNAL` with prefixed description (retryable
+     *   by default; callers inspect the bracketed error-code).
+     * - `IllegalArgumentException` → `INVALID_ARGUMENT` (caller supplied bad
+     *   payload / missing route key; never retry).
+     * - Anything else → `INTERNAL` (generic infrastructure error; log full stack).
      */
     private fun toStatusException(ex: Throwable): StatusRuntimeException {
         return when (ex) {
@@ -362,11 +330,13 @@ class GrpcWorkflowServiceImpl(
                     .withDescription("[${ex.errorCode}] ${ex.message ?: "Workflow execution failed"}")
                     .asRuntimeException()
             }
+
             is IllegalArgumentException -> {
                 Status.INVALID_ARGUMENT
                     .withDescription(ex.message ?: "Invalid argument")
                     .asRuntimeException()
             }
+
             else -> {
                 log.error(ex) { "gRPC unexpected error: ${ex.message}" }
                 Status.INTERNAL

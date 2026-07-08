@@ -1,4 +1,5 @@
-import { apiGet, apiPost, apiPut, apiDelete } from './request';
+import { client, unwrap, silentHeaders } from '@/sdk';
+import { apiGet, apiPost } from './request';
 import type { WorkflowDefinition, DebugResult, DebugExecutionRecord } from '@/types/workflow';
 import type { MockConfig, PublishTarget } from '@/types/api';
 import type { RequestOptions } from './request';
@@ -7,35 +8,79 @@ export async function getWorkflows(
   params?: { keyword?: string; page?: number; pageSize?: number },
   options?: RequestOptions,
 ) {
-  return apiGet<API.PageResponse<WorkflowDefinition>>('/api/admin/workflows', params, options);
+  return unwrap(
+    await client.GET('/api/admin/workflows', {
+      params: { query: params ?? {} },
+      headers: silentHeaders(options),
+    }),
+  ) as unknown as API.PageResponse<WorkflowDefinition>;
 }
 
 export async function getWorkflow(id: string, options?: RequestOptions) {
-  return apiGet<WorkflowDefinition>(`/api/admin/workflows/${id}`, undefined, options);
+  return unwrap(
+    await client.GET('/api/admin/workflows/{workflowId}', {
+      params: { path: { workflowId: id } },
+      headers: silentHeaders(options),
+    }),
+  ) as WorkflowDefinition;
 }
 
 export async function createWorkflow(data: WorkflowDefinition, options?: RequestOptions) {
-  return apiPost<WorkflowDefinition>('/api/admin/workflows', data, options);
+  return unwrap(
+    await client.POST('/api/admin/workflows', {
+      body: data as any,
+      headers: silentHeaders(options),
+    }),
+  ) as WorkflowDefinition;
 }
 
 export async function updateWorkflow(id: string, data: WorkflowDefinition, options?: RequestOptions) {
-  return apiPut<WorkflowDefinition>(`/api/admin/workflows/${id}`, data, options);
+  return unwrap(
+    await client.PUT('/api/admin/workflows/{workflowId}', {
+      params: { path: { workflowId: id } },
+      body: data as any,
+      headers: silentHeaders(options),
+    }),
+  ) as WorkflowDefinition;
 }
 
 export async function deleteWorkflow(id: string, options?: RequestOptions) {
-  return apiDelete<void>(`/api/admin/workflows/${id}`, options);
+  unwrap(
+    await client.DELETE('/api/admin/workflows/{workflowId}', {
+      params: { path: { workflowId: id } },
+      headers: silentHeaders(options),
+    }),
+  );
+  return undefined as void;
 }
 
 export async function publishWorkflow(id: string, target?: PublishTarget, options?: RequestOptions) {
-  return apiPost<WorkflowDefinition>(`/api/admin/workflows/${id}/publish`, target, options);
+  return unwrap(
+    await client.POST('/api/admin/workflows/{workflowId}/publish', {
+      params: { path: { workflowId: id } },
+      body: target as any,
+      headers: silentHeaders(options),
+    }),
+  ) as WorkflowDefinition;
 }
 
 export async function rollbackWorkflow(id: string, version: number, options?: RequestOptions) {
-  return apiPost<WorkflowDefinition>(`/api/admin/workflows/${id}/rollback`, { version }, options);
+  return unwrap(
+    await client.POST('/api/admin/workflows/{workflowId}/rollback', {
+      params: { path: { workflowId: id } },
+      body: { version } as any,
+      headers: silentHeaders(options),
+    }),
+  ) as WorkflowDefinition;
 }
 
 export async function getWorkflowVersions(id: string, options?: RequestOptions) {
-  return apiGet<WorkflowDefinition[]>(`/api/admin/workflows/${id}/versions`, undefined, options);
+  return unwrap(
+    await client.GET('/api/admin/workflows/{workflowId}/versions', {
+      params: { path: { workflowId: id } },
+      headers: silentHeaders(options),
+    }),
+  ) as WorkflowDefinition[];
 }
 
 export async function debugWorkflow(
@@ -45,11 +90,13 @@ export async function debugWorkflow(
   mockConfig?: MockConfig,
   options?: RequestOptions,
 ) {
-  return apiPost<DebugResult>(
-    `/api/admin/workflows/${id}/debug`,
-    { inputs, breakpoints, mockConfig },
-    options,
-  );
+  return unwrap(
+    await client.POST('/api/admin/workflows/{workflowId}/debug', {
+      params: { path: { workflowId: id } },
+      body: { inputs, breakpoints, mockConfig } as any,
+      headers: silentHeaders(options),
+    }),
+  ) as DebugResult;
 }
 
 export async function debugWorkflowNode(
@@ -59,7 +106,13 @@ export async function debugWorkflowNode(
   mockConfig?: MockConfig,
   options?: RequestOptions,
 ) {
-  return apiPost<any>(`/api/admin/workflows/${id}/debug/node`, { nodeId, inputData, mockConfig }, options);
+  return unwrap(
+    await client.POST('/api/admin/workflows/{workflowId}/debug/node', {
+      params: { path: { workflowId: id } },
+      body: { nodeId, inputData, mockConfig } as any,
+      headers: silentHeaders(options),
+    }),
+  );
 }
 
 export async function debugWorkflowStep(
@@ -68,11 +121,13 @@ export async function debugWorkflowStep(
   breakpoints?: string[],
   options?: RequestOptions,
 ) {
-  return apiPost<DebugResult>(
-    `/api/admin/workflows/${id}/debug/step`,
-    { snapshot, breakpoints },
-    options,
-  );
+  return unwrap(
+    await client.POST('/api/admin/workflows/{workflowId}/debug/step', {
+      params: { path: { workflowId: id } },
+      body: { snapshot, breakpoints } as any,
+      headers: silentHeaders(options),
+    }),
+  ) as DebugResult;
 }
 
 export async function rerunWorkflowNode(
@@ -82,37 +137,51 @@ export async function rerunWorkflowNode(
   overrideInput?: any,
   options?: RequestOptions,
 ) {
-  return apiPost<DebugResult>(
-    `/api/admin/workflows/${id}/debug/rerun`,
-    { snapshot, nodeId, overrideInput },
-    options,
-  );
+  return unwrap(
+    await client.POST('/api/admin/workflows/{workflowId}/debug/rerun', {
+      params: { path: { workflowId: id } },
+      body: { snapshot, nodeId, overrideInput } as any,
+      headers: silentHeaders(options),
+    }),
+  ) as DebugResult;
 }
 
 export async function getDebugHistory(id: string, page = 1, size = 20, options?: RequestOptions) {
-  return apiGet<API.PageResponse<DebugExecutionRecord>>(
-    `/api/admin/workflows/${id}/debug/history`,
-    { page, size },
-    options,
-  );
+  return unwrap(
+    await client.GET('/api/admin/workflows/{workflowId}/debug/history', {
+      params: { path: { workflowId: id }, query: { page, size } },
+      headers: silentHeaders(options),
+    }),
+  ) as unknown as API.PageResponse<DebugExecutionRecord>;
 }
 
 export async function getDebugHistoryDetail(id: string, executionId: string, options?: RequestOptions) {
-  return apiGet<DebugExecutionRecord>(
-    `/api/admin/workflows/${id}/debug/history/${executionId}`,
-    undefined,
-    options,
-  );
+  return unwrap(
+    await client.GET('/api/admin/workflows/{workflowId}/debug/history/{executionId}', {
+      params: { path: { workflowId: id, executionId } },
+      headers: silentHeaders(options),
+    }),
+  ) as DebugExecutionRecord;
 }
 
 export async function importOpenAPI(file: File, options?: RequestOptions) {
   const formData = new FormData();
   formData.append('file', file);
-  return apiPost<any>('/api/admin/workflows/import/openapi', formData, options);
+  return unwrap(
+    await client.POST('/api/admin/workflows/import/openapi', {
+      body: formData as any,
+      headers: silentHeaders(options),
+    }),
+  );
 }
 
 export async function confirmImportOpenAPI(items: WorkflowDefinition[], options?: RequestOptions) {
-  return apiPost<WorkflowDefinition[]>('/api/admin/workflows/import/openapi/confirm', { items }, options);
+  return unwrap(
+    await client.POST('/api/admin/workflows/import/openapi/confirm', {
+      body: { items } as any,
+      headers: silentHeaders(options),
+    }),
+  ) as WorkflowDefinition[];
 }
 
 export async function importWorkflowDefinition(file: File, options?: RequestOptions) {
@@ -131,10 +200,25 @@ export async function exportOpenAPI(
   if (title) params.title = title;
   if (version) params.version = version;
   if (ids && ids.length === 1) {
-    return apiGet<any>(`/api/admin/workflows/${ids[0]}/export/openapi`, params, options);
+    const queryStr = new URLSearchParams(params).toString();
+    return apiGet<any>(
+      `/api/admin/workflows/${encodeURIComponent(ids[0])}/export/openapi${queryStr ? '?' + queryStr : ''}`,
+      undefined,
+      options,
+    );
   }
   if (ids && ids.length > 1) {
-    return apiPost<any>('/api/admin/workflows/export/openapi', { ids, title, version }, options);
+    return unwrap(
+      await client.POST('/api/admin/workflows/export/openapi', {
+        body: { ids, title, version } as any,
+        headers: silentHeaders(options),
+      }),
+    );
   }
-  return apiGet<any>('/api/admin/workflows/export/openapi', params, options);
+  return unwrap(
+    await client.GET('/api/admin/workflows/export/openapi', {
+      params: { query: params },
+      headers: silentHeaders(options),
+    }),
+  );
 }

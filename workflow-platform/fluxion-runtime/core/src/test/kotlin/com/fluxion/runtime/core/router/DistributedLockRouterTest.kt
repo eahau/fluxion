@@ -11,6 +11,13 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.util.concurrent.atomic.AtomicInteger
 
+/**
+ * Behavioural tests for [DistributedLockRouter].
+ *
+ * Uses [InMemoryDistributedLockProvider] (from the test-support module) as a
+ * fast, deterministic lock backend that can simulate transient failures and
+ * expose acquire/release state for assertions.
+ */
 class DistributedLockRouterTest {
 
     private lateinit var lockProvider: InMemoryDistributedLockProvider
@@ -122,6 +129,12 @@ class DistributedLockRouterTest {
         assertEquals(1, delegate.maxConcurrent.get())
     }
 
+    /**
+     * Test stub [WorkflowRouter] that counts invocations and tracks the
+     * maximum number of concurrent in-flight calls it has ever observed.
+     *
+     * Used to verify that the lock decorator actually serializes execution.
+     */
     class CountingRouter(private val sleepMillis: Long = 0) : WorkflowRouter {
         val callCount = AtomicInteger(0)
         val maxConcurrent = AtomicInteger(0)
@@ -138,5 +151,4 @@ class DistributedLockRouterTest {
             return UnifiedResponse(success = true, data = "ok")
         }
     }
-
 }

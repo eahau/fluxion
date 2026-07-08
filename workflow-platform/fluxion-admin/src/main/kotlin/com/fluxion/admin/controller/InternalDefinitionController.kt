@@ -10,14 +10,16 @@ import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 
 /**
- * 内部定义分发端点 — HTTP 模式下供 Worker 拉取定义
+ * Internal HTTP endpoint that serves workflow definition snapshots to workers.
  *
- * 仅在 workflow.config.type=http 时激活。
- * Worker 启动时调用 GET /internal/workflow/definition/all 全量拉取。
+ * Activated by `workflow.config.type=http`. Workers call
+ * `GET /internal/workflow/definition/all` on startup and whenever their polling
+ * watcher fires to rebuild the local `DefinitionRegistry`.
  *
- * 支持按 appGroup 过滤：
- *   - 未指定 appGroup 时：返回所有 ACTIVE 工作流（兼容旧行为）
- *   - 指定 appGroup 时：返回 PLATFORM + 该 appGroup 的 PRIVATE 工作流
+ * Multi-tenant filtering semantics for the bulk endpoint:
+ *   - `appGroup` absent: every `ACTIVE` workflow (PLATFORM + PRIVATE) for legacy callers.
+ *   - `appGroup` supplied: `PLATFORM` visibility merged with the PRIVATE workflows of
+ *     that specific tenant.
  */
 @RestController
 @RequestMapping("/internal/workflow/definition")
@@ -27,8 +29,10 @@ class InternalDefinitionController(
 ) {
 
     /**
-     * 拉取定义快照。
-     * @param appGroup 所属应用分组，传入时仅下发 PLATFORM + 该 appGroup 的 PRIVATE
+     * Bulk definition fetcher used for worker bootstrap / periodic refresh.
+     *
+     * @param appGroup when non-null only PLATFORM + that tenant's PRIVATE workflows are
+     *                 returned; when null all ACTIVE workflows are returned (legacy mode).
      */
     @GetMapping("/all")
     fun loadAll(@RequestParam(required = false) appGroup: String?): List<WorkflowDefinitionSnapshot> {
@@ -36,7 +40,7 @@ class InternalDefinitionController(
     }
 
     /**
-     * 获取单个定义快照
+     * Single definition lookup used for hot-reload / individual workflow refresh.
      */
     @GetMapping("/{workflowId}")
     fun get(@PathVariable workflowId: String): WorkflowDefinitionSnapshot? {

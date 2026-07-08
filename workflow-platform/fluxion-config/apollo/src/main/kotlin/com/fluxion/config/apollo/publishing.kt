@@ -5,11 +5,11 @@ import com.ctrip.framework.apollo.openapi.dto.NamespaceReleaseDTO
 import com.ctrip.framework.apollo.openapi.dto.OpenItemDTO
 
 /**
- * Apollo 发布器内部共享工具 — 消除 OpenItemDTO / NamespaceReleaseDTO 构建重复
+ * Apollo 鍙戝竷鍣ㄥ唴閮ㄥ叡浜伐鍏?鈥?娑堥櫎 OpenItemDTO / NamespaceReleaseDTO 鏋勫缓閲嶅
  *
- * 三个 Apollo 发布器（DefinitionPublisher、FunctionPublisher、InstanceRegistry）
- * 共享相同的 createOrUpdateItem + publishNamespace 模式。
- * 这些 internal 函数将 DTO 构建和 API 调用收敛到一处。
+ * 涓変釜 Apollo 鍙戝竷鍣紙DefinitionPublisher銆丗unctionPublisher銆両nstanceRegistry锛?
+ * 鍏变韩鐩稿悓鐨?createOrUpdateItem + publishNamespace 妯″紡銆?
+ * 杩欎簺 internal 鍑芥暟灏?DTO 鏋勫缓鍜?API 璋冪敤鏀舵暃鍒颁竴澶勩€?
  */
 
 internal fun buildItem(
@@ -34,10 +34,10 @@ internal fun buildRelease(
 }
 
 /**
- * 完整的 item 写入 + namespace 发布管线。
+ * 瀹屾暣鐨?item 鍐欏叆 + namespace 鍙戝竷绠＄嚎銆?
  *
- * 将 createOrUpdateItem → publishNamespace 的两步操作封装为单一函数，
- * 供所有 Apollo 发布器的 publish/unpublish 方法复用。
+ * 灏?createOrUpdateItem 鈫?publishNamespace 鐨勪袱姝ユ搷浣滃皝瑁呬负鍗曚竴鍑芥暟锛?
+ * 渚涙墍鏈?Apollo 鍙戝竷鍣ㄧ殑 publish/unpublish 鏂规硶澶嶇敤銆?
  */
 internal fun publishItemToApollo(
     client: ApolloOpenApiClient,
@@ -58,7 +58,7 @@ internal fun publishItemToApollo(
 }
 
 /**
- * 完整的 item 删除 + namespace 发布管线。
+ * 瀹屾暣鐨?item 鍒犻櫎 + namespace 鍙戝竷绠＄嚎銆?
  */
 internal fun unpublishItemFromApollo(
     client: ApolloOpenApiClient,

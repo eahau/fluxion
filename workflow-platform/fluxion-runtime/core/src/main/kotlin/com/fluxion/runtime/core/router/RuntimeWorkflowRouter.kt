@@ -11,16 +11,23 @@ import com.fluxion.runtime.core.provider.DefinitionProvider
 import com.fluxion.runtime.core.spi.ExecutionSnapshotStore
 import kotlinx.coroutines.runBlocking
 import org.slf4j.*
-
 /**
- * Runtime 侧工作流路由器。
+ * Runtime-side workflow router — worker (data-plane) entry point.
  *
- * 与控制面解耦，仅依赖 [DefinitionProvider] 获取工作流定义，
- * 通过 [DagExecutor] 执行，并可选择将结果持久化到 [ExecutionSnapshotStore]。
+ * Unlike the Admin control-plane router, this implementation has no direct DB
+ * dependency. It resolves workflow definitions exclusively via
+ * [DefinitionProvider] (config-center cache on Worker) and delegates actual
+ * DAG execution to the shared [DagExecutor] from `fluxion-core`.
  *
- * 协程链路：
- *   [executeSuspend] 直接挂起调用 DagExecutor，不阻塞 Tomcat 线程。
- *   [execute] 为向后兼容的阻塞式桥接（供非协程调用方使用）。
+ * Execution path contract:
+ * - [executeSuspend] is the primary path — it suspends instead of blocking the
+ *   calling Tomcat/WebFlux thread so concurrent throughput stays high.
+ * - [execute] is a backwards-compatible blocking bridge used by adapters that
+ *   don't yet speak coroutines (Dubbo, gRPC sync stubs, Kafka consumer loops).
+ *
+ * @param definitionProvider Source of truth for published workflow definitions
+ * @param dagExecutor        Core DAG execution engine
+ * @param snapshotStore      Optional persistence for execution results
  */
 class RuntimeWorkflowRouter(
     private val definitionProvider: DefinitionProvider,
@@ -30,12 +37,18 @@ class RuntimeWorkflowRouter(
 
     private val log = LoggerFactory.getLogger(javaClass)
 
-    /** 阻塞式桥接（供 Dubbo/gRPC/Kafka 等非协程适配器使用） */
+    /**
+     * Blocking bridge for non-coroutine adapters (Dubbo/gRPC/Kafka consumer).
+     * Bridges the call onto the coroutine dispatcher via [runBlocking].
+     */
     override fun execute(request: UnifiedRequest): UnifiedResponse = runBlocking {
         executeSuspend(request)
     }
 
-    /** 协程原生执行路径（不阻塞调用线程） */
+    /**
+     * Primary coroutine-native routing path. Suspends instead of blocking
+     * the calling thread, which is essential for WebFlux / virtual-thread pools.
+     */
     override suspend fun executeSuspend(request: UnifiedRequest): UnifiedResponse {
         val definition = resolveDefinition(request)
             ?: throw WorkflowNotFoundException(
@@ -44,14 +57,12 @@ class RuntimeWorkflowRouter(
 
         log.debug { "Runtime routing to workflow [${definition.id}] via protocol [${request.protocol}]" }
 
-        // 直接挂起执行，不阻塞 Tomcat 线程
         val result = dagExecutor.execute(definition, request.params)
 
-        // 同步保存快照（失败不影响主流程）
         try {
             snapshotStore?.save(result, definition.id, definition.version)
         } catch (ex: Exception) {
-            log.warn { "Failed to save execution snapshot executionId=${result.executionId}: ${ex.message}" }
+            log.warn(ex) { "Failed to save execution snapshot executionId=${result.executionId}" }
         }
 
         return UnifiedResponse.from(result).copy(
@@ -60,20 +71,27 @@ class RuntimeWorkflowRouter(
         )
     }
 
+    /**
+     * Resolve the [WorkflowDefinition] targeted by the request.
+     *
+     * Resolution order (first match wins):
+     * 1. Explicit `workflowId` on the request (direct Admin-call path).
+     * 2. Protocol binding encoded in `request.protocol` as `"TYPE:bindKey"`
+     *    (e.g. `"HTTP:GET:/api/users"`, `"KAFKA:order.created"`).
+     *
+     * @return Resolved definition, or null if no match exists
+     */
     private fun resolveDefinition(request: UnifiedRequest): WorkflowDefinition? {
-        // 1. 直接按 workflowId 查找
         if (!request.workflowId.isNullOrBlank()) {
             return definitionProvider.get(request.workflowId!!)
         }
 
-        // 2. 解析 protocol 字段路由
-        // protocol 格式：PROTOCOL:bindKey（如 HTTP:GET:/api/users、KAFKA:workflow.user.create）
         val protocol = request.protocol
         val parts = protocol.split(":", limit = 2)
         if (parts.size < 2) return null
 
-        val protocolType = parts[0]                  // HTTP / KAFKA / DUBBO / GRPC
-        val bindKey = parts[1]                       // path / topic / serviceKey
+        val protocolType = parts[0]
+        val bindKey = parts[1]
 
         val workflowId = definitionProvider.findByBinding(protocolType, bindKey) ?: return null
         return definitionProvider.get(workflowId)

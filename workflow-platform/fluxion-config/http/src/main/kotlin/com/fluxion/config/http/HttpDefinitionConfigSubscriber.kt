@@ -1,3 +1,12 @@
+/**
+ * Worker-side workflow-definition subscriber that pulls
+ * [WorkflowDefinitionSnapshot] entries from the Admin server over HTTP and
+ * accepts typed push deltas.
+ *
+ * Part of the zero-config-centre deployment mode. Admin pushes updates via
+ * [DefinitionPushController] which calls [onPushReceived] with the published
+ * workflow id, snapshot, and change type.
+ */
 package com.fluxion.config.http
 
 import com.fluxion.core.util.JsonUtil
@@ -12,11 +21,11 @@ import java.net.http.HttpResponse
 import java.time.Duration
 
 /**
- * HTTP 默认实现 — Worker 侧定义订阅器
+ * Pulls workflow definition snapshots from the Admin internal API on worker
+ * startup and applies incremental push events forwarded by the Admin server.
  *
- * HTTP 模式下配置由 Admin 主动推送（[onPushReceived]）或全量拉取（[loadAll]），
- * 不经过 `mapKeyToSnapshot` 原始 JSON 解析管线。
- * 降级追踪通过 [trackSnapshot] 在各入口显式调用。
+ * The degrade cache is updated explicitly here because HTTP transport works
+ * with already-typd snapshots rather than raw config-centre key/value pairs.
  */
 class HttpDefinitionConfigSubscriber(
     adminBaseUrl: String
@@ -42,9 +51,9 @@ class HttpDefinitionConfigSubscriber(
                     resp.body(),
                     WorkflowDefinitionSnapshot::class.java
                 )
-                // 记录降级缓存
+                // Populate degrade cache up front for cold-start resilience.
                 for (snap in snapshots) { trackSnapshot(snap.workflowId, snap) }
-                log.info("Loaded ${snapshots.size} workflow definitions from Admin via HTTP")
+                log.info { "Loaded ${snapshots.size} workflow definitions from Admin via HTTP" }
                 snapshots
             } else {
                 throw RuntimeException("Load all definitions failed: status=${resp.statusCode()}")
@@ -74,15 +83,14 @@ class HttpDefinitionConfigSubscriber(
                 null
             }
         } catch (e: Exception) {
-            log.error("Failed to get definition for key=$key", e)
+            log.error(e) { "Failed to get definition for key=$key" }
             null
         }
     }
 
     /**
-     * 由 DefinitionPushController 调用，当 Admin 推送定义到本实例时触发。
-     *
-     * REMOVE 事件清理降级缓存；PUBLISH/UPDATE 记录降级缓存。
+     * Push entry point called by [DefinitionPushController] on the Admin
+     * server to deliver a single workflow definition delta.
      */
     fun onPushReceived(workflowId: String, snapshot: WorkflowDefinitionSnapshot, changeType: ChangeType) {
         when (changeType) {
@@ -92,7 +100,7 @@ class HttpDefinitionConfigSubscriber(
         notifyListeners(workflowId, snapshot, changeType)
     }
 
-    /** HTTP 模式不经过原始 JSON 解析管线 */
+    // Typed HTTP mode never goes through raw key/content deserialization.
     override fun mapKeyToSnapshot(key: String, content: String): WorkflowDefinitionSnapshot =
         throw UnsupportedOperationException("HTTP mode uses typed push/pull, not raw JSON parsing")
 }

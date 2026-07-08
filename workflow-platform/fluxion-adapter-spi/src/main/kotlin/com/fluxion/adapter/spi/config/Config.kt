@@ -1,23 +1,44 @@
 package com.fluxion.adapter.spi.config
 
 import com.fluxion.adapter.spi.registry.PublishTarget
+import com.fluxion.core.value.FunctionMeta
 
-// ═══════════════════════════════════════════════════════════════════════════
-//  传输值对象 — 配置中心传输层 DTO，跨层共享
-// ═══════════════════════════════════════════════════════════════════════════
+/**
+ * Configuration snapshot DTOs and change listeners for cross-module sharing.
+ *
+ * Defines the SPI contract between the Admin control plane (which publishes
+ * configuration changes) and Worker data plane instances (which subscribe to
+ * and apply those changes). Supports three resource types:
+ * - Workflow definitions
+ * - Function configurations (SCRIPT / EXTERNAL types)
+ * - Schema definitions
+ *
+ * Also includes generic single-value and multi-key abstractions for other
+ * dynamic configuration (e.g. idempotency, rate limiting).
+ */
 
-/** 配置变更类型枚举 */
+/**
+ * Type of configuration change event delivered to subscribers.
+ */
 enum class ChangeType {
-    /** 新发布（首次上线） */
     PUBLISH,
-    /** 更新（已有定义的版本升级） */
     UPDATE,
-    /** 移除（下线/废弃） */
     REMOVE
 }
 
 /**
- * 工作流定义快照 — 配置中心传输值对象
+ * Workflow definition snapshot — config-center transfer object.
+ *
+ * Carries the full workflow definition (as JSON) plus metadata needed by the
+ * Worker-side [DefinitionProvider] to cache and route workflows.
+ *
+ * @param workflowId       Unique workflow identifier (primary key)
+ * @param definitionJson   Full DAG definition serialized as JSON; null when
+ *                         this is a REMOVE tombstone
+ * @param version          Monotonically increasing version number
+ * @param active           Whether this definition is currently active
+ * @param targetGroups     Optional list of app-group filters; empty/null =
+ *                         broadcast to all worker instances
  */
 data class WorkflowDefinitionSnapshot(
     val workflowId: String,
@@ -26,13 +47,32 @@ data class WorkflowDefinitionSnapshot(
     val active: Boolean,
     val targetGroups: List<String>?
 ) {
-    /** 判断是否面向全量（无群组限制） */
+    /**
+     * Check whether this snapshot targets all instances (no group restriction).
+     *
+     * @return true when targetGroups is null or empty
+     */
     fun isGlobal(): Boolean = targetGroups.isNullOrEmpty()
 
     companion object {
+        /**
+         * Create a REMOVE tombstone snapshot.
+         *
+         * @param workflowId Workflow to remove
+         * @return Snapshot with null definitionJson and active=false
+         */
         @JvmStatic
         fun removed(workflowId: String) = WorkflowDefinitionSnapshot(workflowId, null, 0, false, null)
 
+        /**
+         * Create a standard publish/update snapshot with no group restriction.
+         *
+         * @param workflowId     Workflow ID
+         * @param definitionJson Full DAG JSON
+         * @param version        Version number
+         * @param active         Active flag
+         * @return Populated snapshot
+         */
         @JvmStatic
         fun of(workflowId: String, definitionJson: String, version: Int, active: Boolean) =
             WorkflowDefinitionSnapshot(workflowId, definitionJson, version, active, null)
@@ -40,31 +80,74 @@ data class WorkflowDefinitionSnapshot(
 }
 
 /**
- * 函数配置快照 — 配置中心传输值对象
+ * Function configuration snapshot — config-center transfer object.
  *
- * 用于把函数定义（尤其是 SCRIPT / EXTERNAL 类型）从 Admin 推送到 Worker 实例，
- * Worker 收到后注册到本地 FunctionRegistry，实现函数热更新。
+ * Pushes function definitions (especially SCRIPT / EXTERNAL types) from Admin
+ * to Worker instances. Workers register the received functions into their
+ * local [com.fluxion.core.function.FunctionRegistry] to support hot-reloading
+ * without a restart.
+ *
+ * Implements [FunctionMeta] so downstream consumers can treat snapshots
+ * interchangeably with other function metadata sources.
+ *
+ * @param functionName       Unique function name
+ * @param functionType       Function type: SCRIPT_GROOVY / EXTERNAL / CUSTOM
+ * @param version            Monotonically increasing version; 0 = unspecified (backward compatible)
+ * @param scriptBody         Inline script source (SCRIPT type only)
+ * @param className          Fully-qualified Java/Kotlin class name (CUSTOM type)
+ * @param endpoint           Remote endpoint URL/address (EXTERNAL type only)
+ * @param inputSchema        Input JSON Schema string (covariant override of FunctionMeta.inputSchema: Any?)
+ * @param outputSchema       Output JSON Schema string
+ * @param description        Human-readable description
+ * @param inputSchemaRef     Input schema reference identifier
+ * @param outputSchemaRef    Output schema reference identifier
+ * @param descriptions       Per-field description map
+ * @param category           Function category for UI grouping
+ * @param domain             Business domain tag
+ * @param config             Pass-through unified config Map for EXTERNAL-type extended fields
+ * @param enabled            Whether this function is enabled; false = REMOVE event
+ * @param targetGroups       Optional list of app-group filters
  */
 data class FunctionConfigSnapshot(
-    val functionName: String,
-    val functionType: String,
-    /** 函数版本号，单调递增；0 表示未显式指定版本（向后兼容） */
+    override val functionName: String,
+    override val functionType: String,
     val version: Long = 0,
     val scriptBody: String? = null,
     val className: String? = null,
     val endpoint: String? = null,
-    val paramSchema: String? = null,
-    val outputSchema: String? = null,
-    val description: String? = null,
-    /** 透传函数统一配置 Map，供 EXTERNAL 等类型读取扩展字段 */
+    override val inputSchema: String? = null,
+    override val outputSchema: String? = null,
+    override val description: String? = null,
+    override val inputSchemaRef: String = "",
+    override val outputSchemaRef: String = "",
+    override val descriptions: Map<String, String>? = null,
+    override val category: String? = null,
+    override val domain: String? = null,
     val config: Map<String, Any>? = null,
     val enabled: Boolean = true,
     val targetGroups: List<String>? = null
-) {
-    /** 判断是否面向全量（无群组限制） */
+) : FunctionMeta {
+
+    /**
+     * Backward-compatibility alias: paramSchema = inputSchema (JSON Schema string).
+     */
+    val paramSchema: String?
+        get() = inputSchema
+
+    /**
+     * Check whether this snapshot targets all instances (no group restriction).
+     *
+     * @return true when targetGroups is null or empty
+     */
     fun isGlobal(): Boolean = targetGroups.isNullOrEmpty()
 
     companion object {
+        /**
+         * Create a REMOVE tombstone snapshot for a function.
+         *
+         * @param functionName Function to remove
+         * @return Snapshot with enabled=false
+         */
         @JvmStatic
         fun removed(functionName: String) = FunctionConfigSnapshot(
             functionName = functionName,
@@ -72,7 +155,7 @@ data class FunctionConfigSnapshot(
             scriptBody = null,
             className = null,
             endpoint = null,
-            paramSchema = null,
+            inputSchema = null,
             outputSchema = null,
             description = null,
             config = null,
@@ -83,20 +166,22 @@ data class FunctionConfigSnapshot(
 }
 
 /**
- * Schema 配置快照 — 配置中心传输值对象
+ * Schema configuration snapshot — config-center transfer object.
  *
- * 用于把 Schema 定义从 Admin 推送到 Worker 实例，
- * Worker 收到后注册到本地 SchemaRegistry，实现 Schema 热更新。
+ * Pushes Schema definitions from Admin to Worker instances. Workers register
+ * the received schemas into their local SchemaRegistry to support Schema
+ * hot-reloading without a restart.
  *
- * @param schemaName   Schema 唯一名称
- * @param schemaFormat Schema 格式标识（json-schema / protobuf / avro）
- * @param schemaJson   Schema 原始内容（JSON 格式的 Schema 定义）
- * @param version      Schema 版本号，单调递增；0 表示未显式指定版本
- * @param description  描述信息
- * @param scope        作用域：PLATFORM / PRIVATE
- * @param appGroup     所属应用分组（scope=PRIVATE 时有值）
- * @param enabled      是否启用（false 表示 REMOVE 事件）
- * @param targetGroups 可选的目标 Worker 分组过滤
+ * @param schemaName   Unique schema name (primary key)
+ * @param schemaFormat Schema format identifier: json-schema / protobuf / avro
+ * @param schemaJson   Raw Schema content (JSON-format Schema definition);
+ *                     null when this is a REMOVE tombstone
+ * @param version      Monotonically increasing version; 0 = unspecified
+ * @param description  Human-readable description
+ * @param scope        Scope: PLATFORM / PRIVATE
+ * @param appGroup     Owning application group (populated when scope=PRIVATE)
+ * @param enabled      Whether this schema is enabled; false = REMOVE event
+ * @param targetGroups Optional list of target Worker group filters
  */
 data class SchemaConfigSnapshot(
     val schemaName: String,
@@ -109,10 +194,15 @@ data class SchemaConfigSnapshot(
     val enabled: Boolean = true,
     val targetGroups: List<String>? = null
 ) {
-    /** 判断是否面向全量（无群组限制） */
+    /**
+     * Check whether this snapshot targets all instances (no group restriction).
+     */
     fun isGlobal(): Boolean = targetGroups.isNullOrEmpty()
 
     companion object {
+        /**
+         * Create a REMOVE tombstone snapshot.
+         */
         @JvmStatic
         fun removed(schemaName: String) = SchemaConfigSnapshot(
             schemaName = schemaName,
@@ -123,17 +213,20 @@ data class SchemaConfigSnapshot(
 }
 
 /**
- * 幂等缓存配置快照 — 配置中心传输值对象
+ * Idempotency cache configuration — supports app-level defaults with
+ * per-workflow overrides.
  *
- * 支持应用级默认配置 + 工作流级覆盖的二维策略：
- * - 应用级字段（[enabled] / [ttlHours] / [maxSize] / [spec]）作为全局默认值
- * - [workflows] 按工作流 ID 提供精细覆盖，未指定字段继承应用级默认值
+ * Two-tier strategy:
+ * - App-level fields ([enabled], [ttlHours], [maxSize], [spec]) provide
+ *   global defaults.
+ * - [workflows] provides fine-grained overrides keyed by workflowId;
+ *   unspecified fields inherit the app-level default.
  *
- * @param enabled    是否启用幂等缓存（应用默认）
- * @param ttlHours   缓存条目 TTL（小时，应用默认）
- * @param maxSize    最大缓存条目数（应用默认）
- * @param spec       可选的 Caffeine 高级配置表达式（应用默认）
- * @param workflows  工作流级覆盖配置，key 为 workflowId
+ * @param enabled   Whether idempotency caching is enabled (app default)
+ * @param ttlHours  Cache entry TTL in hours (app default)
+ * @param maxSize   Maximum cache entries (app default)
+ * @param spec      Optional Caffeine advanced configuration expression (app default)
+ * @param workflows Per-workflow override config; key = workflowId
  */
 data class IdempotencyConfig(
     val enabled: Boolean = true,
@@ -144,9 +237,10 @@ data class IdempotencyConfig(
 )
 
 /**
- * 工作流级幂等缓存策略覆盖。
+ * Per-workflow idempotency cache override.
  *
- * 所有字段均可空，null 表示继承应用级默认值。
+ * All fields are nullable; null = inherit the corresponding app-level default
+ * from [IdempotencyConfig].
  */
 data class WorkflowIdempotencyConfig(
     val enabled: Boolean? = null,
@@ -155,183 +249,237 @@ data class WorkflowIdempotencyConfig(
     val spec: String? = null
 )
 
-// ═══════════════════════════════════════════════════════════════════════════
-//  回调监听器 — 配置变更回调契约
-// ═══════════════════════════════════════════════════════════════════════════
-
 /**
- * 通用配置变更监听器（单值）
+ * Single-value config change listener — generic callback for any single-value
+ * configuration (e.g. [IdempotencyConfig]).
  *
- * 泛型回调接口，适用于任何单值配置（如 IdempotencyConfig）。
- * 上层业务通过此回调接收解析后的配置对象。
+ * Upper-layer business code receives the already-parsed config object.
  */
 fun interface ConfigChangeListener<T> {
+    /**
+     * Invoked when the configuration value changes.
+     *
+     * @param config New configuration value
+     */
     fun onChange(config: T)
 }
 
 /**
- * 带键配置变更监听器（多键）
+ * Multi-key config change listener — for keyed configurations
+ * (e.g. workflow definitions, function configs).
  *
- * 适用于多键配置（如工作流定义、函数配置），每次变更携带 key + changeType。
+ * Each change event carries the key + snapshot + change type.
  */
 fun interface KeyedConfigChangeListener<T> {
+    /**
+     * Invoked when a keyed configuration entry changes.
+     *
+     * @param key        Configuration key (e.g. workflowId, functionName)
+     * @param config     New configuration snapshot value
+     * @param changeType Type of change: PUBLISH / UPDATE / REMOVE
+     */
     fun onChange(key: String, config: T, changeType: ChangeType)
 }
 
-/** 工作流定义变更监听器 */
+/** Workflow definition change listener alias. */
 typealias DefinitionChangeListener = KeyedConfigChangeListener<WorkflowDefinitionSnapshot>
 
-/** 函数配置变更监听器 */
+/** Function configuration change listener alias. */
 typealias FunctionChangeListener = KeyedConfigChangeListener<FunctionConfigSnapshot>
 
-/** Schema 配置变更监听器 */
+/** Schema configuration change listener alias. */
 typealias SchemaChangeListener = KeyedConfigChangeListener<SchemaConfigSnapshot>
 
-// ═══════════════════════════════════════════════════════════════════════════
-//  获取层（Fetch）— 从配置中心拉取配置数据
-// ═══════════════════════════════════════════════════════════════════════════
-
 /**
- * 单值配置获取 SPI
- *
- * 负责从配置中心拉取当前配置值（一次性加载）。
+ * Single-value config fetch SPI — pulls the current value from a config center
+ * for one-time initial loading.
  */
 interface ConfigFetcher<T> {
-    /** 从配置中心加载当前配置 */
+    /**
+     * Load the current configuration value from the config center.
+     *
+     * @return Parsed configuration object
+     */
     fun load(): T
 }
 
 /**
- * 多键配置获取 SPI
- *
- * 负责从配置中心按 key 拉取配置项（全量加载 + 按需查询）。
+ * Multi-key config fetch SPI — loads all entries plus optional key lookup.
  */
 interface KeyedConfigFetcher<T> {
-    /** 加载当前所有配置项 */
+    /**
+     * Load all currently-published configuration entries.
+     */
     fun loadAll(): List<T>
-    /** 按 key 获取单个配置项 */
+
+    /**
+     * Fetch a single configuration entry by key.
+     *
+     * @param key Entry key
+     * @return Entry value, or null if not found
+     */
     fun get(key: String): T?
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-//  监听层（Watch）— 监听配置变更并通知上层应用
-// ═══════════════════════════════════════════════════════════════════════════
-
 /**
- * 单值配置监听 SPI
- *
- * 负责订阅配置变更事件，配置变更时推送 [T] 给已注册的监听器。
+ * Single-value config watch SPI — subscribes to change events and pushes
+ * the updated [T] value to registered listeners.
  */
 interface ConfigWatcher<T> {
-    /** 注册监听器，配置变更时推送 [T] */
+    /**
+     * Register a listener that receives new config values on change.
+     *
+     * @param listener Callback to invoke
+     */
     fun watch(listener: ConfigChangeListener<T>)
 }
 
 /**
- * 多键配置监听 SPI
- *
- * 负责订阅配置变更事件，配置变更时推送 key + 快照 + 变更类型给已注册的监听器。
+ * Multi-key config watch SPI — subscribes to keyed change events.
  */
 interface KeyedConfigWatcher<T> {
-    /** 注册监听器，配置变更时推送 key + 快照 + 变更类型 */
+    /**
+     * Register a listener that receives key + snapshot + change type events.
+     */
     fun watch(listener: KeyedConfigChangeListener<T>)
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-//  订阅器 = 获取 + 监听（组合）— 配置中心适配器的完整契约
-// ═══════════════════════════════════════════════════════════════════════════
-
 /**
- * 单值配置订阅器 SPI = [ConfigFetcher] + [ConfigWatcher]
+ * Single-value config subscriber SPI = [ConfigFetcher] + [ConfigWatcher].
  *
- * 各配置中心实现（Apollo/Nacos/HTTP）同时提供加载与监听能力。
+ * Implemented by each config center backend (Apollo, Nacos, HTTP registry) to
+ * provide both initial load and live-watch capabilities.
  */
 interface ConfigSubscriber<T> : ConfigFetcher<T>, ConfigWatcher<T>
 
 /**
- * 多键配置订阅器 SPI = [KeyedConfigFetcher] + [KeyedConfigWatcher]
- *
- * 各配置中心实现（Apollo/Nacos/HTTP）同时提供按 key 加载与变更监听能力。
+ * Multi-key config subscriber SPI = [KeyedConfigFetcher] + [KeyedConfigWatcher].
  */
 interface KeyedConfigSubscriber<T> : KeyedConfigFetcher<T>, KeyedConfigWatcher<T>
 
-/** 工作流定义配置订阅器 — 业务实例侧 */
+/** Workflow definition config subscriber alias — business instance. */
 typealias DefinitionConfigSubscriber = KeyedConfigSubscriber<WorkflowDefinitionSnapshot>
 
-/** 函数配置订阅器 — Worker 侧 */
+/** Function config subscriber alias — Worker instance. */
 typealias FunctionConfigSubscriber = KeyedConfigSubscriber<FunctionConfigSnapshot>
 
-/** Schema 配置订阅器 — Worker 侧 */
+/** Schema config subscriber alias — Worker instance. */
 typealias SchemaConfigSubscriber = KeyedConfigSubscriber<SchemaConfigSnapshot>
 
-/** 幂等配置动态订阅器 */
+/** Idempotency config dynamic subscriber alias. */
 typealias IdempotencyConfigSubscriber = ConfigSubscriber<IdempotencyConfig>
 
-// ═══════════════════════════════════════════════════════════════════════════
-//  发布层（Publish）— 管理端向配置中心推送配置变更
-// ═══════════════════════════════════════════════════════════════════════════
-
 /**
- * 通用多键配置发布器 SPI
+ * Generic multi-key configuration publisher SPI — Admin-side write contract.
  *
- * 各后端实现（Nacos/Apollo/HTTP）提供统一的 publish/unpublish 能力。
- * 新增配置类型只需在 AutoConfiguration 中实例化本接口的后端实现，
- * 无需再定义专门的发布器接口。
+ * Implemented by backends (Nacos, Apollo, HTTP registry) to provide unified
+ * publish / unpublish operations. New configuration types only require a new
+ * backend bean in AutoConfiguration — no dedicated publisher interface needed.
  *
+ * Usage example (register a new keyed config publisher with Nacos backend):
  * ```kotlin
- * // 示例：注册一个新的 keyed 配置发布器（Nacos）
  * @Bean
  * fun myConfigPublisher(cs: ConfigService) =
  *     NacosKeyedConfigPublisher(cs, "WORKFLOW", "my.config.", "my.config.__index__")
  * ```
  */
 interface KeyedConfigPublisher<T> {
-    /** 发布或更新指定 key 的配置 */
+    /**
+     * Publish or update a configuration entry for the given key.
+     *
+     * @param key      Configuration key
+     * @param snapshot Configuration snapshot value
+     */
     fun publish(key: String, snapshot: T)
 
-    /** 移除指定 key 的配置 */
+    /**
+     * Remove (unpublish) a configuration entry.
+     *
+     * @param key Configuration key to remove
+     */
     fun unpublish(key: String)
 }
 
 /**
- * 通用单值配置发布器 SPI
+ * Generic single-value configuration publisher SPI.
  *
- * 适用于整体发布/覆盖的单值配置（如限流规则、功能开关等）。
+ * Suitable for whole-replacement single-value configs (e.g. rate-limit rules,
+ * feature flags).
  */
 interface ConfigPublisher<T> {
-    /** 发布或覆盖当前配置 */
+    /**
+     * Publish or overwrite the current single-value configuration.
+     */
     fun publish(config: T)
 }
 
-/** 工作流定义配置发布器 SPI — Admin 侧 */
+/**
+ * Workflow definition publisher SPI — Admin-side write contract.
+ */
 interface DefinitionConfigPublisher {
+    /**
+     * Publish/update a workflow definition (broadcast to all groups).
+     *
+     * @param workflowId     Workflow ID
+     * @param definitionJson Full DAG JSON
+     * @param version        Version number
+     */
     fun publish(workflowId: String, definitionJson: String, version: Int)
 
+    /**
+     * Publish/update targeting a specific [PublishTarget] subset of workers.
+     * Default implementation delegates to the broadcast variant.
+     */
     fun publish(workflowId: String, definitionJson: String, version: Int, target: PublishTarget) {
         publish(workflowId, definitionJson, version)
     }
 
+    /**
+     * Unpublish / remove a workflow definition.
+     */
     fun unpublish(workflowId: String)
 }
 
-/** 函数配置发布器 SPI — Admin 侧 */
+/**
+ * Function configuration publisher SPI — Admin-side write contract.
+ */
 interface FunctionConfigPublisher {
+    /**
+     * Publish/update a function configuration (broadcast).
+     */
     fun publish(snapshot: FunctionConfigSnapshot)
 
+    /**
+     * Publish/update targeting a specific worker subset.
+     */
     fun publish(snapshot: FunctionConfigSnapshot, target: PublishTarget) {
         publish(snapshot)
     }
 
+    /**
+     * Unpublish / remove a function.
+     */
     fun unpublish(functionName: String)
 }
 
-/** Schema 配置发布器 SPI — Admin 侧 */
+/**
+ * Schema configuration publisher SPI — Admin-side write contract.
+ */
 interface SchemaConfigPublisher {
+    /**
+     * Publish/update a schema configuration (broadcast).
+     */
     fun publish(snapshot: SchemaConfigSnapshot)
 
+    /**
+     * Publish/update targeting a specific worker subset.
+     */
     fun publish(snapshot: SchemaConfigSnapshot, target: PublishTarget) {
         publish(snapshot)
     }
 
+    /**
+     * Unpublish / remove a schema.
+     */
     fun unpublish(schemaName: String)
 }

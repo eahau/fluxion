@@ -1,28 +1,30 @@
+// fluxion-adapter-mq:spring-boot - Spring Boot auto-configuration for MQ adapter suite.
+// Registers KafkaProducerFactory / KafkaConsumerListener beans conditionally when Kafka clients
+// class is detected on classpath. Currently supports Kafka only (RabbitMQ/RocketMQ extendable).
 plugins {
     kotlin("jvm")
     kotlin("plugin.spring")
 }
 
 dependencies {
-    // MQ SPI
+    // Adapter SPI (message publish / subscribe contracts for MQ capability domain).
     implementation(project(":fluxion-adapter-spi"))
-
-    // Kafka 零 Spring 实现
+    // Native Kafka client implementation (zero Spring).
     implementation(project(":fluxion-adapter-mq:kafka"))
 
-    // Spring Boot 自动装配
+    // Spring Boot AutoConfigure mechanism - @AutoConfiguration + @ConditionalOnClass(KafkaProducer::class).
     implementation("org.springframework.boot:spring-boot-autoconfigure")
 
-    // 原生 Kafka 客户端（用于创建 Producer/Consumer Bean）
+    // Native Apache Kafka Clients library (Producer/Consumer bean creation at runtime).
     implementation("org.apache.kafka:kafka-clients")
 
-    // Jackson / Kotlin reflect
+    // Jackson Kotlin + Databind for JSON message body conversion.
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
     implementation("com.fasterxml.jackson.core:jackson-databind")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
-
-    // SLF4J
+    // SLF4J logging.
     implementation("org.slf4j:slf4j-api")
 
+    // Spring Boot Test starter for integration testing with embedded Kafka-compatible test harness.
     testImplementation("org.springframework.boot:spring-boot-starter-test")
 }

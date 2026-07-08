@@ -1,3 +1,6 @@
+// fluxion-runtime:spring-boot - Spring Boot auto-configuration for runtime execution plane.
+// Wires runtime core beans into the ApplicationContext, bridges config center + adapter SPI
+// lifecycle events, and assembles all capability domain spring-boot starters for the runtime.
 plugins {
     kotlin("jvm")
     kotlin("plugin.spring")
@@ -5,25 +8,23 @@ plugins {
 }
 
 dependencies {
-    // Runtime 核心（零 Spring）
+    // Runtime core (api - downstream consumers get transitive DAG executor types).
     api(project(":fluxion-runtime:core"))
-
-    // 核心引擎 Spring Boot 装配
-    implementation(project(":fluxion-core-spring-boot"))
-
-    // 适配器 SPI 与配置中心 Spring Boot 装配
+    // Core engine Spring Boot starter (assembles all capability domain beans).
+    implementation(project(":fluxion-core:spring-boot"))
+    // Adapter SPI (api - downstream consumers get router / definition provider types transitively).
     api(project(":fluxion-adapter-spi"))
+    // Config center Spring Boot starter (runtimeOnly - pulled in automatically but not required for compile).
     runtimeOnly(project(":fluxion-config:spring-boot"))
 
-    // Spring Boot 自动装配
+    // Spring Boot AutoConfigure mechanism + conditional bean registration.
     implementation("org.springframework.boot:spring-boot-autoconfigure")
 
-    // Jackson / Kotlin reflect
+    // Jackson Kotlin module + Kotlin reflection for runtime DTO handling.
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
-
-    // SLF4J
-    implementation("org.slf4j:slf4j-api")
+    // Unified logging extensions.
+    implementation(project(":fluxion-log"))
 }
 
 sourceSets {

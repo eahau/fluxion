@@ -1,25 +1,27 @@
+// fluxion-runtime:core - Runtime execution plane framework-agnostic core module.
+// Provides DagExecutor entry point, WorkflowRouter orchestration, DefinitionProvider abstraction,
+// and suspend-based workflow execution primitives using Kotlin coroutines. Zero Spring dependencies.
 plugins {
     kotlin("jvm")
     `java-library`
 }
 
 dependencies {
-    // 执行引擎核心抽象与实现
+    // Core base types + JsonUtil utilities (api - downstream modules inherit core types).
     api(project(":fluxion-core"))
-
-    // 适配器 SPI：UnifiedRequest / WorkflowRouter / DefinitionProvider
+    // DAG execution engine (api - downstream modules inherit engine types).
+    api(project(":fluxion-engine"))
+    // Adapter SPI (api - UnifiedRequest / WorkflowRouter / DefinitionProvider contracts).
     api(project(":fluxion-adapter-spi"))
 
-    // Kotlin 协程（DagExecutor 为 suspend 函数）
+    // Kotlin coroutines core - DagExecutor entry is a suspend function.
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core")
+    // Unified logging extensions.
+    implementation(project(":fluxion-log"))
 
-    // SLF4J
-    implementation("org.slf4j:slf4j-api")
-
-    // JUnit 5 — Router 单元测试
+    // ===== Testing Dependencies =====
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
-
-    // 测试 fixtures
+    // Shared test fixtures module.
     testImplementation(project(":fluxion-test"))
 }
 

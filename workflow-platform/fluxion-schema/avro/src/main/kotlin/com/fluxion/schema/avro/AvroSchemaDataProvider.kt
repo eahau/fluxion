@@ -1,26 +1,28 @@
+/**
+ * Avro-backed [SchemaDataProvider] that enables transparent field access on
+ * Avro [GenericRecord] payloads through the generic `inputField("name")`
+ * workflow API.
+ *
+ * Also handles `Map<String, *>` fallbacks (e.g. deserialised from JSON before
+ * Avro processing) so mixed workloads behave consistently. Nested
+ * GenericRecords, arrays, maps and `Utf8` values are recursively converted
+ * to plain Kotlin collections when [toMap] is called.
+ */
 package com.fluxion.schema.avro
 
 import com.fluxion.schema.api.SchemaDataProvider
 import org.apache.avro.generic.GenericRecord
 import org.slf4j.LoggerFactory
+import org.slf4j.*
 
 /**
- * Avro 数据访问提供者。
+ * Exposes Avro record fields through the generic data-access SPI.
  *
- * 支持两种数据对象类型：
- * - [GenericRecord]：通过 `get(String key)` 访问字段
- * - `Map<String, Any?>`：作为 fallback，使用标准 Map 访问
- *
- * ### 使用场景
- *
- * 当工作流入参经过 Avro 协议解码后产生 `GenericRecord` 对象时，
- * 此 provider 使得 NodeInput 能够透明地通过 `inputField("fieldName")` 访问字段，
- * 无需调用方感知底层数据类型。
- *
- * ```kotlin
- * // 在 WorkflowFunction 中
- * val name = input.inputField("name")  // 自动使用 GenericRecord.get()
- * ```
+ * ### Input shapes supported
+ * * [GenericRecord] — schema-aware field lookup; missing fields log a debug
+ *   line and return `null`.
+ * * `Map<*, *>` — standard indexed access.
+ * * Anything else — [getField] returns `null` so callers can provide defaults.
  */
 class AvroSchemaDataProvider : SchemaDataProvider {
 
@@ -33,7 +35,9 @@ class AvroSchemaDataProvider : SchemaDataProvider {
                 if (schema.getField(field) != null) {
                     data.get(field)
                 } else {
-                    log.debug("Avro field [{}] not found in schema [{}]", field, schema.fullName)
+                    // Logged at DEBUG rather than WARN because absent fields
+                    // can be a valid optional-value case for union schemas.
+                    log.debug { "Avro field [$field] not found in schema [${schema.fullName}]" }
                     null
                 }
             }
@@ -70,13 +74,9 @@ class AvroSchemaDataProvider : SchemaDataProvider {
     }
 
     /**
-     * 将 GenericRecord 递归转换为 Map。
-     *
-     * - 嵌套 GenericRecord → 递归转为 Map
-     * - Avro Array → 转为 List
-     * - Avro Map → 转为 Map
-     * - Utf8 → 转为 String
-     * - 基本类型 → 直接使用 Java 值
+     * Recursively flatten a GenericRecord to a Kotlin LinkedHashMap (preserving
+     * field declaration order) while translating Avro-specific value types
+     * into standard JVM equivalents.
      */
     private fun genericRecordToMap(record: GenericRecord): Map<String, Any?> {
         val result = linkedMapOf<String, Any?>()

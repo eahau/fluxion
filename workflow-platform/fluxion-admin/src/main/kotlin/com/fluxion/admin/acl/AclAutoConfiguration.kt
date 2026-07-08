@@ -3,20 +3,22 @@ package com.fluxion.admin.acl
 import com.fluxion.acl.spi.AuthProvider
 import com.fluxion.acl.spi.model.AuthResult
 import com.fluxion.acl.spi.model.TokenClaims
-import org.slf4j.LoggerFactory
+import org.slf4j.*
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.context.annotation.Configuration
 import org.springframework.stereotype.Component
 
 /**
- * ACL 自动配置
+ * Bootstraps the pluggable `AuthProvider` SPI based on the `fluxion.acl.*` configuration.
  *
- * 根据 fluxion.acl.* 配置项装配对应的 AuthProvider 实现：
- * - fluxion.acl.enabled=false：全放行（NoopAuthProvider）
- * - fluxion.acl.provider=local：本地 JWT + DB（LocalAclProvider，默认）
- * - fluxion.acl.provider=remote：远程 ACL 服务（RemoteAclClient）
- * - fluxion.acl.disabled-management：禁用的本地管理项列表
+ * Provider selection:
+ *   - `fluxion.acl.enabled=false`        → `NoopAuthProvider` (allow everything, dev-only).
+ *   - `fluxion.acl.provider=local`       → `LocalAclProvider` (default, DB-backed + JWT).
+ *   - `fluxion.acl.provider=remote`      → `RemoteAclClient` (OAuth/OIDC IdP over HTTP).
+ *
+ * The `disabled-management` list lets operators hide specific CRUD pages in the admin UI
+ * (user / role / permission / tenant / group) when those are managed externally.
  */
 @Configuration
 class AclAutoConfiguration {
@@ -27,10 +29,10 @@ class AclAutoConfiguration {
     private lateinit var disabledManagement: String
 
     /**
-     * 检查某个管理功能是否被禁用
+     * Query whether a specific management feature is hidden for this deployment.
      *
-     * @param feature 功能名：user / role / permission / tenant / group
-     * @return true 表示该功能被禁用，应返回 403
+     * @param feature feature name: `user` / `role` / `permission` / `tenant` / `group`
+     * @return `true` if the UI + API should return 403 for this management surface.
      */
     fun isManagementDisabled(feature: String): Boolean {
         val disabled = disabledManagement.split(",").map { it.trim() }.filter { it.isNotEmpty() }
@@ -38,10 +40,10 @@ class AclAutoConfiguration {
     }
 
     /**
-     * NoopAuthProvider — 全放行模式（fluxion.acl.enabled=false 时使用）
+     * Pass-through `AuthProvider` used when `fluxion.acl.enabled=false`.
      *
-     * 当 fluxion.acl.enabled=false 时，此 Bean 会被装配，
-     * 替代 LocalAclProvider 或 RemoteAclClient
+     * Every token, credential and permission check is accepted; install **only** in
+     * local/demo environments.
      */
     @Component
     @ConditionalOnProperty(name = ["fluxion.acl.enabled"], havingValue = "false")
@@ -49,7 +51,7 @@ class AclAutoConfiguration {
         private val log = LoggerFactory.getLogger(javaClass)
 
         init {
-            log.warn("ACL is disabled - all requests will be allowed without authentication")
+            log.warn { "ACL is disabled - all requests will be allowed without authentication" }
         }
 
         override fun authenticate(username: String, password: String): AuthResult {

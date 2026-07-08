@@ -5,7 +5,7 @@ import com.fluxion.admin.security.JwtTokenProvider
 import com.fluxion.acl.spi.AuthProvider
 import com.fluxion.acl.spi.model.AuthResult
 import com.fluxion.acl.spi.model.TokenClaims
-import org.slf4j.LoggerFactory
+import org.slf4j.*
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.security.core.userdetails.UserDetailsService
 import org.springframework.security.core.userdetails.UsernameNotFoundException
@@ -13,9 +13,11 @@ import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Component
 
 /**
- * 本地 ACL 提供者（默认实现）
+ * Default `AuthProvider` implementation backed by the local admin database.
  *
- * 使用本地 JWT + DB 进行认证和鉴权
+ * Authentication uses `UserDetailsService` + a `PasswordEncoder`; token issuance and
+ * validation delegate to `JwtTokenProvider`. This is the provider used when
+ * `fluxion.acl.provider=local` (or unset).
  */
 @Component
 @ConditionalOnProperty(name = ["fluxion.acl.provider"], havingValue = "local", matchIfMissing = true)
@@ -32,17 +34,14 @@ class LocalAclProvider(
         return try {
             val userDetails = userDetailsService.loadUserByUsername(username)
 
-            // 检查用户是否被禁用
             if (!userDetails.isEnabled) {
                 return AuthResult(success = false, errorMessage = "User is disabled")
             }
 
-            // 验证密码
             if (!passwordEncoder.matches(password, userDetails.password)) {
                 return AuthResult(success = false, errorMessage = "Invalid credentials")
             }
 
-            // 提取角色和权限
             val roles = userDetails.authorities
                 .map { it.authority }
                 .filter { it.startsWith("ROLE_") }
@@ -59,10 +58,10 @@ class LocalAclProvider(
                 permissions = permissions
             )
         } catch (e: UsernameNotFoundException) {
-            log.warn("User not found: $username")
+            log.warn { "User not found: `$username" }
             AuthResult(success = false, errorMessage = "User not found")
         } catch (e: Exception) {
-            log.error("Authentication failed for user: $username", e)
+            log.error(e) { "Authentication failed for user: `$username" }
             AuthResult(success = false, errorMessage = "Authentication failed")
         }
     }

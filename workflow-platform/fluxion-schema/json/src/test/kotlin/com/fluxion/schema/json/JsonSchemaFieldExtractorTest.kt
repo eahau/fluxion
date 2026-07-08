@@ -15,7 +15,7 @@ class JsonSchemaFieldExtractorTest {
             {
               "type": "object",
               "properties": {
-                "name": {"type": "string", "description": "用户名"},
+                "name": {"type": "string", "description": "鐢ㄦ埛鍚?},
                 "age": {"type": "integer"}
               },
               "required": ["name"]
@@ -28,7 +28,7 @@ class JsonSchemaFieldExtractorTest {
         val nameField = fields.first { it.name == "name" }
         assertEquals(FieldType.STRING, nameField.type)
         assertTrue(nameField.required)
-        assertEquals("用户名", nameField.description)
+        assertEquals("鐢ㄦ埛鍚", nameField.description)
 
         val ageField = fields.first { it.name == "age" }
         assertEquals(FieldType.INTEGER, ageField.type)

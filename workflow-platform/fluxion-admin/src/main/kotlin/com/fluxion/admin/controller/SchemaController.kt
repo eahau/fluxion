@@ -18,9 +18,20 @@ import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.RestController
 
 /**
- * Schema 定义管理 REST API
+ * Schema definition & RDBMS metadata REST controller (implements OpenAPI-generated [SchemasApi]).
  *
- * 实现 OpenAPI 生成的 SchemasApi 接口，确保前后端契约一致。
+ * Two distinct functional areas share this controller (grouped under the Schemas
+ * admin nav section):
+ *   1. **WfSchema CRUD** — reusable named JSON-Schema documents (referenced by
+ *      workflows and other schemas via `$ref: "schema:<name>"`). Enforces tenant
+ *      gating for PRIVATE-scope schemas via [SecurityContextHelper].
+ *   2. **Live DB introspection** — enumerate DataSources, tables, columns, FKs and
+ *      auto-generate JSON-Schema from any table via JDBC `DatabaseMetaData`. Used by
+ *      the DAG builder to scaffold `dbExecute` node inputs.
+ *
+ * Collaborates with: WfSchemaService (schema CRUD + worker push), SchemaMapper
+ * (DTO↔Entity), TableMetadataService (JDBC introspection), SecurityContextHelper
+ * (tenant gating on PRIVATE scope resources).
  */
 @RestController
 class SchemaController(
@@ -30,6 +41,10 @@ class SchemaController(
     private val securityContext: SecurityContextHelper
 ) : SchemasApi {
 
+    /**
+     * Paginated schema list page. Delegates to the optimised summary projection
+     * (schemaJson is NOT loaded — ~90% smaller payload than the full entity).
+     */
     override fun listSchemas(
         keyword: String?,
         schemaType: String?,
@@ -47,46 +62,55 @@ class SchemaController(
         })
     }
 
+    /** Fetch a single full schema definition (including the large schemaJson column). */
     override fun getSchema(schemaName: String): ResponseEntity<SchemaDefinition> {
         val entity = service.getByName(schemaName)
             ?: return ResponseEntity.notFound().build()
         return ResponseEntity.ok(schemaMapper.toDto(entity))
     }
 
+    /**
+     * Create a new schema. PRIVATE-scope resources require the caller to have
+     * access to the target app_group (checked via SecurityContextHelper).
+     */
     override fun createSchema(schemaDefinition: SchemaDefinition): ResponseEntity<SchemaDefinition> {
         val entity = schemaMapper.toEntity(schemaDefinition)
-        // 租户权限校验：PRIVATE scope 需要校验 appGroup 访问权限
         if (entity.scope == "PRIVATE" && !entity.appGroup.isNullOrBlank()) {
             securityContext.requireAppGroupAccess(entity.appGroup!!)
         }
         return ResponseEntity.ok(schemaMapper.toDto(service.save(entity)))
     }
 
+    /**
+     * Update an existing schema. Validates access against both the OLD appGroup
+     * (before mutation) and the NEW appGroup (if the caller is moving the schema
+     * to another tenant).
+     */
     override fun updateSchema(
         schemaName: String,
         schemaDefinition: SchemaDefinition
     ): ResponseEntity<SchemaDefinition> {
         val entity = schemaMapper.toEntity(schemaDefinition)
-        // 租户权限校验：校验原始 Schema 的 appGroup 权限
         service.getByName(schemaName)?.appGroup?.let { securityContext.requireAppGroupAccess(it) }
-        // 若 appGroup 变更，还需校验新 appGroup 的权限
         if (entity.scope == "PRIVATE" && !entity.appGroup.isNullOrBlank()) {
             securityContext.requireAppGroupAccess(entity.appGroup!!)
         }
         return ResponseEntity.ok(schemaMapper.toDto(service.update(schemaName, entity)))
     }
 
+    /** Delete a schema by name. Checks tenant access against the original appGroup. */
     override fun deleteSchema(schemaName: String): ResponseEntity<Unit> {
-        // 租户权限校验
         service.getByName(schemaName)?.appGroup?.let { securityContext.requireAppGroupAccess(it) }
         service.delete(schemaName)
         return ResponseEntity.noContent().build()
     }
 
+    /** Enumerate non-system table names in the target (or default) DataSource. */
     override fun listTables(dataSource: String?): ResponseEntity<List<String>> {
         return ResponseEntity.ok(tableMetadataService.listTables(dataSource))
     }
 
+    /** Introspect column metadata for one table (used by the schema JSON-Schema generator). */
     override fun listTableColumns(tableName: String, dataSource: String?): ResponseEntity<List<TableColumnMetadata>> {
         val columns = tableMetadataService.getColumns(tableName, dataSource).map {
             TableColumnMetadata().apply {
@@ -104,11 +128,13 @@ class SchemaController(
         return ResponseEntity.ok(columns)
     }
 
+    /** Historical versions for a schema (currently returns the single current row). */
     override fun listSchemaVersions(schemaName: String): ResponseEntity<List<SchemaDefinition>> {
         val list = service.findVersions(schemaName).map { schemaMapper.toDto(it) }
         return ResponseEntity.ok(list)
     }
 
+    /** Batch helper: returns every user-visible table together with its columns. */
     override fun listTablesWithColumns(dataSource: String?): ResponseEntity<List<TableDetail>> {
         val tables = tableMetadataService.getTablesWithColumns(dataSource).map { table ->
             TableDetail().apply {
@@ -131,6 +157,7 @@ class SchemaController(
         return ResponseEntity.ok(tables)
     }
 
+    /** Incoming + outgoing FK inspection for ER-diagram tooling. */
     override fun listForeignKeys(tableName: String, dataSource: String?): ResponseEntity<ForeignKeysResponse> {
         val result = tableMetadataService.getForeignKeys(tableName, dataSource)
         val toInfo = { fk: com.fluxion.admin.service.ForeignKeyMetadata ->
@@ -149,6 +176,7 @@ class SchemaController(
         })
     }
 
+    /** Generate a JSON-Schema document for a given table (stringified JSON). */
     override fun generateTableJsonSchema(tableName: String, dataSource: String?): ResponseEntity<String> {
         val schema = tableMetadataService.generateJsonSchema(tableName, dataSource)
         return ResponseEntity.ok(JsonUtil.serialize(schema))

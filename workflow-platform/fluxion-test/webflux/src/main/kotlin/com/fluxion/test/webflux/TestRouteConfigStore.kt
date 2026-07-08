@@ -3,18 +3,21 @@ package com.fluxion.test.webflux
 import com.alibaba.nacos.api.config.ConfigService
 import com.fluxion.adapter.http.core.RouteConfigStore
 import com.fluxion.adapter.http.springmvc.nacos.NacosRouteConfigStore
-import org.slf4j.LoggerFactory
+import org.slf4j.*
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 
 /**
- * WebFlux 测试模块的路由配置存储装配。
+ * Manual `RouteConfigStore` registration for the WebFlux test harness.
  *
- * 由于 NacosRouteConfigStore / ApolloRouteConfigStore 的自动装配目前仅注册在
- * HttpSpringMvcAdapterAutoConfiguration 中（需要 DispatcherServlet），
- * WebFlux 环境不会触发。此处为 WebFlux 手动装配 NacosRouteConfigStore。
+ * Background: the standard `NacosRouteConfigStore` / `ApolloRouteConfigStore`
+ * auto-configurations are currently scoped to `HttpSpringMvcAdapterAutoConfiguration`,
+ * which itself only activates in the presence of Spring MVC's `DispatcherServlet`.
+ * WebFlux environments therefore never pick them up automatically -- this
+ * configuration closes that gap specifically for the test harness so we can
+ * exercise dynamic routes end-to-end under WebFlux.
  */
 @Configuration
 class TestRouteConfigStore {
@@ -29,10 +32,10 @@ class TestRouteConfigStore {
         @Value("\${workflow.adapter.http.nacos.group:WORKFLOW}") group: String,
     ): RouteConfigStore? {
         val configService = configServiceProvider.ifAvailable ?: run {
-            log.info("ConfigService not available (nacos profile not active), skipping NacosRouteConfigStore")
+            log.info { "ConfigService not available (nacos profile not active), skipping NacosRouteConfigStore" }
             return null
         }
-        log.info("Creating NacosRouteConfigStore for WebFlux: dataId=$dataId, group=$group")
+        log.info { "Creating NacosRouteConfigStore for WebFlux: dataId=$dataId, group=$group" }
         return NacosRouteConfigStore(configService, dataId, group)
     }
 }

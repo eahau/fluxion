@@ -1,3 +1,16 @@
+/**
+ * JSON-format [SchemaCodec] backed by the shared Jackson [JsonUtil] helper.
+ *
+ * Serialisation always produces UTF-8 encoded compact JSON; deserialisation
+ * uses Jackson's polymorphic `Any` deserializer so Map entries become
+ * LinkedHashMap and arrays become ArrayList. The same logic is reused for
+ * both `toJson`/`fromJson` string round-trips and `serialize`/`deserialize`
+ * byte-array calls.
+ *
+ * This is the most commonly wired codec in the platform because JSON Schema
+ * format is the default for inline node-level validation rules and for
+ * function param/output schemas authored through the admin UI.
+ */
 package com.fluxion.schema.json
 
 import com.fluxion.schema.api.SchemaCodec
@@ -5,10 +18,7 @@ import com.fluxion.schema.model.Schema
 import com.fluxion.schema.util.JsonUtil
 
 /**
- * JSON Schema 编解码器。
- *
- * 使用标准 Jackson JSON 序列化/反序列化，适用于 JSON Schema 格式的数据。
- * 这是最通用的 codec，也是工作流运行时的默认编解码器。
+ * Schema codec implementation for JSON Schema format data.
  */
 class JsonSchemaCodec : SchemaCodec {
 

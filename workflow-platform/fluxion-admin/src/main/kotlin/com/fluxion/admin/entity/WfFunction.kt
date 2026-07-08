@@ -9,9 +9,18 @@ import jakarta.persistence.Table
 import jakarta.persistence.UniqueConstraint
 
 /**
- * 工作流函数注册实体。
+ * Registered workflow-function metadata entity.
  *
- * 源表：`wf_function`
+ * Represents a callable function reference that workflows can invoke by `functionName`.
+ * Supports multiple function types (BUILTIN / SCRIPT / JAVA_CLASS / EXTERNAL) with a
+ * unified `config` JSON column for per-type parameters. Uniqueness is scoped to
+ * `(scope, app_group, function_name)` so that PLATFORM and private PRIVATE namespaces
+ * do not collide.
+ *
+ * Source table: `wf_function`.
+ *
+ * Collaborates with: WfFunctionRepository, WfFunctionService, AdminFunctionComponent
+ * (publishes changes to Worker instances), FunctionRegistry (runtime in-memory lookup).
  */
 @Entity
 @Table(
@@ -22,35 +31,35 @@ import jakarta.persistence.UniqueConstraint
 )
 class WfFunction : BaseEntity() {
 
-    /** 函数引用名（列：`function_name`） */
+    /** Invocation reference name used by workflow nodes, maps to column `function_name`. */
     @Column(name = "function_name", nullable = false, length = 128)
     var functionName: String = ""
 
-    /** 作用域：PLATFORM/PRIVATE/MARKETPLACE（列：`scope`） */
+    /** Visibility scope: PLATFORM / PRIVATE / MARKETPLACE, maps to column `scope`. */
     @Column(name = "scope", nullable = false, length = 16)
     var scope: String = "PRIVATE"
 
-    /** 所属应用分组（scope=PRIVATE 时必填）（列：`app_group`） */
+    /** Owning application group when scope=PRIVATE, maps to column `app_group`. */
     @Column(name = "app_group", length = 128)
     var appGroup: String? = null
 
-    /** 来源引用（安装市场函数时指向原始 functionName）（列：`source_ref`） */
+    /** Original listing reference when installed from Marketplace, maps to column `source_ref`. */
     @Column(name = "source_ref", length = 128)
     var sourceRef: String? = null
 
-    /** 函数类型：BUILTIN/SCRIPT_GROOVY/SCRIPT_JS/JAVA_CLASS/EXTERNAL/CUSTOM（列：`function_type`） */
+    /** Execution dispatch type: BUILTIN / SCRIPT_GROOVY / SCRIPT_JS / JAVA_CLASS / EXTERNAL / CUSTOM, maps to column `function_type`. */
     @Column(name = "function_type", nullable = false, length = 32)
     var functionType: String = "BUILTIN"
 
-    /** 函数所属领域（列：`domain`） */
+    /** Optional domain classifier for UI grouping, maps to column `domain`. */
     @Column(name = "domain", length = 32)
     var domain: String? = null
 
-    /** 统一配置 JSON（列：`config`） */
+    /** Unified per-function-type configuration JSON, maps to column `config`. */
     @Column(name = "config", columnDefinition = "JSON")
     var config: String? = null
 
-    /** 函数状态：ACTIVE/INACTIVE（列：`status`） */
+    /** Runtime lifecycle status (ACTIVE = invocable, INACTIVE = hidden/disabled). */
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 16)
     var status: FunctionStatus = FunctionStatus.ACTIVE

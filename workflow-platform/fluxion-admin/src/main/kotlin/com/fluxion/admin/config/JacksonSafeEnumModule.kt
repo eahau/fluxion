@@ -12,39 +12,27 @@ import com.fluxion.admin.generated.model.WorkflowStatus
 import org.springframework.stereotype.Component
 
 /**
- * Jackson 容错反序列化模块
+ * Jackson module that registers lenient deserializers for every OpenAPI-generated enum
+ * that might receive external (AI-authored, user-uploaded) input.
  *
- * 解决 AI 接入场景下的核心脆弱点：
- * OpenAPI 生成的枚举 forValue() 对未知值直接抛 NoSuchElementException，
- * 导致 Jackson 反序列化失败。本模块为所有可能接收外部输入的生成枚举注册
- * 兜底反序列化器，确保未知值降级为合理默认值而非崩溃。
- *
- * 设计原则：AI 生成的数据不可信，在反序列化层即做容错，而非在业务层补救。
+ * The default OpenAPI enum `forValue()` throws `NoSuchElementException` on unknown values,
+ * which bubbles up and crashes the whole deserialization. Each deserializer in this module
+ * instead gracefully falls back to a sensible default, aligning with the design rule:
+ * **AI-generated data is untrusted and must be sanitized at the deserialization boundary,
+ * not patched up later by business logic.**
  */
 @Component
 class JacksonSafeEnumModule : SimpleModule("JacksonSafeEnumModule") {
 
     init {
-        // NodeType 是最关键的枚举 — dag_json 中的 node type 字段
-        // AI 可能生成 BUILTIN/EXTERNAL 等核心类型或任意未知值
         addDeserializer(NodeType::class.java, SafeNodeTypeDeserializer())
-
-        // ErrorStrategy: AI 可能生成未知的错误策略
         addDeserializer(ErrorStrategy::class.java, SafeErrorStrategyDeserializer())
-
-        // WorkflowCategory: AI 可能生成未知分类
         addDeserializer(WorkflowCategory::class.java, SafeWorkflowCategoryDeserializer())
-
-        // WorkflowStatus: AI 可能生成未知状态
         addDeserializer(WorkflowStatus::class.java, SafeWorkflowStatusDeserializer())
-
-        // FunctionNodeType: 函数定义中的节点类型
         addDeserializer(FunctionNodeType::class.java, SafeFunctionNodeTypeDeserializer())
     }
 
-    /**
-     * NodeType 安全反序列化：未知值降级为 CUSTOM
-     */
+    /** NodeType: falls back to `CUSTOM` when encountering BUILTIN/EXTERNAL/unknown values in a `dag_json`. */
     class SafeNodeTypeDeserializer : JsonDeserializer<NodeType>() {
         override fun deserialize(p: JsonParser, ctxt: DeserializationContext): NodeType {
             val value = p.text ?: return NodeType.CUSTOM

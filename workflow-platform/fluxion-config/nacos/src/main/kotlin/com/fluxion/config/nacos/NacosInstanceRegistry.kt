@@ -7,7 +7,7 @@ import com.fluxion.adapter.spi.registry.InstanceRegistry
 import org.slf4j.*
 
 /**
- * Nacos 实现 — 实例注册（业务实例侧）
+ * Nacos 瀹炵幇 鈥?瀹炰緥娉ㄥ唽锛堜笟鍔″疄渚嬩晶锛?
  */
 class NacosInstanceRegistry(
     private val namingService: NamingService

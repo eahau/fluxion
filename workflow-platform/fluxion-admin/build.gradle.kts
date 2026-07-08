@@ -1,3 +1,7 @@
+// fluxion-admin - Admin management console executable Spring Boot application.
+// Provides workflow management REST API, JPA persistence, OpenAPI-generated DTOs,
+// Spring Security authentication, JWT token handling, and admin UI serving capabilities.
+// Key plugins: Spring Boot (application), Kotlin + Spring/JPA plugins, OpenAPI Generator (kotlin-spring).
 plugins {
     kotlin("jvm")
     kotlin("plugin.spring")
@@ -5,14 +9,15 @@ plugins {
     id("org.springframework.boot")
     id("io.spring.dependency-management")
     id("org.openapi.generator")
-    // id("org.graalvm.buildtools.native")  // 暂时关闭，日常开发不需要 AOT
 }
 
-// 禁用 Maven exclusion 自动应用，避免与 bootJar 的 runtimeClasspath 解析冲突
+// Disable Spring Dependency Management auto-applied Maven exclusions to avoid conflicts
+// with Spring Boot bootJar runtime classpath resolution (prevent false-positive exclusions).
 the<io.spring.gradle.dependencymanagement.dsl.DependencyManagementExtension>().applyMavenExclusions(false)
 
-// ============ OpenAPI Generator 配置 ============
-// 从 openapi.yaml 生成 Kotlin DTO 和 API 接口
+// ===== OpenAPI Generator Configuration =====
+// Generates Kotlin DTO model classes and Spring @RestController interface stubs from ../doc/openapi.yaml.
+// Output sources are registered under build/generated/openapi and wired to compileKotlin source set.
 val openApiInputFile = file("${rootProject.projectDir}/../doc/openapi.yaml")
 val openApiOutputDir = layout.buildDirectory.dir("generated/openapi")
 
@@ -20,32 +25,32 @@ openApiGenerate {
     generatorName.set("kotlin-spring")
     inputSpec.set(openApiInputFile.absolutePath)
     outputDir.set(openApiOutputDir.get().asFile.absolutePath)
-    validateSpec.set(false)  // 跳过 spec 校验，避免 YAML 解析器 maxDepth 限制
+    validateSpec.set(false)
     apiPackage.set("com.fluxion.admin.generated.api")
     modelPackage.set("com.fluxion.admin.generated.model")
     packageName.set("com.fluxion.admin.generated")
     configOptions.set(mapOf(
-        "interfaceOnly" to "true",           // 只生成接口，不生成实现
-        "skipDefaultInterface" to "false",   // 生成默认方法（返回 501 NOT_IMPLEMENTED）
-        "useTags" to "true",                  // 按 tag 分组生成 API
+        "interfaceOnly" to "true",
+        "skipDefaultInterface" to "false",
+        "useTags" to "true",
         "dateLibrary" to "java8",
         "useSpringBoot3" to "true",
-        "documentationProvider" to "none",    // 不生成 Swagger 文档注解
+        "documentationProvider" to "none",
         "enumPropertyNaming" to "UPPERCASE",
         "serializableModel" to "true",
-        "openApiNullable" to "false",         // 禁用 openapi-nullable
-        "modelMutable" to "true"              // 生成 var 属性，保持 .apply {} 模式兼容
+        "openApiNullable" to "false",
+        "modelMutable" to "true"
     ))
-    // 生成 model + API
     globalProperties.set(mapOf(
         "models" to "",
         "apis" to ""
     ))
 }
 
-// ============ OpenAPI 后处理：为 required 字段补充 @field:NotNull ============
-// kotlin-spring 生成器对 required 字段只生成 @JsonProperty(required=true)，
-// 不自动添加 @NotNull。此处自动补全 JSR-303 非空校验注解。
+// ===== OpenAPI Post-Processing Hook =====
+// kotlin-spring generator only emits @JsonProperty(required=true) for required fields without
+// injecting JSR-303 @NotNull. This task patches generated model classes to add @field:NotNull
+// annotations on every required property after openApiGenerate completes.
 tasks.named("openApiGenerate") {
     doLast {
         val modelDir = openApiOutputDir.get().asFile.resolve("src/main/kotlin")
@@ -53,9 +58,7 @@ tasks.named("openApiGenerate") {
         if (!modelDir.exists()) return@doLast
         modelDir.listFiles { f -> f.extension == "kt" }?.forEach { file ->
             var text = file.readText()
-            // 先移除已有的 @field:NotNull（防止重复生成时叠加）
             text = text.replace(Regex("""\s*@field:NotNull\n"""), "\n")
-            // 为 required = true 的属性注入 @field:NotNull
             text = text.replace(
                 Regex("""(\s*)(@get:JsonProperty\("[^"]+", required = true\))"""),
                 "$1@field:NotNull\n$1$2"
@@ -65,7 +68,8 @@ tasks.named("openApiGenerate") {
     }
 }
 
-// 将生成的代码添加到源码目录，并确保 openApiGenerate 先执行
+// Register generated Kotlin sources on the main source set and establish task ordering so
+// openApiGenerate completes before compileKotlin / compileJava attempt to consume sources.
 tasks.named("compileKotlin") {
     dependsOn("openApiGenerate")
 }
@@ -83,96 +87,116 @@ sourceSets {
 }
 
 dependencies {
-    // ============ 项目模块依赖 ============
+    // ===== Internal Fluxion Modules =====
+    // ACL SPI - permission/role/auth interfaces for admin security layer.
     implementation(project(":fluxion-acl-spi"))
+    // Core foundation types and base abstractions (api for transitive exposure).
     implementation(project(":fluxion-core"))
-    implementation(project(":fluxion-core-spring-boot"))
+    // Spring Boot auto-configuration for core engine beans.
+    implementation(project(":fluxion-core:spring-boot"))
+    // Schema core abstractions (NodeInput/FunctionResult schema contracts).
     implementation(project(":fluxion-schema:core"))
+    // Spring Boot auto-configuration for schema registry + subscribers.
     implementation(project(":fluxion-schema:spring-boot"))
-    implementation(project(":fluxion-decorator-impl:spring-boot"))
+    // Spring Boot auto-configuration for cross-cutting decorators (metrics/tracing/cache).
+    implementation(project(":fluxion-decorator:spring-boot"))
+    // Adapter SPI (router/request/unified abstractions for capability domains).
     implementation(project(":fluxion-adapter-spi"))
+    // Runtime core - DAG executor and workflow orchestration primitives.
     implementation(project(":fluxion-runtime:core"))
+    // HTTP adapter core abstractions (request processing, route registry SPI).
     implementation(project(":fluxion-adapter-http:core"))
+    // Spring MVC HTTP adapter Spring Boot starter (full auto-configuration).
     implementation(project(":fluxion-adapter-http:springmvc:spring-boot"))
-    // 内置函数（spring-boot 已传递依赖 core）
-    implementation(project(":fluxion-builtin-functions:spring-boot"))
-    // 依赖注入能力域
+    // Built-in workflow functions + Spring Boot function registry auto-configuration.
+    implementation(project(":fluxion-function:spring-boot"))
+    // Built-in function implementations (DbExecuteWorkflowCompiler, DataSourceProvider).
+    implementation(project(":fluxion-function:builtin"))
+    // Spring DI bridge - ApplicationContext-backed FunctionInstanceProvider.
     implementation(project(":fluxion-di:spring"))
-    // Redis（spring-boot 已传递依赖 core）
+    // Redis capability domain Spring Boot auto-configuration + client adapter SPI.
     implementation(project(":fluxion-redis:spring-boot"))
+    // Lettuce Redis client adapter implementation.
     implementation(project(":fluxion-redis:lettuce"))
-    // 脚本引擎（spring-boot 已传递依赖 core）
+    // Groovy script engine Spring Boot auto-configuration + dynamic evaluation.
     implementation(project(":fluxion-script-engine:spring-boot"))
-    // 配置中心
+    // Config center Spring Boot auto-configuration (binds Apollo/Nacos/HTTP backends).
     implementation(project(":fluxion-config:spring-boot"))
-    implementation(project(":fluxion-config:http"))          // HTTP 自举模式（workflow.config.type=http 时生效）
-    implementation(project(":fluxion-config:nacos"))         // Nacos 配置中心（workflow.config.type=nacos 时生效）
-    // 注册中心
-    implementation(project(":fluxion-config:registry-http")) // HTTP 自举注册中心（type=http 时生效）
-    // Nacos Client（nacos 模式运行时必需）
+    // HTTP bootstrap config backend - activated when workflow.config.type=http.
+    implementation(project(":fluxion-config:http"))
+    // Nacos config backend - activated when workflow.config.type=nacos.
+    implementation(project(":fluxion-config:nacos"))
+    // HTTP-based service registry for lightweight discovery (bootstrap mode).
+    implementation(project(":fluxion-config:registry-http"))
+    // Nacos Client SDK on runtime classpath when running in Nacos configuration mode.
     runtimeOnly("com.alibaba.nacos:nacos-client")
 
-    // ============ Spring Boot 核心 ============
+    // ===== Spring Boot Starters (Application Foundation) =====
+    // DevTools for live-reload during local development.
     developmentOnly("org.springframework.boot:spring-boot-devtools")
+    // Spring MVC (Servlet stack) web server.
     implementation("org.springframework.boot:spring-boot-starter-web")
+    // Log4j2 logging implementation (root build.gradle.kts excludes default Logback globally).
     implementation("org.springframework.boot:spring-boot-starter-log4j2")
-    runtimeOnly("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml")  // Log4j2 YAML 配置解析
+    // Jackson YAML dataformat for Log4j2 YAML configuration file parsing.
+    runtimeOnly("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml")
+    // Spring Data JPA with Hibernate ORM - entity mapping excludes glassfish JAXB runtime (annotation-only mode).
     implementation("org.springframework.boot:spring-boot-starter-data-jpa") {
-        // 纯注解 JPA，无需 XML 映射，排除 JAXB 运行时（glassfish.jaxb）
         exclude(group = "org.glassfish.jaxb", module = "jaxb-runtime")
     }
+    // Spring Security - authentication filter chain + method-level authorization.
     implementation("org.springframework.boot:spring-boot-starter-security")
+    // Actuator - /actuator/health, /actuator/metrics, /actuator/prometheus endpoints.
     implementation("org.springframework.boot:spring-boot-starter-actuator")
+    // JSR-303 validation (@NotNull/@Valid/@Size Hibernate Validator engine).
     implementation("org.springframework.boot:spring-boot-starter-validation")
+    // Spring Cache abstraction (Caffeine-backed local cache default impl).
     implementation("org.springframework.boot:spring-boot-starter-cache")
 
-    // ============ 可选：第三方认证集成（按需启用）============
-    // LDAP - 企业内部统一账号
-    // implementation("org.springframework.boot:spring-boot-starter-data-ldap")
-    // implementation("org.springframework.security:spring-security-ldap")
-    // OAuth2 - 第三方登录
-    // implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
-
-    // ============ 监控（默认启用：追踪 + metrics）============
-    // Prometheus 监控
-    // implementation("io.micrometer:micrometer-registry-prometheus")
-    // OpenTelemetry 分布式追踪（Spring Boot 3.x + Jaeger 走 OTLP HTTP 协议，默认 http://localhost:4318/v1/traces）
+    // ===== Observability / Distributed Tracing =====
+    // Micrometer-to-OpenTelemetry tracing bridge (propagates trace IDs through workflow calls).
     implementation("io.micrometer:micrometer-tracing-bridge-otel")
+    // OTLP HTTP span exporter - sends traces to Jaeger/OpenTelemetry Collector at localhost:4318.
     implementation("io.opentelemetry:opentelemetry-exporter-otlp")
 
-    // ============ 工具库 ============
-    // JSR-305（提供 javax.annotation.meta.When 等元注解，消除 kapt 阶段的编译警告）
+    // ===== Compile-Only Annotation Libraries =====
+    // JSR-305 nullability annotations (eliminate kapt strict-mode compiler warnings).
     compileOnly("com.google.code.findbugs:jsr305")
 
-    // Kotlin Coroutines
+    // ===== Kotlin Coroutines =====
+    // Core coroutine primitives (suspend function support, Dispatchers, async/launch).
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core")
 
-    // ============ 数据库 ============
-    // Flyway 数据库迁移
+    // ===== Persistence & Database =====
+    // Flyway - declarative database migration scripts executed at application startup.
     implementation("org.flywaydb:flyway-core")
     implementation("org.flywaydb:flyway-mysql")
-    // MySQL 驱动
+    // MySQL Connector/J - runtime JDBC driver for MySQL 8.x databases.
     runtimeOnly("com.mysql:mysql-connector-j")
 
-    // ============ JWT ============
+    // ===== JWT Authentication =====
+    // JJWT API (compile-safe interfaces) + runtime impl + Jackson serialization module.
     implementation("io.jsonwebtoken:jjwt-api")
     runtimeOnly("io.jsonwebtoken:jjwt-impl")
     runtimeOnly("io.jsonwebtoken:jjwt-jackson")
 
-    // ============ 测试 ============
+    // ===== Testing =====
+    // Spring Boot Test starter (integration test context bootstrap, @SpringBootTest).
     testImplementation("org.springframework.boot:spring-boot-starter-test")
 }
 
-// 多个子模块共享 "core" artifact 名称（如 fluxion-schema:core / fluxion-adapter-http:core），
-// Spring Boot fat JAR 打包时可能出现同名 JAR，使用 EXCLUDE 策略保留首个。
+// Handle duplicate JAR entries during bootJar fat-JAR packaging. Multiple submodules share identical
+// "core" artifact coordinates (e.g., fluxion-schema:core, fluxion-adapter-http:core) which would
+// otherwise cause Gradle duplicate-strategy failures; EXCLUDE retains first-encountered JAR.
 tasks.named<org.springframework.boot.gradle.tasks.bundling.BootJar>("bootJar") {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 
-// 支持 `-Pdebug` 开启远程调试，默认端口 5005
+// Local development bootRun customization. Enables JDWP remote debugging on port 5005 when the
+// `-Pdebug` Gradle project property is provided, and disables the DevTools restart classloader
+// to prevent web container / port-binding state loss across hot-reload fork cycles.
 tasks.bootRun {
     val baseJvmArgs = mutableListOf<String>()
-    // 禁用 DevTools Restart Classloader（避免重启后 fork 进程丢失 Web 容器/端口监听）
     baseJvmArgs += "-Dspring.devtools.restart.enabled=false"
     if (project.hasProperty("debug")) {
         baseJvmArgs += "-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:5005"
@@ -181,20 +205,3 @@ tasks.bootRun {
         jvmArgs = baseJvmArgs
     }
 }
-
-// ============ GraalVM Native Image 配置（暂时关闭）============
-// 同时兼容传统 JDK 和 GraalVM Native Image 两种构建模式：
-//   - 传统 JDK：./gradlew bootJar → 产出 fat JAR
-//   - Native Image：./gradlew nativeCompile → 产出原生二进制
-// graalvmNative {
-//     binaries {
-//         named("main") {
-//             imageName.set("fluxion-admin")
-//             buildArgs.addAll(
-//                 "-O2",
-//                 "--no-fallback",
-//                 "-H:+ReportExceptionStackTraces"
-//             )
-//         }
-//     }
-// }

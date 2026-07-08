@@ -1,3 +1,14 @@
+/**
+ * Nacos-backed subscriber for function configuration snapshots with
+ * per-function granular listeners.
+ *
+ * Extends [NacosKeyedConfigSubscriber] and customises the index-change handler
+ * so that it performs a set-diff against the previously watched function set,
+ * emitting precise PUBLISH / REMOVE / UPDATE events instead of a blanket
+ * full-drop-and-reload. In addition, for each individual function a dedicated
+ * Nacos dataId listener is registered so content-level edits propagate
+ * immediately without waiting for the `__index__` key to refresh.
+ */
 package com.fluxion.config.nacos
 
 import com.alibaba.nacos.api.config.ConfigService
@@ -5,15 +16,19 @@ import com.alibaba.nacos.api.config.listener.Listener
 import com.fluxion.adapter.spi.config.ChangeType
 import com.fluxion.adapter.spi.config.FunctionConfigSnapshot
 import com.fluxion.config.core.SnapshotParser
+import org.slf4j.*
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Nacos 实现 — 函数配置订阅器（业务实例侧）
+ * Business-level subscriber that watches `WORKFLOW` group entries prefixed with
+ * `workflow.function.` plus the special `workflow.function.__index__` index key.
  *
- * 继承 [NacosKeyedConfigSubscriber] 的索引获取、监听器注册和 dataId 读取能力，
- * 通过 override [handleIndexChange] 实现 diff 对比策略：
- * 对比旧/新函数集合，分别触发 PUBLISH / REMOVE / UPDATE，
- * 同时为每个函数注册独立的 dataId 监听器，确保函数内容变更能被感知。
+ * Diff strategy on index change:
+ * ```
+ * added   = newIds ∖ oldIds   → register listener + PUBLISH
+ * removed = oldIds ∖ newIds   → unregister listener + evict + REMOVE
+ * updated = newIds ∩ oldIds   → reload + UPDATE (listener already in place)
+ * ```
  */
 class NacosFunctionConfigSubscriber(
     configService: ConfigService
@@ -24,7 +39,12 @@ class NacosFunctionConfigSubscriber(
     indexDataId   = "workflow.function.__index__"
 ) {
 
-    /** 当前已监听的函数集合，用于在索引变化时判断新增/删除 */
+    /**
+     * Names of functions whose dedicated dataId listener has been attached.
+     *
+     * Used by [handleIndexChange] to compute the set-diff; concurrent add/remove
+     * is safe because we use a CHM-backed key set.
+     */
     private val watchedFunctions = ConcurrentHashMap.newKeySet<String>()
 
     override fun mapKeyToSnapshot(key: String, content: String): FunctionConfigSnapshot? =
@@ -32,16 +52,20 @@ class NacosFunctionConfigSubscriber(
 
     override fun loadAll(): List<FunctionConfigSnapshot> {
         val result = super.loadAll()
-        // 启动时即为每个函数注册内容监听器，确保后续函数内容变更能被感知
+        // Eagerly attach per-function listeners during bootstrap so subsequent
+        // content edits propagate without waiting for an index refresh cycle.
         val keys = loadIndex()
         keys.forEach { registerFunctionListener(it) }
         return result
     }
 
     /**
-     * diff 对比策略 — 对比旧/新集合，分别触发 PUBLISH / REMOVE / UPDATE。
+     * Custom index-change handler that computes a precise delta against the
+     * previously watched function set instead of the base-class full-drop
+     * behaviour.
      *
-     * 覆盖基类的"全量刷新"默认实现，以实现精确的增量变更通知。
+     * This avoids spurious UPDATE notifications for functions that have not
+     * actually changed between index refreshes.
      */
     override fun handleIndexChange(newIndexContent: String) {
         try {
@@ -52,31 +76,28 @@ class NacosFunctionConfigSubscriber(
             val removed = oldIdSet - newIdSet
             val updated = newIdSet intersect oldIdSet
 
-            // 新增：注册单个函数监听器并触发 PUBLISH
             for (functionName in added) {
                 registerFunctionListener(functionName)
                 get(functionName)?.let { notifyListeners(functionName, it, ChangeType.PUBLISH) }
             }
 
-            // 删除：注销监听器、清理降级缓存并触发 REMOVE
             for (functionName in removed) {
                 watchedFunctions.remove(functionName)
                 evictSnapshot(functionName)
                 notifyListeners(functionName, FunctionConfigSnapshot.removed(functionName), ChangeType.REMOVE)
             }
 
-            // 保留集合中可能内容已变化，统一触发 UPDATE（幂等注册监听器）
             for (functionName in updated) {
                 get(functionName)?.let { notifyListeners(functionName, it, ChangeType.UPDATE) }
             }
 
-            log.debug("Processed function index change, added=$added, removed=$removed, updated=$updated")
+            log.debug { "Processed function index change, added=$added, removed=$removed, updated=$updated" }
         } catch (e: Exception) {
-            log.error("Failed to handle function index change from Nacos", e)
+            log.error(e) { "Failed to handle function index change from Nacos" }
         }
     }
 
-    // ─── 函数级别 dataId 监听 ─────────────────────────────────────
+    // ── Per-function dataId listener registration ─────────────────────────
 
     private fun registerFunctionListener(functionName: String) {
         if (!watchedFunctions.add(functionName)) return
@@ -90,7 +111,7 @@ class NacosFunctionConfigSubscriber(
             })
         } catch (e: Exception) {
             watchedFunctions.remove(functionName)
-            log.error("Failed to register Nacos function listener: dataId=$dataId", e)
+            log.error(e) { "Failed to register Nacos function listener: dataId=$dataId" }
         }
     }
 

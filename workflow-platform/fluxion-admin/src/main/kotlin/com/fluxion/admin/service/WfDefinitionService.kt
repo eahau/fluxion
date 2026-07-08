@@ -20,6 +20,10 @@ import com.fluxion.admin.repository.WfFunctionRepository
 import com.fluxion.admin.route.WorkflowDefinitionRouteRefreshEvent
 import com.fluxion.admin.util.toPage
 import org.slf4j.*
+import org.slf4j.debug
+import org.slf4j.error
+import org.slf4j.info
+import org.slf4j.warn
 import org.springframework.cache.annotation.CacheEvict
 import org.springframework.cache.annotation.Cacheable
 import org.springframework.context.ApplicationEventPublisher
@@ -28,13 +32,24 @@ import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 
 /**
- * 工作流定义管理 Service
+ * Workflow definition management service and runtime [DefinitionProvider].
  *
- * 职责：
- *   1. CRUD 工作流定义（wf_definition 表）
- *   2. 将 DB 存储的 JSON 转换为 WorkflowDefinition 领域对象
- *   3. 缓存 ACTIVE 工作流（Caffeine 本地缓存）
- *   4. 发布工作流时通过 DefinitionConfigPublisher 推送到配置中心
+ * Responsibilities:
+ *   1. CRUD on the `wf_definition` table (DRAFT / ACTIVE / DEPRECATED lifecycle)
+ *   2. Convert DB-persisted JSON to the runtime [WorkflowDefinition] domain model
+ *   3. Caffeine-backed local caching of ACTIVE definitions and protocol bindings
+ *   4. Push definition snapshots to Worker nodes via the optional
+ *      [DefinitionConfigPublisher] SPI on publish/deprecate mutations
+ *   5. Fire Spring [WorkflowDefinitionRouteRefreshEvent]s when META-category
+ *      workflows change, so the admin auto-generated route registry stays in sync
+ *   6. Pre-compile DAGs: normalize node types, inject default logging decorators,
+ *      validate function references (scope-aware), and eagerly compile `dbExecute`
+ *      nodes against upstream input schemas
+ *
+ * Collaborates with: WfDefinitionRepository (persistence), WfFunctionRepository
+ * (function ref validation), FunctionRegistry (builtin function lookups),
+ * DefinitionConfigPublisher (optional worker push), DbExecuteWorkflowCompiler
+ * (SQL-node AOT compilation), ApplicationEventPublisher (META-route refresh).
  */
 @Service
 class WfDefinitionService(
@@ -48,7 +63,8 @@ class WfDefinitionService(
     private val log = LoggerFactory.getLogger(javaClass)
 
     /**
-     * 当 META 工作流发生变更时，触发 Admin 自举路由刷新。
+     * Emit a route-refresh Spring application event when the mutated definition is
+     * category META. These definitions drive admin auto-generated REST routes.
      */
     private fun notifyRouteRefreshIfMeta(entity: WfDefinition) {
         if (entity.category == "META") {
@@ -57,23 +73,23 @@ class WfDefinitionService(
     }
 
     /**
-     * 保存或更新工作流定义
-     * 若当前状态为 ACTIVE，同步推送到配置中心
+     * Create or update a workflow definition.
+     *
+     * Pipeline: normalize DAG node types → inject default logging decorators →
+     * (if ACTIVE) validate DAG JSON + referenced function availability + pre-compile
+     * dbExecute nodes → persist → (if ACTIVE) push to config center → notify route
+     * refresh listeners for META workflows.
      */
     @CacheEvict(cacheNames = ["wfDefinition", "wfBinding"], allEntries = true)
     fun save(entity: WfDefinition): WfDefinition {
-        // 规范化 dag_json：清洗 node type 为合法的 FunctionNodeType（AI 生成的 type 可能为核心类型或未知值）
         entity.dagJson = normalizeDagJson(entity.dagJson)
-        // 配置时注入默认日志装饰器，确保所有节点在持久化前已显式声明
         entity.dagJson = applyDefaultLoggingDecorator(entity.dagJson)
-        // ACTIVE 状态的定义必须保证引用的函数已发布，并预编译 dbExecute 节点
         if (entity.status == "ACTIVE") {
             validateDagJson(entity.workflowId, entity.dagJson)
             validateFunctionRefs(entity.dagJson, entity.appGroup)
             compileDbExecuteNodes(entity)
         }
         val saved = repository.save(entity)
-        // ACTIVE 状态的定义变更也需同步到配置中心
         if (saved.status == "ACTIVE") {
             publishToConfigCenter(saved)
         }
@@ -82,8 +98,14 @@ class WfDefinitionService(
     }
 
     /**
-     * 发布工作流（DRAFT → ACTIVE）
-     * 发布前验证 DAG JSON 格式，发布后按 PublishTarget 推送到配置中心
+     * Publish a workflow (DRAFT → ACTIVE) and bump its version number.
+     *
+     * Runs a strict pre-publish pipeline: validate DAG structure, verify referenced
+     * functions are ACTIVE and scope-visible, pre-compile dbExecute nodes, then
+     * re-inject the default logging decorator on top (because the compile step may
+     * have inserted new nodes). If a [publishTarget] is supplied it overrides any
+     * previously stored target-group directive. Post-save: push to config center
+     * and — for META workflows — emit the route refresh event.
      */
     @CacheEvict(cacheNames = ["wfDefinition", "wfBinding"], allEntries = true)
     fun publish(
@@ -91,21 +113,17 @@ class WfDefinitionService(
         publishTarget: com.fluxion.admin.generated.model.PublishTarget? = null
     ): WfDefinition {
         val entity = repository.findByWorkflowId(workflowId)
-            .orElseThrow { IllegalArgumentException("Workflow not found: $workflowId") }
+            .orElseThrow { IllegalArgumentException("Workflow not found: `$workflowId") }
         validateDagJson(workflowId, entity.dagJson)
-        // 发布前必须保证引用的函数已发布，并基于上游 schema 预编译 dbExecute 节点
         validateFunctionRefs(entity.dagJson, entity.appGroup)
         compileDbExecuteNodes(entity)
-        // 发布时再次确保默认日志装饰器已注入（覆盖 dbExecute 预编译可能产生的新节点）
         entity.dagJson = applyDefaultLoggingDecorator(entity.dagJson)
         entity.status = "ACTIVE"
         entity.version += 1
-        // 调用方显式传入 publishTarget 时覆盖当前值
         publishTarget?.let {
             entity.publishTarget = jsonMapperHelper.publishTargetToString(it)
         }
         val saved = repository.save(entity)
-        // 推送到配置中心
         publishToConfigCenter(saved)
         notifyRouteRefreshIfMeta(saved)
         log.info { "Published workflow [$workflowId] version [${entity.version}]" }
@@ -113,16 +131,14 @@ class WfDefinitionService(
     }
 
     /**
-     * 下线工作流（ACTIVE → DEPRECATED）
-     * 下线后从配置中心移除
+     * Deprecate a workflow (ACTIVE → DEPRECATED) and revoke it from workers.
      */
     @CacheEvict(cacheNames = ["wfDefinition", "wfBinding"], allEntries = true)
     fun deprecate(workflowId: String): WfDefinition {
         val entity = repository.findByWorkflowId(workflowId)
-            .orElseThrow { IllegalArgumentException("Workflow not found: $workflowId") }
+            .orElseThrow { IllegalArgumentException("Workflow not found: `$workflowId") }
         entity.status = "DEPRECATED"
         val saved = repository.save(entity)
-        // 从配置中心移除
         unpublishFromConfigCenter(workflowId)
         notifyRouteRefreshIfMeta(saved)
         log.info { "Deprecated workflow [$workflowId]" }
@@ -130,7 +146,12 @@ class WfDefinitionService(
     }
 
     /**
-     * 推送工作流定义到配置中心（支持定向发布）
+     * Push a definition snapshot to the optional config-distribution channel.
+     *
+     * Failure is intentionally non-fatal: a publish error degrades gracefully to
+     * "local-only" (the DB row is committed), and the next publish / worker HTTP
+     * pull cycle will retry. Target resolution: prefer the explicit `publishTarget`
+     * stored on the entity, fall back to the deprecated `targetGroups` column.
      */
     private fun publishToConfigCenter(entity: WfDefinition) {
         val publisher = configPublisher ?: run {
@@ -144,12 +165,12 @@ class WfDefinitionService(
             publisher.publish(entity.workflowId, entity.dagJson, entity.version, target)
         } catch (e: Exception) {
             log.error(e) { "Failed to publish workflow [${entity.workflowId}] to config center: ${e.message}" }
-            // 不阻断 DB 事务，降级为仅本地（下次发布可重试）
         }
     }
 
     /**
-     * 从配置中心移除工作流定义
+     * Revoke a definition from every connected worker. Safe no-op if no publisher
+     * SPI is bound or if the workflow was never published.
      */
     private fun unpublishFromConfigCenter(workflowId: String) {
         val publisher = configPublisher ?: run {
@@ -164,7 +185,8 @@ class WfDefinitionService(
     }
 
     /**
-     * 根据 workflowId 获取 WorkflowDefinition 领域对象（带缓存）
+     * Runtime [DefinitionProvider] lookup. Returns only ACTIVE definitions and
+     * consults the `wfDefinition` Caffeine cache for hot paths.
      */
     @Cacheable(cacheNames = ["wfDefinition"], key = "#key")
     override fun get(key: String): WorkflowDefinition? {
@@ -174,15 +196,14 @@ class WfDefinitionService(
             .orElse(null)
     }
 
-    /**
-     * 根据 workflowId 获取原始实体（不限制状态）
-     */
+    /** Raw entity fetch (status-agnostic) used by admin UI edit views. */
     fun getEntity(workflowId: String): WfDefinition? {
         return repository.findByWorkflowId(workflowId).orElse(null)
     }
 
     /**
-     * 根据 workflowId 获取 WorkflowDefinition 领域对象（不限制状态，调试场景使用）
+     * Returns the [WorkflowDefinition] domain object regardless of status. Used
+     * by debug / trace tooling that needs to replay DRAFT executions.
      */
     fun getDefinitionAnyStatus(workflowId: String): WorkflowDefinition? {
         return repository.findByWorkflowId(workflowId)
@@ -191,19 +212,15 @@ class WfDefinitionService(
     }
 
     /**
-     * 检查路由绑定是否已被其他工作流占用（按 scope 隔离）
+     * Scope-aware route-binding conflict check.
      *
-     * - PLATFORM scope：与全局 PLATFORM 工作流冲突
-     * - PRIVATE scope：只与同 app_group 的 PRIVATE 工作流冲突
-     * - MARKETPLACE scope：与全局 MARKETPLACE 工作流冲突
+     * Conflict rules (matches the Worker runtime binding semantics):
+     *   - PRIVATE scope: only conflicts with other PRIVATE workflows in the same `appGroup`
+     *   - PLATFORM / MARKETPLACE scope: conflicts globally with workflows in the same scope
      *
-     * @param protocol 协议（HTTP/DUBBO/GRPC/KAFKA）
-     * @param method HTTP 方法（HTTP 协议时使用）
-     * @param bindKey 绑定路径
-     * @param scope 作用域（默认 PRIVATE）
-     * @param appGroup 所属应用分组（scope=PRIVATE 时必填）
-     * @param excludeWorkflowId 排除的工作流 ID（用于更新场景）
-     * @return 占用该路由的工作流，无冲突返回 null
+     * Skips the check entirely when `bindKey` is blank (workflow has no HTTP/gRPC route).
+     * Callers performing an UPDATE pass [excludeWorkflowId] so a workflow does not
+     * conflict with its own existing binding.
      */
     fun findRouteConflict(
         protocol: String,
@@ -213,16 +230,13 @@ class WfDefinitionService(
         appGroup: String? = null,
         excludeWorkflowId: String? = null
     ): WfDefinition? {
-        // 无绑定路径时不检查冲突
         if (bindKey.isNullOrBlank()) return null
 
         val conflict = if (scope == "PRIVATE") {
-            // PRIVATE 只与同 app_group 的 PRIVATE 冲突
             repository.findByScopeAndAppGroupAndProtocolAndMethodAndBindKey(
                 "PRIVATE", appGroup, protocol, method, bindKey
             ).orElse(null)
         } else {
-            // PLATFORM / MARKETPLACE 与全局同 scope 冲突
             repository.findByScopeAndProtocolAndMethodAndBindKey(
                 scope, protocol, method, bindKey
             ).orElse(null)
@@ -232,7 +246,8 @@ class WfDefinitionService(
     }
 
     /**
-     * 检查路由绑定是否已被其他工作流占用（兼容旧调用方）
+     * Back-compat overload for callers written before scope isolation landed.
+     * Defaults to PRIVATE scope with no app-group restriction.
      */
     @Deprecated("Use findRouteConflict with scope parameter", ReplaceWith("findRouteConflict(protocol, method, bindKey, scope, appGroup, excludeWorkflowId)"))
     fun findRouteConflict(
@@ -245,7 +260,8 @@ class WfDefinitionService(
     }
 
     /**
-     * 分页搜索工作流定义（关键字匹配 workflowId/workflowName）
+     * Paginated admin search over workflow definitions.
+     * Keyword matches case-insensitively against workflowId or workflowName.
      */
     fun search(keyword: String?, pageable: Pageable): Page<WfDefinition> {
         val all = if (keyword.isNullOrBlank()) {
@@ -261,12 +277,13 @@ class WfDefinitionService(
     }
 
     /**
-     * 删除工作流定义
+     * Delete a definition by id. Also revokes it from the config distribution
+     * channel and refreshes META routes if applicable.
      */
     @CacheEvict(cacheNames = ["wfDefinition", "wfBinding"], allEntries = true)
     fun delete(workflowId: String) {
         val entity = repository.findByWorkflowId(workflowId)
-            .orElseThrow { IllegalArgumentException("Workflow not found: $workflowId") }
+            .orElseThrow { IllegalArgumentException("Workflow not found: `$workflowId") }
         repository.delete(entity)
         unpublishFromConfigCenter(workflowId)
         notifyRouteRefreshIfMeta(entity)
@@ -274,12 +291,14 @@ class WfDefinitionService(
     }
 
     /**
-     * 回滚到指定版本（当前实现：基于最新 ACTIVE/DRAFT 复制并递增版本号）
+     * Rollback placeholder. Current semantics: flip the latest row back to DRAFT
+     * and bump the version counter. Row-level version history is planned but not
+     * yet implemented on the persistence side.
      */
     @CacheEvict(cacheNames = ["wfDefinition", "wfBinding"], allEntries = true)
     fun rollback(workflowId: String, version: Int): WfDefinition {
         val current = repository.findByWorkflowId(workflowId)
-            .orElseThrow { IllegalArgumentException("Workflow not found: $workflowId") }
+            .orElseThrow { IllegalArgumentException("Workflow not found: `$workflowId") }
         current.status = "DRAFT"
         current.version = version + 1
         val saved = repository.save(current)
@@ -289,8 +308,9 @@ class WfDefinitionService(
     }
 
     /**
-     * 查询某工作流的所有历史版本
-     * 当前实现：按 workflowId 查询所有状态记录，按 version 升序
+     * Historical versions for a workflow. Current implementation scans every row
+     * with the matching business id and sorts by the integer version column. True
+     * row-level immutable versioning is a future enhancement.
      */
     fun findVersions(workflowId: String): List<WfDefinition> {
         return repository.findAll()
@@ -299,7 +319,11 @@ class WfDefinitionService(
     }
 
     /**
-     * 将工作流导出为 OpenAPI 文档（基础版）
+     * Bulk-export a set of workflow definitions as a minimal OpenAPI 3.0 document.
+     *
+     * Each workflow is exported as `POST /<workflowId>` with JSON request/response
+     * bodies derived from the input/output schema columns. When `ids` is empty the
+     * export includes every ACTIVE definition in the DB.
      */
     fun exportOpenAPI(ids: List<String>, title: String?, version: String?): Map<String, Any> {
         val workflows = if (ids.isEmpty()) repository.findAllActive() else ids.mapNotNull { getEntity(it) }
@@ -339,24 +363,25 @@ class WfDefinitionService(
         return doc
     }
 
-    /**
-     * 加载所有 ACTIVE 工作流（引擎启动时预热缓存）
-     */
+    /** Engine bootstrap preload: every ACTIVE definition as domain objects. */
     fun loadAllActive(): List<WorkflowDefinition> {
         return repository.findAllActive().map { toWorkflowDefinition(it) }
     }
 
     /**
-     * 加载所有 ACTIVE 工作流定义快照（HTTP 模式下供 Worker 拉取）
+     * Worker HTTP pull: all ACTIVE workflow snapshots.
      *
-     * @param appGroup 所属应用分组，传入时仅返回 PLATFORM + 该 appGroup 的 PRIVATE
+     * When `appGroup` is supplied the result follows the Worker visibility contract:
+     *   - All PLATFORM-scope ACTIVE definitions
+     *   - PRIVATE-scope ACTIVE definitions whose appGroup matches
+     *
+     * When `appGroup` is null every ACTIVE definition is returned (back-compat for
+     * single-tenant local-dev deployments).
      */
     fun loadAllActiveSnapshots(appGroup: String? = null): List<com.fluxion.adapter.spi.config.WorkflowDefinitionSnapshot> {
         val entities = if (appGroup.isNullOrBlank()) {
-            // 兼容旧行为：返回所有 ACTIVE
             repository.findAllActive()
         } else {
-            // PLATFORM + 该 appGroup 的 PRIVATE
             val platform = repository.findAllActiveByScope("PLATFORM")
             val private = repository.findAllActiveByScopeAndAppGroup("PRIVATE", appGroup)
             platform + private
@@ -368,9 +393,7 @@ class WfDefinitionService(
         }
     }
 
-    /**
-     * 获取单个工作流定义快照
-     */
+    /** Single-definition snapshot lookup used for incremental worker refresh. */
     fun getSnapshot(workflowId: String): com.fluxion.adapter.spi.config.WorkflowDefinitionSnapshot? {
         return repository.findByWorkflowId(workflowId)
             .filter { it.status == "ACTIVE" }
@@ -383,7 +406,8 @@ class WfDefinitionService(
     }
 
     /**
-     * 通过协议 + 绑定 Key 路由查找工作流 ID（带缓存）
+     * Resolve a protocol + bindKey route to a workflow id. Result is cached in
+     * Caffeine (`wfBinding` cache) for hot path invocation.
      */
     @Cacheable(cacheNames = ["wfBinding"], key = "#protocol + ':' + #bindKey")
     override fun findByBinding(protocol: String, bindKey: String): String? {
@@ -394,7 +418,12 @@ class WfDefinitionService(
     }
 
     /**
-     * 将 DB 实体转换为核心领域模型 WorkflowDefinition
+     * Convert the persisted DB row to the [WorkflowDefinition] runtime domain object.
+     *
+     * Unmarshalling steps:
+     *   1. Parse `dagJson` → extract `nodes` → map to [com.fluxion.core.model.Node] via JsonMapperHelper
+     *   2. Parse `triggersConfig` → list of [WorkflowTrigger] (WEBHOOK / SCHEDULED / MANUAL / etc.)
+     *   3. Copy scalar columns (id, name, version, schemas, scope, errorHandlerRef) verbatim
      */
     private fun toWorkflowDefinition(entity: WfDefinition): WorkflowDefinition {
         val dagData = JsonUtil.toMap(entity.dagJson)
@@ -422,8 +451,16 @@ class WfDefinitionService(
     }
 
     /**
-     * 解析 triggersConfig JSON 为 WorkflowTrigger 列表。
-     * JSON 格式：[{"id":"t1","type":"WEBHOOK","config":{"path":"/hooks/my-workflow"},"enabled":true}]
+     * Parse the optional `triggersConfig` JSON column into a list of
+     * [WorkflowTrigger]. Expected shape:
+     *
+     * ```
+     * [{"id":"t1","type":"WEBHOOK","config":{"path":"/hooks/x"},"enabled":true}]
+     * ```
+     *
+     * Unknown `type` strings fall back to [TriggerType.MANUAL] instead of failing
+     * the whole workflow load (defensive default). Corrupt JSON similarly degrades
+     * gracefully to an empty trigger list.
      */
     private fun parseTriggers(triggersConfig: String?): List<WorkflowTrigger> {
         if (triggersConfig.isNullOrBlank()) return emptyList()
@@ -440,76 +477,84 @@ class WfDefinitionService(
                 )
             }
         } catch (ex: Exception) {
-            log.warn("Failed to parse triggersConfig, returning empty list", ex)
+            log.warn(ex) { "Failed to parse triggersConfig, returning empty list" }
             emptyList()
         }
     }
 
+    /**
+     * Validate that `dagJson` is structurally well-formed and produces a cycle-free
+     * DAG. Rethrows [WorkflowException] instances verbatim (they carry engine-level
+     * error codes) and wraps anything else as a plain [IllegalArgumentException].
+     */
     private fun validateDagJson(workflowId: String, dagJson: String) {
         try {
             val map = JsonUtil.toMap(dagJson)
-            requireNotNull(map["nodes"]) { "DAG JSON 必须包含 'nodes' 数组" }
+            requireNotNull(map["nodes"]) { "DAG JSON must contain a 'nodes' array" }
 
             val nodesJson = JsonUtil.convertValueOrNull<List<Map<String, Any?>>>(map["nodes"]) ?: emptyList()
             val nodes = jsonMapperHelper.parseNodesFromMap(nodesJson.uncheckedCast<List<Map<String, Any>>>() ?: emptyList())
             DagTopology.validate(workflowId, nodes)
         } catch (ex: Exception) {
-            // 保留 WorkflowException 的错误码，其它解析异常统一包装
             if (ex is WorkflowException) throw ex
-            throw IllegalArgumentException("DAG JSON 格式错误: ${ex.message}", ex)
+            throw IllegalArgumentException("DAG JSON format error: ${ex.message}", ex)
         }
     }
 
     /**
-     * 校验 DAG 中引用的所有函数存在且已启用
+     * Scope-aware referenced-function availability check.
      *
-     * Scope-aware：PRIVATE 工作流可引用 PLATFORM 函数或同 appGroup 的 PRIVATE 函数
+     * Lookup order for each `functionRef` in the DAG (matches runtime resolution):
+     *   1. PLATFORM-scope DB function (globally visible) → must be ACTIVE
+     *   2. Engine-level builtin registry (`builtin:` functions) → always OK
+     *   3. PRIVATE-scope DB function in the same `appGroup` as the workflow → must be ACTIVE
+     *   4. Back-compat fallback: any DB function matching by name alone → must be ACTIVE
+     *
+     * Throws IllegalArgumentException on first missing or inactive reference.
      */
     private fun validateFunctionRefs(dagJson: String, appGroup: String? = null) {
         val functionRefs = extractFunctionRefs(dagJson)
         if (functionRefs.isEmpty()) return
         functionRefs.forEach { functionName ->
-            // 1. 先查 PLATFORM 函数（全局可用）
             val platformFn = functionRepository.findByScopeAndFunctionName("PLATFORM", functionName).orElse(null)
             if (platformFn != null) {
                 if (platformFn.status != FunctionStatus.ACTIVE) {
-                    throw IllegalArgumentException("工作流引用了未启用的函数: $functionName")
+                    throw IllegalArgumentException("Workflow references inactive function: $functionName")
                 }
                 return@forEach
             }
-            // 2. 再查 BUILTIN（代码注册）
             if (functionRegistry.contains(functionName)) return@forEach
-            // 3. 查 PRIVATE 函数（同 appGroup）
             if (!appGroup.isNullOrBlank()) {
                 val privateFn = functionRepository.findByScopeAndAppGroupAndFunctionName("PRIVATE", appGroup, functionName).orElse(null)
                 if (privateFn != null) {
                     if (privateFn.status != FunctionStatus.ACTIVE) {
-                        throw IllegalArgumentException("工作流引用了未启用的函数: $functionName")
+                        throw IllegalArgumentException("Workflow references inactive function: $functionName")
                     }
                     return@forEach
                 }
             }
-            // 4. 兼容旧逻辑：直接按 functionName 查找
             val fn = functionRepository.findByFunctionName(functionName).orElse(null)
-                ?: throw IllegalArgumentException("工作流引用了未定义的函数: $functionName")
+                ?: throw IllegalArgumentException("Workflow references undefined function: $functionName")
             if (fn.status != FunctionStatus.ACTIVE) {
-                throw IllegalArgumentException("工作流引用了未启用的函数: $functionName")
+                throw IllegalArgumentException("Workflow references inactive function: $functionName")
             }
         }
     }
 
     /**
-     * 基于上游节点输出 schema 预编译 DAG 中的 dbExecute 节点，
-     * 并将编译结果写回 dagJson，供运行时直接复用。
+     * Invoke the builtin SQL-node AOT compiler and write the resulting enriched node
+     * graph back into the entity's `dagJson`. Compiler errors (missing input schema,
+     * invalid SQL, etc.) surface as IllegalArgumentException to the publish/save caller.
      */
     private fun compileDbExecuteNodes(entity: WfDefinition) {
         try {
             entity.dagJson = compileDagJson(entity.dagJson)
         } catch (e: Exception) {
-            throw IllegalArgumentException("工作流 DAG 预编译失败: ${e.message}", e)
+            throw IllegalArgumentException("Workflow DAG pre-compilation failed: ${e.message}", e)
         }
     }
 
+    /** Pure helper: unmarshal DAG → compile → re-marshal with enriched nodes. */
     private fun compileDagJson(dagJson: String): String {
         val dag = JsonUtil.toMap(dagJson).toMutableMap()
         val nodesJson = JsonUtil.convertValueOrNull<List<Map<String, Any?>>>(dag["nodes"]) ?: return dagJson
@@ -519,14 +564,17 @@ class WfDefinitionService(
         return JsonUtil.serialize(dag)
     }
 
-    // ─── dag_json 规范化 ──────────────────────────────────────────────
+    // ===== dag_json normalisation =====
 
     /**
-     * 规范化 dag_json 中的 node type 字段：
-     * 无论输入是核心 NodeType（BUILTIN/CUSTOM/SCRIPT/EXTERNAL）、未知类型、还是 FunctionNodeType，
-     * 统一清洗为合法的 FunctionNodeType（PARAM_VALIDATE/DATA_QUERY/CUSTOM 等），确保前端可正确渲染。
+     * Sanitize `dag_json.node.type` values prior to persistence.
      *
-     * 设计原则：AI 生成的数据不可信，在持久化前统一清洗，而非在读取时补救。
+     * Raw inputs can arrive as legacy core NodeType enums (BUILTIN/CUSTOM/SCRIPT/EXTERNAL),
+     * AI-hallucinated garbage strings, or already-correct FunctionNodeType values.
+     * Everything is canonicalised via [JsonMapperHelper.normalizeToFunctionNodeType] so
+     * the admin UI's DAG renderer always gets a known type.
+     *
+     * Design principle: AI-generated inputs are untrusted. Cleanse data on write, not on read.
      */
     private fun normalizeDagJson(dagJson: String): String {
         return try {
@@ -555,8 +603,11 @@ class WfDefinitionService(
     }
 
     /**
-     * 配置时为所有节点注入默认日志装饰器 logging:default，
-     * 若节点已显式声明则去重，保持 logging:default 在装饰器链首位。
+     * Inject the default `logging:default` decorator onto every node.
+     *
+     * Preserves nodes that already declared decorators by prepending the default
+     * at index 0 — this keeps the logging decorator first in the execution chain
+     * (it needs to wrap all downstream user-defined decorators).
      */
     private fun applyDefaultLoggingDecorator(dagJson: String): String {
         return try {
@@ -578,7 +629,7 @@ class WfDefinitionService(
     }
 
     /**
-     * 从 DAG JSON 中提取所有 functionRef
+     * Extract every distinct non-blank `functionRef` value from the DAG nodes list.
      */
     private fun extractFunctionRefs(dagJson: String): Set<String> {
         return try {
@@ -586,7 +637,7 @@ class WfDefinitionService(
             val nodes = JsonUtil.convertValueOrNull<List<Map<String, Any>>>(dagData["nodes"]) ?: emptyList()
             nodes.mapNotNull { it["functionRef"]?.toString()?.takeIf { s -> s.isNotBlank() } }.toSet()
         } catch (ex: Exception) {
-            throw IllegalArgumentException("DAG JSON 格式错误: ${ex.message}", ex)
+            throw IllegalArgumentException("DAG JSON format error: ${ex.message}", ex)
         }
     }
 }

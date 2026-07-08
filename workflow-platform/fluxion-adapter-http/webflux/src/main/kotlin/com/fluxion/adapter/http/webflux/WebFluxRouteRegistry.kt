@@ -3,30 +3,37 @@ package com.fluxion.adapter.http.webflux
 import com.fluxion.adapter.http.core.AbstractRouteRegistry
 import com.fluxion.adapter.http.core.HttpRouteDefinition
 import com.fluxion.adapter.http.core.RouteMatch
-import org.slf4j.info
-
+import org.slf4j.*
 /**
- * WebFlux 路由注册表 — 继承自 [AbstractRouteRegistry]。
+ * WebFlux HTTP route registry — concrete subclass of [AbstractRouteRegistry].
  *
- * WebFlux 与 Spring MVC 在动态路由注册上存在根本差异：
- *   - MVC 有 [RequestMappingHandlerMapping.registerMapping] API，支持 O(1) 增量注册/注销
- *   - WebFlux 的 RouterFunction 不支持运行时增删，每次变更需 O(n) 全量重建
+ * WebFlux and Spring MVC differ fundamentally in how they support runtime
+ * route mutation:
+ * - MVC exposes `RequestMappingHandlerMapping#registerMapping` for O(1)
+ *   incremental add/remove of individual routes.
+ * - WebFlux's `RouterFunction` API is immutable and requires a full O(n)
+ *   composite rebuild on every mutation.
  *
- * 因此 WebFlux 采用**直接查询**策略：
- *   - 路由注册/注销仅操作父类 [routeDefinitions]（ConcurrentHashMap）
- *   - HandlerMapping 每次请求时直接调用 [resolveRoute] 实时查询，无中间缓存层
- *   - 路由变更 O(1)，请求解析 O(n) 模式匹配
+ * WebFlux therefore uses a **direct-query** strategy instead:
+ * - Register/unregister writes ONLY go to the parent's `routeDefinitions`
+ *   ConcurrentHashMap (O(1), no framework API).
+ * - The `WorkflowHandlerMapping` calls [resolveRoute] on EVERY inbound request
+ *   to scan `routeDefinitions` for a pattern match. O(n) on the number of
+ *   routes but typical deployments stay well under ~500 routes, so the scan
+ *   is cheaper than framework-level churn.
  *
- * 路径模式匹配使用 Spring Web 共享的 [org.springframework.web.util.pattern.PathPattern]
- * （与 Spring MVC 相同），因此 resolveRoute() 逻辑与 MVC 实现一致。
+ * Pattern matching still uses Spring's shared `PathPattern` (same parser
+ * used by Spring MVC) for identical behaviour across stacks.
  */
 class WebFluxRouteRegistry : AbstractRouteRegistry() {
 
-    // ─── AbstractRouteRegistry 钩子 ─────────────────────────────────────
+    // ----- AbstractRouteRegistry hooks ----------------------------------------
 
     public override fun activeRouteKeys(): Set<String> = routeDefinitions.keys.toSet()
 
     override fun doRegister(route: HttpRouteDefinition) {
+        // No framework-side registration exists for WebFlux path — we just write
+        // into the shared CHM which the HandlerMapping scans per-request.
         onRouteRegistered(route)
         log.info { "Registered WebFlux route: ${route.method} ${route.path} [${route.scope}] → workflowId=[${route.workflowId}]" }
     }
@@ -38,22 +45,24 @@ class WebFluxRouteRegistry : AbstractRouteRegistry() {
         }
     }
 
-    // ─── 请求解析 ──────────────────────────────────────────────────────
+    // ----- Request resolution (called by WorkflowHandlerMapping) -------------
 
     /**
-     * 为传入请求解析 workflowId + 路径变量。
+     * Full resolution per-request entry point.
      *
-     * 由 HandlerMapping 直接调用，无需 RouterFunction 中间层。
-     * 使用 Spring Web 的 PathPattern（与 Spring MVC 共享）进行模式匹配。
-     * 同时支持精确路径和路径变量模式，如 /api/users/{id}。
+     * Invoked by [WorkflowHandlerMapping] for every WebFlux dispatch. Two-stage:
+     * 1. Exact-match against `METHOD:path` key (O(1), no template variables).
+     * 2. O(n) scan for `PathPattern` match (returns first fit) with variables.
+     *
+     * @param method Upper/lower-case HTTP method (normalised internally)
+     * @param path   Request URI path (e.g. `/api/users/123`)
+     * @return Route match if a registered route fits; null otherwise
      */
     fun resolveRoute(method: String, path: String): RouteMatch? {
-        // 1. 精确匹配（无路径变量）
         resolveWorkflowId(HttpRouteDefinition.keyOf(method, path))?.let {
             return RouteMatch(it, emptyMap())
         }
 
-        // 2. 模式匹配并提取路径变量
         val requestPath = org.springframework.http.server.PathContainer.parsePath(path)
         val patternParser = org.springframework.web.util.pattern.PathPatternParser.defaultInstance
 

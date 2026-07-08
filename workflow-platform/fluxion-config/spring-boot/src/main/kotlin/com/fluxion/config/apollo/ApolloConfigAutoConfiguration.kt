@@ -21,13 +21,13 @@ import org.springframework.context.annotation.Bean
 import org.springframework.core.env.Environment
 
 /**
- * Apollo 配置中心 + 注册中心自动装配
+ * Apollo 閰嶇疆涓績 + 娉ㄥ唽涓績鑷姩瑁呴厤
  *
- * ## 声明式配置注册（对标 NacosConfigs.java）
+ * ## 澹版槑寮忛厤缃敞鍐岋紙瀵规爣 NacosConfigs.java锛?
  *
- * 所有 Subscriber/Publisher 均使用泛型基类直接实例化，无需为每种配置定义独立子类。
- * 新增 keyed 配置：一行 `ApolloKeyedConfigSubscriber(mapper = { ... }, removedMapper = { ... })`
- * 新增单值配置：一行 `ApolloConfigSubscriber(parser = { cfg -> ... })`
+ * 鎵€鏈?Subscriber/Publisher 鍧囦娇鐢ㄦ硾鍨嬪熀绫荤洿鎺ュ疄渚嬪寲锛屾棤闇€涓烘瘡绉嶉厤缃畾涔夌嫭绔嬪瓙绫汇€?
+ * 鏂板 keyed 閰嶇疆锛氫竴琛?`ApolloKeyedConfigSubscriber(mapper = { ... }, removedMapper = { ... })`
+ * 鏂板鍗曞€奸厤缃細涓€琛?`ApolloConfigSubscriber(parser = { cfg -> ... })`
  */
 @AutoConfiguration
 @ConditionalOnClass(name = ["com.ctrip.framework.apollo.ConfigService"])
@@ -124,13 +124,12 @@ class ApolloConfigAutoConfiguration {
         env: Environment
     ): InstanceRegistry {
         val appId = env.getRequiredProperty("workflow.config.apollo.app-id")
-        val envName = env.getProperty("workflow.config.apollo.env", "DEV")!!
-        val cluster = env.getProperty("workflow.config.apollo.cluster", "default")!!
-        val operator = env.getProperty("workflow.config.apollo.operator", "workflow-admin")!!
+        val envName = env.getProperty("workflow.config.apollo.env", "DEV")
+        val cluster = env.getProperty("workflow.config.apollo.cluster", "default")
+        val operator = env.getProperty("workflow.config.apollo.operator", "workflow-admin")
         return ApolloInstanceRegistry(client, appId, envName, cluster, operator)
     }
 
     @Bean
-    fun apolloInstanceDiscovery(): InstanceDiscovery =
-        ApolloInstanceDiscovery()
+    fun apolloInstanceDiscovery(): InstanceDiscovery = ApolloInstanceDiscovery()
 }

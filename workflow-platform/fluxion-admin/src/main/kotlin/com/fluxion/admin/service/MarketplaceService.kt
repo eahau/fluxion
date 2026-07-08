@@ -11,17 +11,29 @@ import com.fluxion.admin.repository.WfMarketplaceListingRepository
 import com.fluxion.admin.security.SecurityContextHelper
 import com.fluxion.core.util.JsonUtil
 import org.slf4j.*
+import org.slf4j.info
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
 /**
- * 市场服务
+ * Internal marketplace service for sharing and installing workflows, functions,
+ * and workflow templates across app_groups.
  *
- * 核心职责：
- *   1. 发布工作流/函数到市场
- *   2. 从市场安装（生成 PRIVATE 副本）
- *   3. 卸载市场安装
- *   4. 市场浏览与搜索
+ * Operation model:
+ *   - PUBLISHER takes a PLATFORM / private resource and creates a
+ *     `wf_marketplace_listing` row pointing at it (source ref + title + tags)
+ *   - CONSUMER installs a listing into their own app_group, which produces a
+ *     scope=PRIVATE deep-copy of the original workflow/function (suffix:
+ *     `{sourceId}-{appGroup}`) and increments the listing's install counter
+ *   - UNINSTALL removes the PRIVATE copy, decrements install count, and removes
+ *     the install receipt row
+ *   - TEMPLATE installs additionally run `{{paramKey}}` string substitution over
+ *     dagJson using the caller-supplied parameter map
+ *
+ * Collaborates with: WfMarketplaceListingRepository, WfMarketplaceInstallRepository
+ * (listing + receipt persistence), WfDefinitionRepository / WfFunctionRepository
+ * (source lookup + PRIVATE copy creation), SecurityContextHelper (publish-time
+ * tenant access check — you can only publish a resource whose app_group you can access).
  */
 @Service
 class MarketplaceService(
@@ -33,17 +45,14 @@ class MarketplaceService(
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
-    // ─── 发布 ────────────────────────────────────────────────────────
+    // ===== Publish =====
 
     /**
-     * 发布工作流到市场
+     * Publish an existing workflow definition to the marketplace.
      *
-     * @param listingId   市场唯一标识（如 user-login-flow）
-     * @param sourceId    源工作流 workflowId
-     * @param title       市场展示标题
-     * @param description 描述
-     * @param tags        标签列表
-     * @param author      发布者
+     * Requires the caller to have access to the source workflow's app_group (when
+     * not PLATFORM scope). Throws IllegalArgumentException when the same workflow
+     * is already listed under a different listing id.
      */
     @Transactional
     fun publishWorkflow(
@@ -55,15 +64,13 @@ class MarketplaceService(
         author: String,
     ): WfMarketplaceListing {
         val definition = definitionRepository.findByWorkflowId(sourceId)
-            .orElseThrow { IllegalArgumentException("工作流不存在: $sourceId") }
+            .orElseThrow { IllegalArgumentException("Workflow not found: $sourceId") }
 
-        // 租户权限校验：发布者必须有权访问源工作流的 appGroup
         definition.appGroup?.let { securityContext.requireAppGroupAccess(it) }
 
-        // 检查工作流是否已在市场中发布
         val existing = listingRepository.findBySourceTypeAndSourceId("WORKFLOW", sourceId)
         if (existing.isNotEmpty()) {
-            throw IllegalArgumentException("工作流 [$sourceId] 已在市场发布")
+            throw IllegalArgumentException("Workflow [$sourceId] is already published in marketplace")
         }
 
         val listing = WfMarketplaceListing().apply {
@@ -83,7 +90,9 @@ class MarketplaceService(
     }
 
     /**
-     * 发布函数到市场
+     * Publish a registered function to the marketplace.
+     *
+     * Semantics mirror [publishWorkflow]: tenant access gate + duplicate-listing check.
      */
     @Transactional
     fun publishFunction(
@@ -95,14 +104,13 @@ class MarketplaceService(
         author: String,
     ): WfMarketplaceListing {
         val function = functionRepository.findByFunctionName(sourceId)
-            .orElseThrow { IllegalArgumentException("函数不存在: $sourceId") }
+            .orElseThrow { IllegalArgumentException("Function not found: $sourceId") }
 
-        // 租户权限校验：发布者必须有权访问源函数的 appGroup
         function.appGroup?.let { securityContext.requireAppGroupAccess(it) }
 
         val existing = listingRepository.findBySourceTypeAndSourceId("FUNCTION", sourceId)
         if (existing.isNotEmpty()) {
-            throw IllegalArgumentException("函数 [$sourceId] 已在市场发布")
+            throw IllegalArgumentException("Function [$sourceId] is already published in marketplace")
         }
 
         val listing = WfMarketplaceListing().apply {
@@ -122,9 +130,12 @@ class MarketplaceService(
     }
 
     /**
-     * 发布工作流模版到市场
+     * Publish a parameterized workflow template.
      *
-     * @param templateConfig 模版配置 JSON（定义可替换参数列表）
+     * Same lifecycle as [publishWorkflow] plus a [templateConfig] JSON blob that
+     * describes which `{{paramKey}}` placeholders exist and how they should be
+     * rendered in the install UI. The template can be later installed either via
+     * [installTemplate] (with params) or the generic install workflow path.
      */
     @Transactional
     fun publishTemplate(
@@ -137,13 +148,13 @@ class MarketplaceService(
         templateConfig: String?,
     ): WfMarketplaceListing {
         val definition = definitionRepository.findByWorkflowId(sourceId)
-            .orElseThrow { IllegalArgumentException("工作流不存在: $sourceId") }
+            .orElseThrow { IllegalArgumentException("Workflow not found: $sourceId") }
 
         definition.appGroup?.let { securityContext.requireAppGroupAccess(it) }
 
         val existing = listingRepository.findBySourceTypeAndSourceId("WORKFLOW_TEMPLATE", sourceId)
         if (existing.isNotEmpty()) {
-            throw IllegalArgumentException("工作流模版 [$sourceId] 已在市场发布")
+            throw IllegalArgumentException("Workflow template [$sourceId] is already published in marketplace")
         }
 
         val listing = WfMarketplaceListing().apply {
@@ -163,30 +174,31 @@ class MarketplaceService(
         }
     }
 
-    // ─── 安装 ────────────────────────────────────────────────────────
+    // ===== Install =====
 
     /**
-     * 安装市场工作流到指定 app_group
+     * Install a marketplace workflow listing into a target app_group.
      *
-     * 生成一个 scope=PRIVATE 的副本，source_ref 指向市场原始工作流
+     * Produces a new scope=PRIVATE [WfDefinition] copy whose id is
+     * `{source.workflowId}-{appGroup}` and records the install receipt. Bumps the
+     * listing.installCount counter so the browse UI can sort by popularity.
      */
     @Transactional
     fun installWorkflow(listingId: String, appGroup: String, installedBy: String?): WfDefinition {
         val listing = listingRepository.findByListingId(listingId)
-            .orElseThrow { IllegalArgumentException("市场 listing 不存在: $listingId") }
+            .orElseThrow { IllegalArgumentException("Marketplace listing not found: $listingId") }
         if (listing.sourceType != "WORKFLOW") {
-            throw IllegalArgumentException("Listing [$listingId] 不是工作流类型")
+            throw IllegalArgumentException("Listing [$listingId] is not a WORKFLOW type")
         }
 
-        // 检查是否已安装
         if (installRepository.existsByListingIdAndAppGroup(listingId, appGroup)) {
-            throw IllegalArgumentException("已安装到 app_group [$appGroup]")
+            throw IllegalArgumentException("Already installed into app_group [$appGroup]")
         }
 
         val source = definitionRepository.findByWorkflowId(listing.sourceId)
-            .orElseThrow { IllegalStateException("源工作流不存在: ${listing.sourceId}") }
+            .orElseThrow { IllegalStateException("Source workflow not found: ${listing.sourceId}") }
 
-        // 生成 PRIVATE 副本
+        // Deep copy into a PRIVATE-scope row under the consumer's appGroup
         val copy = WfDefinition().apply {
             this.workflowId = "${source.workflowId}-${appGroup}"
             this.workflowName = source.workflowName
@@ -205,7 +217,6 @@ class MarketplaceService(
         }
         val saved = definitionRepository.save(copy)
 
-        // 记录安装
         val install = WfMarketplaceInstall().apply {
             this.listingId = listingId
             this.appGroup = appGroup
@@ -213,7 +224,6 @@ class MarketplaceService(
         }
         installRepository.save(install)
 
-        // 更新安装次数
         listing.installCount = listing.installCount + 1
         listingRepository.save(listing)
 
@@ -222,22 +232,23 @@ class MarketplaceService(
     }
 
     /**
-     * 安装市场函数到指定 app_group
+     * Install a marketplace function listing into a target app_group.
+     * Creates a PRIVATE-scope [WfFunction] copy prefixed with the source name.
      */
     @Transactional
     fun installFunction(listingId: String, appGroup: String, installedBy: String?): WfFunction {
         val listing = listingRepository.findByListingId(listingId)
-            .orElseThrow { IllegalArgumentException("市场 listing 不存在: $listingId") }
+            .orElseThrow { IllegalArgumentException("Marketplace listing not found: $listingId") }
         if (listing.sourceType != "FUNCTION") {
-            throw IllegalArgumentException("Listing [$listingId] 不是函数类型")
+            throw IllegalArgumentException("Listing [$listingId] is not a FUNCTION type")
         }
 
         if (installRepository.existsByListingIdAndAppGroup(listingId, appGroup)) {
-            throw IllegalArgumentException("已安装到 app_group [$appGroup]")
+            throw IllegalArgumentException("Already installed into app_group [$appGroup]")
         }
 
         val source = functionRepository.findByFunctionName(listing.sourceId)
-            .orElseThrow { IllegalStateException("源函数不存在: ${listing.sourceId}") }
+            .orElseThrow { IllegalStateException("Source function not found: ${listing.sourceId}") }
 
         val copy = WfFunction().apply {
             this.functionName = "${source.functionName}-${appGroup}"
@@ -265,11 +276,12 @@ class MarketplaceService(
     }
 
     /**
-     * 安装模版工作流到指定 app_group
+     * Install a parameterized marketplace template into a target app_group.
      *
-     * 与 installWorkflow 类似，但会根据模版配置替换参数值。
-     *
-     * @param templateParams 用户提供的模版参数（key=参数名，value=参数值）
+     * After loading the source definition this runs `{{paramKey}}` replacement
+     * over the dagJson (see [replaceTemplateParams]) before creating the PRIVATE
+     * copy. All scalar fields (schemas, triggers, route bindings) are cloned
+     * verbatim from the source row.
      */
     @Transactional
     fun installTemplate(
@@ -279,19 +291,18 @@ class MarketplaceService(
         templateParams: Map<String, Any> = emptyMap()
     ): WfDefinition {
         val listing = listingRepository.findByListingId(listingId)
-            .orElseThrow { IllegalArgumentException("市场 listing 不存在: $listingId") }
+            .orElseThrow { IllegalArgumentException("Marketplace listing not found: $listingId") }
         if (listing.sourceType != "WORKFLOW_TEMPLATE" && listing.sourceType != "WORKFLOW") {
-            throw IllegalArgumentException("Listing [$listingId] 不是工作流模版类型")
+            throw IllegalArgumentException("Listing [$listingId] is not a WORKFLOW_TEMPLATE type")
         }
 
         if (installRepository.existsByListingIdAndAppGroup(listingId, appGroup)) {
-            throw IllegalArgumentException("已安装到 app_group [$appGroup]")
+            throw IllegalArgumentException("Already installed into app_group [$appGroup]")
         }
 
         val source = definitionRepository.findByWorkflowId(listing.sourceId)
-            .orElseThrow { IllegalStateException("源工作流不存在: ${listing.sourceId}") }
+            .orElseThrow { IllegalStateException("Source workflow not found: ${listing.sourceId}") }
 
-        // 基于模版参数替换 DAG JSON 中的占位符
         val processedDagJson = if (templateParams.isNotEmpty()) {
             replaceTemplateParams(source.dagJson, templateParams)
         } else {
@@ -332,9 +343,12 @@ class MarketplaceService(
     }
 
     /**
-     * 替换 DAG JSON 中的模版占位符。
+     * Pure helper: replace every `{{key}}` token in the DAG JSON string with the
+     * `toString()` rendering of the corresponding value in [params].
      *
-     * 占位符格式：`{{paramKey}}`
+     * NOTE: this is naive string substitution. Template parameters that need to
+     * become JSON objects/arrays should be serialized to JSON in the caller
+     * before being passed into the map.
      */
     private fun replaceTemplateParams(dagJson: String, params: Map<String, Any>): String {
         var result = dagJson
@@ -344,19 +358,19 @@ class MarketplaceService(
         return result
     }
 
-    // ─── 卸载 ────────────────────────────────────────────────────────
+    // ===== Uninstall =====
 
     /**
-     * 卸载市场安装
+     * Reverse an install: delete the PRIVATE copy of the listing, remove the
+     * install receipt, and roll back the listing's install counter (clamped at 0).
      */
     @Transactional
     fun uninstall(listingId: String, appGroup: String) {
         val install = installRepository.findByListingIdAndAppGroup(listingId, appGroup)
-            ?: throw IllegalArgumentException("未安装到 app_group [$appGroup]")
+            ?: throw IllegalArgumentException("Not installed into app_group [$appGroup]")
 
         val listing = listingRepository.findByListingId(listingId).orElse(null)
 
-        // 删除 PRIVATE 副本
         if (listing != null) {
             when (listing.sourceType) {
                 "WORKFLOW", "WORKFLOW_TEMPLATE" -> {
@@ -378,7 +392,6 @@ class MarketplaceService(
 
         installRepository.delete(install)
 
-        // 回退安装次数
         if (listing != null && listing.installCount > 0) {
             listing.installCount = listing.installCount - 1
             listingRepository.save(listing)
@@ -387,17 +400,16 @@ class MarketplaceService(
         log.info { "Uninstalled marketplace listing [$listingId] from appGroup [$appGroup]" }
     }
 
-    // ─── 浏览 / 搜索 ─────────────────────────────────────────────────
+    // ===== Browse / Search =====
 
-    /**
-     * 列出所有 ACTIVE 的市场 listing
-     */
+    /** List every ACTIVE marketplace listing (admin browse view). */
     fun listActive(): List<WfMarketplaceListing> {
         return listingRepository.findByStatus("ACTIVE")
     }
 
     /**
-     * 按关键词搜索市场
+     * Keyword search over ACTIVE marketplace listings. Matches case-insensitive
+     * substring against title OR description (Spring Data generated OR query).
      */
     fun search(keyword: String): List<WfMarketplaceListing> {
         return listingRepository
@@ -406,16 +418,12 @@ class MarketplaceService(
             )
     }
 
-    /**
-     * 获取单个 listing 详情
-     */
+    /** Fetch a single listing detail by its stable listing id. */
     fun getListing(listingId: String): WfMarketplaceListing? {
         return listingRepository.findByListingId(listingId).orElse(null)
     }
 
-    /**
-     * 获取某 app_group 的安装记录
-     */
+    /** All install receipts for a given app_group (team "installed apps" view). */
     fun getInstalls(appGroup: String): List<WfMarketplaceInstall> {
         return installRepository.findByAppGroup(appGroup)
     }

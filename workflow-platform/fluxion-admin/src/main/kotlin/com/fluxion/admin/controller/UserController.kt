@@ -20,7 +20,15 @@ import org.springframework.web.bind.annotation.RestController
 import java.time.ZoneId
 
 /**
- * 用户管理 REST API
+ * User administration REST controller (implements OpenAPI-generated [UserApi]).
+ *
+ * Exposes endpoints for user CRUD, role association, and /me style current-user
+ * resolution. In local / dev Spring profiles the unauthenticated case falls back
+ * to a synthetic ADMIN mock so the UI can start without an OIDC/ACL server.
+ *
+ * Collaborates with: UserService (persistence + password encoding), RoleRepository
+ * (role collection hydration for create/update DTO mapping), Environment (profile
+ * probe for dev bypass).
  */
 @RestController
 class UserController(
@@ -29,9 +37,14 @@ class UserController(
     private val environment: Environment
 ) : UserApi {
 
+    // True when any of the active profiles is local OR dev (case insensitive).
     private val isLocalOrDev: Boolean
         get() = environment.activeProfiles.any { it.equals("local", ignoreCase = true) || it.equals("dev", ignoreCase = true) }
 
+    /**
+     * Paginated user list with optional keyword filter (username / nickname / email).
+     * Page size is capped at 100 regardless of client input to avoid runaway queries.
+     */
     override fun listUsers(
         keyword: String?,
         page: Int,
@@ -48,14 +61,22 @@ class UserController(
         })
     }
 
+    /** Fetch a single user DTO by business primary key (username). */
     override fun getUser(userId: String): ResponseEntity<UserDto> {
         val entity = userService.get(userId)
             ?: return ResponseEntity.notFound().build()
         return ResponseEntity.ok(toDto(entity))
     }
 
+    /**
+     * Create a new user.
+     *
+     * Guards:
+     *   - 400 if the username already exists (pre-check rather than UK-sqlexception)
+     *   - if request password is empty the username is used as default initial password
+     *   - roleIds are resolved via RoleRepository, missing role names are silently skipped
+     */
     override fun createUser(userRequest: UserRequest): ResponseEntity<UserDto> {
-        // 检查用户名是否已存在
         if (userService.existsByUsername(userRequest.username)) {
             return ResponseEntity.badRequest().build()
         }
@@ -66,9 +87,7 @@ class UserController(
             email = userRequest.email
             phone = userRequest.phone
             enabled = userRequest.status?.let { it.name == "ACTIVE" } ?: true
-            // 创建时若前端未传密码，使用用户名作为默认密码
             password = userRequest.username
-            // 关联角色
             userRequest.roleIds?.forEach { roleName ->
                 roleRepository.findByRoleName(roleName)?.let { role ->
                     this.roles.add(role)
@@ -78,6 +97,10 @@ class UserController(
         return ResponseEntity.ok(toDto(userService.create(entity)))
     }
 
+    /**
+     * Update mutable user fields (nickname / email / phone / enabled / roles) by id.
+     * Roles list is fully replaced (clear + re-add) rather than merged.
+     */
     override fun updateUser(userId: String, userRequest: UserRequest): ResponseEntity<UserDto> {
         val entity = userService.get(userId)
             ?: return ResponseEntity.notFound().build()
@@ -86,7 +109,6 @@ class UserController(
             email = userRequest.email
             phone = userRequest.phone
             enabled = userRequest.status?.let { it.name == "ACTIVE" } ?: enabled
-            // 更新角色关联
             roles.clear()
             userRequest.roleIds?.forEach { roleName ->
                 roleRepository.findByRoleName(roleName)?.let { role ->
@@ -97,15 +119,27 @@ class UserController(
         return ResponseEntity.ok(toDto(userService.update(entity)))
     }
 
+    /** Delete a user by business PK. No-op 204 if the user does not exist. */
     override fun deleteUser(userId: String): ResponseEntity<Unit> {
         userService.delete(userId)
         return ResponseEntity.noContent().build()
     }
 
+    /**
+     * Return the currently authenticated user + their derived coarse-grained access flags.
+     *
+     * Anonymous / missing authentication either:
+     *   - returns 401 in prod profiles
+     *   - returns a mock ADMIN user (see [mockAdminUser]) in local/dev so the frontend
+     *     can run locally without an identity provider.
+     *
+     * Role/permission extraction follows the Spring Security convention:
+     * authorities starting with `ROLE_` are roles, everything else is a fine-grained
+     * permission string.
+     */
     override fun getCurrentUser(): ResponseEntity<CurrentUser> {
         val auth = SecurityContextHolder.getContext().authentication
         if (auth == null || auth is AnonymousAuthenticationToken || !auth.isAuthenticated) {
-            // local / dev 环境下免鉴权，返回 mock admin 用户，方便前端直接调试
             if (isLocalOrDev) {
                 return ResponseEntity.ok(mockAdminUser())
             }
@@ -141,6 +175,7 @@ class UserController(
         })
     }
 
+    /** Synthetic local-dev user — full ADMIN + every fine-grained permission string. */
     private fun mockAdminUser(): CurrentUser = CurrentUser().apply {
         name = "local"
         avatar = ""
@@ -157,6 +192,7 @@ class UserController(
         }
     }
 
+    /** Entity → OpenAPI DTO mapper. Times are converted to epoch millis using the system TZ. */
     private fun toDto(entity: User): UserDto = UserDto(username = entity.username).apply {
         id = entity.username
         nickname = entity.nickname
@@ -164,7 +200,7 @@ class UserController(
         phone = entity.phone
         status = if (entity.enabled) UserDto.Status.ACTIVE else UserDto.Status.INACTIVE
         roles = entity.roles.map { it.roleName }.toMutableList()
-        createdAt = entity.createdAt.atZone(ZoneId.systemDefault()).toOffsetDateTime()
-        updatedAt = entity.updatedAt.atZone(ZoneId.systemDefault()).toOffsetDateTime()
+        createdAt = entity.createdAt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        updatedAt = entity.updatedAt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
     }
 }

@@ -1,3 +1,14 @@
+/**
+ * Protobuf [SchemaParser] that compiles `FileDescriptorProto` JSON (as
+ * produced by `protoc --descriptor_set_out --json_format`) into a
+ * [Descriptors.Descriptor] wrapped in the unified [Schema] envelope.
+ *
+ * A single FileDescriptorProto often ships several message types. See
+ * [selectMessageDescriptor] for the precedence rules used to pick the target.
+ *
+ * Blank / null raw inputs are normalised to the JSON object `"{}"`, yielding
+ * an empty schema that validates everything — matching JSON Schema semantics.
+ */
 package com.fluxion.schema.protobuf
 
 import com.fluxion.schema.api.SchemaParser
@@ -7,22 +18,16 @@ import com.google.protobuf.DescriptorProtos
 import com.google.protobuf.Descriptors
 import com.google.protobuf.util.JsonFormat
 import org.slf4j.LoggerFactory
+import org.slf4j.*
 
 /**
- * Protobuf Schema 解析器。
+ * Compiles Protobuf FileDescriptor JSON into a runtime [Schema].
  *
- * 接受 Protobuf FileDescriptorProto 的 JSON 表示（由 `protoc --descriptor_set_out --json_format` 生成），
- * 将其解析为 [Descriptors.Descriptor]（Message 级描述符）并封装在统一的 [Schema] 容器中。
- *
- * ### Message 选择规则
- *
- * FileDescriptorProto 可能包含多个 messageType，选择优先级：
- * 1. 如果指定了 name，优先匹配同名 message
- * 2. 否则选择第一个 messageType
- * 3. 如果没有 messageType，抛出异常
- *
- * 空 Schema（空白字符串 / "{}" / "null"）会被规范化，
- * 与 JSON Schema 的空 Schema 行为保持一致：校验时直接通过。
+ * ### Message selection precedence
+ * 1. Exact full-name match when the caller provides `name`.
+ * 2. Short-name (unqualified) match on the message.
+ * 3. Recursive search across nested types.
+ * 4. The first `messageType` in the file when no hint is given.
  */
 class ProtobufSchemaParser : SchemaParser {
 
@@ -31,12 +36,12 @@ class ProtobufSchemaParser : SchemaParser {
     override fun parse(name: String?, raw: String): Schema {
         val normalized = normalizeRaw(raw)
         return try {
-            // 1. 解析 FileDescriptorProto
             val fileProtoBuilder = DescriptorProtos.FileDescriptorProto.newBuilder()
             JsonFormat.parser().merge(normalized, fileProtoBuilder)
             val fileProto = fileProtoBuilder.build()
 
-            // 空 Schema：没有 messageType，返回空描述符
+            // Empty schemas (no message types defined) return the marker so
+            // downstream validators can short-circuit validation.
             if (fileProto.messageTypeCount == 0) {
                 return Schema(
                     name = name,
@@ -46,10 +51,11 @@ class ProtobufSchemaParser : SchemaParser {
                 )
             }
 
-            // 2. 构建 FileDescriptor（无外部依赖）
+            // Build with empty dependencies — this assumes the descriptor set
+            // was produced with all imports inlined, which is the convention
+            // for standalone `protoc --descriptor_set_out` outputs.
             val fileDescriptor = Descriptors.FileDescriptor.buildFrom(fileProto, emptyArray())
 
-            // 3. 选择目标 MessageDescriptor
             val messageDescriptor = selectMessageDescriptor(fileDescriptor, name)
                 ?: throw IllegalArgumentException(
                     "Message type not found: ${name ?: "(first)"}. " +
@@ -63,7 +69,7 @@ class ProtobufSchemaParser : SchemaParser {
                 parsed = messageDescriptor
             )
         } catch (e: Exception) {
-            log.error("Failed to parse Protobuf schema: ${e.message}", e)
+            log.error(e) { "Failed to parse Protobuf schema: ${e.message}" }
             throw IllegalArgumentException("Invalid Protobuf FileDescriptorProto JSON: ${e.message}", e)
         }
     }
@@ -79,12 +85,10 @@ class ProtobufSchemaParser : SchemaParser {
     }
 
     /**
-     * 选择目标 MessageDescriptor。
+     * Resolve a concrete message descriptor from a compiled FileDescriptor.
      *
-     * 优先级：
-     * 1. 精确匹配全名
-     * 2. 匹配短名
-     * 3. 返回第一个 messageType
+     * Falls back to the first declared message type when [name] is null so
+     * single-message schemas (the common case) never require an explicit hint.
      */
     private fun selectMessageDescriptor(
         fileDescriptor: Descriptors.FileDescriptor,
@@ -93,11 +97,8 @@ class ProtobufSchemaParser : SchemaParser {
         if (fileDescriptor.messageTypes.isEmpty()) return null
         if (name == null) return fileDescriptor.messageTypes[0]
 
-        // 精确匹配全名
         fileDescriptor.messageTypes.firstOrNull { it.fullName == name }?.let { return it }
-        // 匹配短名
         fileDescriptor.messageTypes.firstOrNull { it.name == name }?.let { return it }
-        // 嵌套匹配（简单实现：递归查找所有嵌套 message）
         return findNestedMessage(fileDescriptor.messageTypes, name)
     }
 
@@ -115,8 +116,8 @@ class ProtobufSchemaParser : SchemaParser {
     }
 
     /**
-     * 规范化原始输入：将 null / 空字符串 / 空对象统一视为空 Schema `"{}"`，
-     * 与 JSON Schema 的 empty schema 行为保持一致。
+     * Normalise the raw input so that blank/null/empty forms are treated
+     * identically — an empty JSON object that compiles to an empty schema.
      */
     private fun normalizeRaw(raw: String): String {
         val trimmed = raw.trim()
@@ -124,8 +125,8 @@ class ProtobufSchemaParser : SchemaParser {
     }
 
     /**
-     * 空 Protobuf 描述符标记对象。
-     * 用于表示空 Schema，校验时直接通过。
+     * Sentinel used as the [Schema.parsed] value for an empty Protobuf schema
+     * so validators can short-circuit without any extra flag.
      */
     object EmptyProtobufDescriptor
 }

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Button, Form, Input, message, Typography } from 'antd';
 import { LockOutlined, UserOutlined, PartitionOutlined } from '@ant-design/icons';
-import { apiPost } from '@/services/request';
+import { client, unwrap } from '@/sdk';
 import { useClickDebounce } from '@/utils/useClickDebounce';
 
 const { Title, Text } = Typography;
@@ -22,7 +22,9 @@ const LoginPage: React.FC = () => {
   const handleLogin = useClickDebounce(async (values: LoginForm) => {
     setLoading(true);
     try {
-      const res = await apiPost<LoginResponse>('/api/admin/auth/login', values);
+      const res = unwrap(
+        await client.POST('/api/admin/auth/login', { body: values as any }),
+      ) as unknown as LoginResponse;
       localStorage.setItem('workflow-admin-token', res.token);
       message.success('登录成功');
       window.location.href = '/';

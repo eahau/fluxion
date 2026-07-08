@@ -5,10 +5,12 @@ import com.fluxion.core.function.WorkflowFunction
 import org.springframework.stereotype.Component
 
 /**
- * Admin 内部函数组件。
+ * Declares the admin-internal `WorkflowFunction` implementations contributed via the
+ * pluggable `FunctionComponent` SPI.
  *
- * 将 admin 自举所需的工作流节点函数类注册到 [com.fluxion.core.function.FunctionRegistry]，
- * 由 [com.fluxion.di.FunctionInstanceProvider] 在注册阶段实例化并完成依赖注入。
+ * The listed classes are instantiated by `com.fluxion.di.FunctionInstanceProvider` during
+ * registry bootstrap, which wires their Spring dependencies and registers them under the
+ * `admin:*` function-reference prefixes in `com.fluxion.core.function.FunctionRegistry`.
  */
 @Component
 class AdminFunctionComponent : FunctionComponent {

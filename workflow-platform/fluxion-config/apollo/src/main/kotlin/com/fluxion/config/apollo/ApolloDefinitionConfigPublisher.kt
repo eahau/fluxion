@@ -5,7 +5,7 @@ import com.fluxion.adapter.spi.config.DefinitionConfigPublisher
 import org.slf4j.*
 
 /**
- * Apollo 实现 — 工作流定义发布器（Admin 侧）
+ * Apollo 瀹炵幇 鈥?宸ヤ綔娴佸畾涔夊彂甯冨櫒锛圓dmin 渚э級
  */
 class ApolloDefinitionConfigPublisher(
     private val openApiClient: ApolloOpenApiClient,

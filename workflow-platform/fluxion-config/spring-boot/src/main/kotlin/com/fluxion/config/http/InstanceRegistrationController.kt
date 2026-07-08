@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 
 /**
- * HTTP 注册端点 — Admin 侧
+ * HTTP 娉ㄥ唽绔偣 鈥?Admin 渚?
  */
 @RestController
 @RequestMapping("/internal/workflow/registry")

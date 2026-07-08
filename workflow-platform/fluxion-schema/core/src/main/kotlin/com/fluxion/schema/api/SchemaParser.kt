@@ -3,27 +3,37 @@ package com.fluxion.schema.api
 import com.fluxion.schema.model.Schema
 
 /**
- * Schema 解析器，将原始 Schema 文本编译为统一的 [Schema] 对象。
+ * Schema parser SPI — converts raw schema source text (or a structured object)
+ * into a compiled, format-specific [Schema] envelope.
  *
- * 格式路由由 [ParserBinding] 在 Spring 装配层声明，SPI 本身不感知格式。
+ * One implementation exists per format (JSON Schema, Protobuf, Avro). The
+ * core module never binds parsers to formats directly; the Spring Boot
+ * auto-config module assembles format bundles and the [DefaultSchemaManager]
+ * routes by [SchemaFormat] at runtime.
  */
 interface SchemaParser {
 
     /**
-     * 从字符串解析 Schema。
+     * Parses a schema from raw source text.
      *
-     * @param name 注册名，内联 schema 可为 null
-     * @param raw 原始 Schema 文本
-     * @return 编译后的 Schema 对象
+     * @param name registered lookup name (optional — `null` for inline
+     *              schemas such as node-level rules).
+     * @param raw  the schema source: a JSON string for JSON Schema / Avro /
+     *              Protobuf FileDescriptorProto JSON.
+     * @return a compiled [Schema] whose `parsed` field carries the
+     *         format-specific validator object.
      */
     fun parse(name: String?, raw: String): Schema
 
     /**
-     * 从对象解析 Schema（兼容 JSON Map、POJO 等）。
+     * Parses a schema from a structured object (Map, POJO, JsonNode, etc.).
      *
-     * @param name 注册名，内联 schema 可为 null
-     * @param raw 原始 Schema 对象
-     * @return 编译后的 Schema 对象
+     * The default implementation round-trips through JSON serialization;
+     * format-specific parsers can override for efficiency when the input
+     * is already in a convenient shape.
+     *
+     * @param name registered lookup name, or `null` for inline schemas.
+     * @param raw  structured schema object.
      */
     fun parse(name: String?, raw: Any): Schema
 }

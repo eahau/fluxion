@@ -1,7 +1,7 @@
 package com.fluxion.config.http
 
 /**
- * HTTP 工作流定义推送的 payload 结构（Admin → Worker）
+ * HTTP 宸ヤ綔娴佸畾涔夋帹閫佺殑 payload 缁撴瀯锛圓dmin 鈫?Worker锛?
  */
 data class HttpDefinitionPushPayload(
     val workflowId: String,

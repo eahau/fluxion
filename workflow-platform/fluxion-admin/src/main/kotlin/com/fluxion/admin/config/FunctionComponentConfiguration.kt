@@ -11,17 +11,19 @@ import org.springframework.stereotype.Component
 import java.util.ServiceLoader
 
 /**
- * 第三方函数自动注册配置
+ * Bootstraps pluggable `FunctionComponent` implementations into the admin-side
+ * `FunctionRegistry` once all Spring singletons have been constructed.
  *
- * 通过 [FunctionComponent] SPI 批量注册第三方函数，支持两种发现方式：
- *   - Spring Bean（@Component / @Bean）
- *   - Java ServiceLoader（META-INF/services，适用于非 Spring 项目）
+ * Discovery order:
+ *   1. Spring-managed `FunctionComponent` beans injected via the constructor.
+ *   2. `ServiceLoader`-discovered components on the classpath (de-duplicated against
+ *      the Spring-discovered set so the same class never runs twice).
  *
- * 内置函数由各自的 AutoConfiguration 注册（BuiltinConfig、RedisWorkflowAutoConfiguration 等），
- * 此配置仅处理第三方扩展。
- *
- * 使用 [SmartInitializingSingleton] 确保所有内置函数注册器先执行完成，
- * 避免第三方函数覆盖内置函数。
+ * Each component may contribute functions either by returning pre-built `WorkflowFunction`
+ * instances or by declaring function classes that are instantiated via the optional
+ * `FunctionInstanceProvider` DI bridge (falling back to reflection when the bridge is
+ * absent). Duplicate function names are skipped with a warning because built-in functions
+ * are not meant to be overridden.
  */
 @Component
 class FunctionComponentConfiguration(
@@ -33,33 +35,31 @@ class FunctionComponentConfiguration(
     private val log = LoggerFactory.getLogger(javaClass)
 
     override fun afterSingletonsInstantiated() {
-        // 合并 Spring Bean + ServiceLoader 发现的组件（按类去重）
         val springClasses = components.map { it::class }.toSet()
         val spiComponents = ServiceLoader.load(FunctionComponent::class.java)
             .filter { it::class !in springClasses }
 
         (components + spiComponents).forEach { component ->
-            component.initialize(emptyMap())
+            runCatching { component.initialize(emptyMap()) }
+                .onFailure { log.warn(it) { "FunctionComponent[${component.componentName()}] initialize failed" } }
 
-            // 1. 处理已构造好的函数实例（向后兼容）
             component.functions().forEach { function ->
-                val meta = function.meta()
-                register(meta.name, meta, function, "component [${component.componentName()}]")
+                val meta = FunctionMeta.of(function.functionName)
+                register(meta.functionName, meta, function, "component [${component.componentName()}]")
             }
 
-            // 2. 处理函数类，由 DI 容器实例化并注入依赖
             component.functionClasses().forEach { functionClass ->
                 val function = instanceProvider?.getInstance(functionClass)
                     ?: functionClass.getDeclaredConstructor().newInstance()
-                val meta = function.meta()
-                register(meta.name, meta, function, "component [${component.componentName()}] class [${functionClass.name}]")
+                val meta = FunctionMeta.of(function.functionName)
+                register(meta.functionName, meta, function, "component [${component.componentName()}] class [${functionClass.name}]")
             }
         }
     }
 
     private fun register(name: String, meta: FunctionMeta, function: WorkflowFunction<*>, source: String) {
         if (registry.contains(name)) {
-            log.warn { "Function [$name] from $source skipped — name already registered (builtin functions cannot be overridden)" }
+            log.warn { "Function [$name] from $source skipped - name already registered (builtin functions cannot be overridden)" }
             return
         }
         registry.register(name, meta, function)

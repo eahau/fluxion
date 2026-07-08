@@ -7,30 +7,24 @@ import com.fluxion.core.util.JsonUtil
 import com.fluxion.adapter.http.core.RouteChangeListener
 import com.fluxion.adapter.http.core.RouteConfigStore
 import org.slf4j.*
-
 /**
- * Apollo 路由配置存储实现
+ * Apollo-backed HTTP route configuration store.
  *
- * admin 后台发布 HTTP 接口后，将路由配置写入 Apollo：
- *   - namespace: workflow.http.routes（可配置）
- *   - key:       routes（JSON 数组字符串）
+ * After the Admin console publishes HTTP routes, it writes them to Apollo
+ * under a configurable namespace (default: `workflow.http.routes`). The
+ * actual content is stored under one key (default: `routes`) and supports
+ * two JSON shapes at runtime for backwards compatibility:
  *
- * Apollo 命名空间内容格式（properties 格式，routes key 存放 JSON）：
- * ```properties
- * routes=[{"routeKey":"POST:/api/user/login","path":"/api/user/login","method":"POST","workflowId":"user-login-workflow","enabled":true}]
- * ```
+ * 1. **Raw JSON array** (used when namespace is configured as `json` format):
+ *    ```properties
+ *    routes=[{"routeKey":"POST:/api/user/login","path":"/api/user/login","method":"POST","workflowId":"user-login-workflow","enabled":true}]
+ *    ```
  *
- * 或使用 JSON 格式命名空间：
- * ```json
- * {
- *   "routes": [
- *     { "routeKey": "POST:/api/user/login", "path": "/api/user/login", "method": "POST", "workflowId": "user-login-workflow", "enabled": true }
- *   ]
- * }
- * ```
+ * 2. **Object wrapper `{routes:[...]}`** (used by properties-format namespaces or
+ *    the Apollo UI when pasting a JSON document).
  *
- * @param config      Apollo Config 对象（由 Apollo Spring Boot SDK 自动注入）
- * @param routesKey   Apollo 配置 key（默认 routes）
+ * @param config    Apollo `Config` instance (auto-injected by Apollo Spring Boot SDK via the ApolloConfiguration in the Spring MVC auto-config).
+ * @param routesKey Apollo property key holding the route JSON (default: `routes`).
  */
 class ApolloRouteConfigStore(
     private val config:        Config,
@@ -38,6 +32,8 @@ class ApolloRouteConfigStore(
 ) : RouteConfigStore {
 
     private val log = LoggerFactory.getLogger(javaClass)
+
+    // ----- RouteConfigStore ---------------------------------------------------
 
     override fun loadAll(): List<HttpRouteDefinition> {
         val value = config.getProperty(routesKey, null)
@@ -64,17 +60,29 @@ class ApolloRouteConfigStore(
                         log.info { "Apollo config change key [$routesKey]: ${routes.size} routes received." }
                         listener.onRoutesChanged(routes)
                     } catch (ex: Exception) {
-                        log.error(ex) { "Failed to parse Apollo config change key [$routesKey]: ${ex.message}" }
+                        log.error(ex) { "Failed to parse Apollo config change key [$routesKey]" }
                     }
                 }
             }
         }
+        // Key-scoped listener — Apollo only fires this change-listener when the
+        // watched key actually mutates, not for unrelated property churn, which
+        // avoids unnecessary diff churn on the registry.
         config.addChangeListener(changeListener, setOf(routesKey))
         log.info { "Started watching Apollo config key [$routesKey] for HTTP route changes." }
     }
 
+    // ----- Parsing -------------------------------------------------------------
+
+    /**
+     * Parse either a raw JSON array `[{...}]` OR an object wrapper
+     * `{"routes":[{...}]}` into the list of route definitions.
+     *
+     * Tolerance here means the platform works regardless of whether the
+     * operator used the Apollo "JSON namespace" vs "properties namespace"
+     * flow when setting up the config.
+     */
     private fun parseRoutes(value: String): List<HttpRouteDefinition> {
-        // 支持两种格式：JSON 数组 [...] 或对象 {"routes": [...]}
         val trimmed = value.trim()
         return if (trimmed.startsWith("[")) {
             JsonUtil.deserializeList(trimmed, HttpRouteDefinition::class.java)

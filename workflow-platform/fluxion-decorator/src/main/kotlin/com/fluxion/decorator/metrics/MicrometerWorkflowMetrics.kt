@@ -7,7 +7,11 @@ import io.micrometer.core.instrument.Timer
 import java.util.concurrent.TimeUnit
 
 /**
- * WorkflowMetrics 鐨?Micrometer 瀹炵幇
+ * Micrometer-backed implementation of [WorkflowMetrics].
+ *
+ * Emits the standard set of counters + timers documented on the interface;
+ * unknown / null tag values are normalised to the literal `"unknown"` so
+ * dashboards never see missing tag cardinalities.
  */
 class MicrometerWorkflowMetrics(private val meterRegistry: MeterRegistry) : WorkflowMetrics {
 

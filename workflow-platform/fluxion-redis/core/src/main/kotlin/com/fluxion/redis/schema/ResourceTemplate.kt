@@ -6,16 +6,23 @@ import org.slf4j.*
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * 资源模板 — 对应 wf_resource_template 表
+ * Named template for a resource address (Redis key, MQ topic, HTTP endpoint, ...)
+ * that is rendered per-invocation from workflow variables.
+ *
+ * Mirrors the logical `wf_resource_template` table; templates are typically loaded
+ * from database seed data or from an external catalog and registered into
+ * `ResourceTemplateRegistry` at startup.
+ *
+ * @property name         stable unique identifier used to reference the template from workflow nodes.
+ * @property resourceType one of the supported resource categories in [ResourceType].
+ * @property template     pattern string with `${variable}` placeholders that will be
+ *                        substituted during `render(..)`.
+ * @property config       optional free-form config map (TTL, timeout, retry policy, etc.).
  */
 data class ResourceTemplate(
-    /** 资源名称（唯一标识） */
     val name: String,
-    /** 资源类型 */
     val resourceType: ResourceType,
-    /** 模板字符串，支持 ${variable} 占位符 */
     val template: String,
-    /** 额外配置（如 TTL、超时时间等） */
     val config: Map<String, Any>? = null
 ) {
     enum class ResourceType {
@@ -24,9 +31,7 @@ data class ResourceTemplate(
         HTTP_ENDPOINT
     }
 
-    /**
-     * 渲染模板，将 ${variable} 替换为实际值
-     */
+    /** Substitute every `${key}` occurrence in [template] using the supplied variable map. */
     fun render(variables: Map<String, String>): String {
         var result = template
         for ((k, v) in variables) {
@@ -36,22 +41,26 @@ data class ResourceTemplate(
     }
 
     /**
-     * 获取配置项（带默认值）
+     * Read a single config entry with a compile-time-inferred type and a caller-supplied
+     * default when the key is absent or cannot be cast.
      */
     inline fun <reified T> getConfig(key: String, defaultValue: T): T {
         if (config == null || !config.containsKey(key)) return defaultValue
         return config[key].castOrNull<T>() ?: defaultValue
     }
 
-    /** 获取 TTL（秒），默认 0 表示无过期 */
+    /** Convenience helper: Redis key TTL in seconds (0 = never expire). */
     fun getTtlSeconds(): Long = getConfig("ttlSeconds", 0L)
 
-    /** 获取超时时间（毫秒），默认 5000ms */
+    /** Convenience helper: HTTP / lock timeout in milliseconds (default 5s). */
     fun getTimeoutMs(): Int = getConfig("timeoutMs", 5000)
 }
 
 /**
- * 资源模板注册中心 — 管理 wf_resource_template 表中的所有资源定义
+ * In-memory catalog of `ResourceTemplate` instances plus convenience render helpers.
+ *
+ * Concurrent safe (backed by `ConcurrentHashMap`). Designed for single-writer registration
+ * during Spring context refresh and multi-reader lookup during hot workflow execution.
  */
 class ResourceTemplateRegistry {
 
@@ -70,16 +79,18 @@ class ResourceTemplateRegistry {
     fun get(name: String): ResourceTemplate? = templates[name]
 
     fun require(name: String): ResourceTemplate =
-        templates[name] ?: throw IllegalArgumentException("Resource template not found: $name")
+        templates[name] ?: throw IllegalArgumentException("Resource template not found: `$name")
 
     fun renderRedisKey(templateName: String, variables: Map<String, String>): String {
         return renderRedisKey(templateName, null, "", variables)
     }
 
     /**
-     * 渲染 REDIS_KEY 模板，并按 {appName:domain}:businessKey 规范包装。
+     * Render a `REDIS_KEY` template and wrap the business key following the convention
+     * `{appName:domain}:businessKey` so cluster hash-tags colocate related data.
      *
-     * 模板本身通常只描述业务键部分；appName/domain 由调用方从工作流定义/执行元信息提供。
+     * The caller supplies `appName` / `domain` from `ExecutionMeta`; the template itself
+     * only expresses the business suffix (e.g. `user:${userId}:profile`).
      */
     fun renderRedisKey(
         templateName: String,

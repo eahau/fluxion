@@ -3,17 +3,38 @@ package com.fluxion.runtime.core.provider
 import com.fluxion.core.model.WorkflowDefinition
 
 /**
- * 工作流定义提供者 SPI — 适配器层路由查找的最小契约
+ * Read-only view of published workflow definitions — minimal abstraction
+ * consumed by adapter-layer routers to locate a definition before execution.
  *
- * 作为 [WorkflowDefinition] 的只读领域视图：
- * - [get]：按 workflowId 获取已解析的工作流定义
- * - [findByBinding]：反向索引（protocol + bindKey → workflowId）
+ * Design goal: this SPI lives in `fluxion-runtime-core` and only depends on
+ * `fluxion-core` types. Concrete implementations are supplied by the
+ * integration layer:
+ * - Worker (data plane): [ConfigBackedDefinitionProvider] backed by Apollo/Nacos
+ * - Admin (control plane): direct DB-backed implementation
+ * - Tests/standalone: in-memory map
  *
- * 此接口仅依赖 [fluxion-core] 类型，与配置中心无关。
- * 配置中心只是其中一种实现来源（见 ConfigBackedDefinitionProvider），
- * 控制面（WfDefinitionService）则直接从 DB 提供。
+ * Two lookup directions are intentionally supported:
+ * - [get]: fetch a parsed definition by its primary key `workflowId`
+ * - [findByBinding]: reverse index from protocol+bindKey to `workflowId`,
+ *   enabling routing decisions without loading full DAGs.
  */
 interface DefinitionProvider {
+
+    /**
+     * Fetch a fully-parsed workflow definition by its `workflowId`.
+     *
+     * @param key workflowId
+     * @return Parsed definition, or null if the id is unknown / unpublished
+     */
     fun get(key: String): WorkflowDefinition?
+
+    /**
+     * Reverse-index lookup: find the `workflowId` bound to a given
+     * protocol-type / bind-key pair.
+     *
+     * @param protocol Upper-case protocol family ("HTTP", "KAFKA", "DUBBO", ...)
+     * @param bindKey  Protocol-specific route key (HTTP path, Kafka topic, Dubbo serviceKey)
+     * @return workflowId that matches the binding, or null if nothing is bound
+     */
     fun findByBinding(protocol: String, bindKey: String): String?
 }

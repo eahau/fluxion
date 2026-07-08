@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPut, apiDelete } from './request';
+import { client, unwrap } from '@/sdk';
 import type { PageResponse } from '@/types/api';
 
 export interface Role {
@@ -19,21 +19,35 @@ export interface RoleRequest {
 }
 
 export async function listRoles(params?: { keyword?: string; page?: number; pageSize?: number }) {
-  return apiGet<PageResponse<Role>>('/api/admin/roles', params);
+  return unwrap(
+    await client.GET('/api/admin/roles', { params: { query: params ?? {} } }),
+  ) as PageResponse<Role>;
 }
 
 export async function getRole(roleId: string) {
-  return apiGet<Role>(`/api/admin/roles/${roleId}`);
+  return unwrap(
+    await client.GET('/api/admin/roles/{roleId}', { params: { path: { roleId } } }),
+  ) as Role;
 }
 
 export async function createRole(data: RoleRequest) {
-  return apiPost<Role>('/api/admin/roles', data);
+  return unwrap(
+    await client.POST('/api/admin/roles', { body: data as any }),
+  ) as Role;
 }
 
 export async function updateRole(roleId: string, data: RoleRequest) {
-  return apiPut<Role>(`/api/admin/roles/${roleId}`, data);
+  return unwrap(
+    await client.PUT('/api/admin/roles/{roleId}', {
+      params: { path: { roleId } },
+      body: data as any,
+    }),
+  ) as Role;
 }
 
 export async function deleteRole(roleId: string) {
-  return apiDelete<void>(`/api/admin/roles/${roleId}`);
+  unwrap(
+    await client.DELETE('/api/admin/roles/{roleId}', { params: { path: { roleId } } }),
+  );
+  return undefined as void;
 }

@@ -3,8 +3,9 @@ package com.fluxion.function.spring.boot
 import com.fluxion.core.function.FunctionComponent
 import com.fluxion.core.function.FunctionRegistry
 import com.fluxion.core.function.WorkflowFunction
+import com.fluxion.core.value.FunctionMeta
 import com.fluxion.di.FunctionInstanceProvider
-import org.slf4j.LoggerFactory
+import org.slf4j.*
 import org.springframework.beans.factory.SmartInitializingSingleton
 import java.util.ServiceLoader
 
@@ -42,30 +43,29 @@ class FunctionComponentConfiguration(
             .filter { it::class !in springClasses }
 
         (components + spiComponents).forEach { component ->
-            component.initialize(emptyMap())
+            runCatching { component.initialize(emptyMap()) }
+                .onFailure { log.warn(it) { "FunctionComponent[${component.componentName()}] initialize failed" } }
 
             component.functions().forEach { function ->
-                val name = function.functionName
-                register(name, function, "component [${component.componentName()}]")
+                val meta = FunctionMeta.of(function.functionName)
+                register(meta.functionName, meta, function, "component [${component.componentName()}]")
             }
 
             component.functionClasses().forEach { functionClass ->
                 val function = instanceProvider?.getInstance(functionClass)
                     ?: functionClass.getDeclaredConstructor().newInstance()
-                val name = function.functionName
-                register(name, function, "component [${component.componentName()}] class [${functionClass.name}]")
+                val meta = FunctionMeta.of(function.functionName)
+                register(meta.functionName, meta, function, "component [${component.componentName()}] class [${functionClass.name}]")
             }
         }
     }
 
-    private fun register(name: String, function: WorkflowFunction<*>, source: String) {
+    private fun register(name: String, meta: FunctionMeta, function: WorkflowFunction<*>, source: String) {
         if (registry.contains(name)) {
-            // Built-in functions take precedence; custom code cannot shadow them to
-            // prevent subtle breakage when upgrading the platform.
-            log.warn { "Function [$name] from $source skipped — name already registered (builtin functions cannot be overridden)" }
+            log.warn { "Function [$name] from $source skipped - name already registered (builtin functions cannot be overridden)" }
             return
         }
-        registry.register(name, function)
+        registry.register(name, meta, function)
         log.info { "Registered function [$name] from $source" }
     }
 }

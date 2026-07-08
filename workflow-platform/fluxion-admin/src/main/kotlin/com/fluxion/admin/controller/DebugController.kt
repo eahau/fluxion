@@ -24,16 +24,31 @@ import org.springframework.web.bind.annotation.RestController
 import com.fluxion.core.engine.DagExecutor
 
 /**
- * Debug / 重放 REST 控制器
+ * Workflow debugger REST controller — stateless (no server-side debug sessions).
  *
- * 接口设计（无服务端 Session）：
- *   POST /api/admin/debug/start           启动调试会话（执行工作流，返回 DebugSnapshot）
- *   POST /api/admin/debug/step            单步执行（body: DebugSnapshot → 返回新 DebugSnapshot）
- *   POST /api/admin/debug/continue        执行到下一个断点（body: DebugSnapshot）
- *   POST /api/admin/debug/mock            设置函数 Mock（body: MockRequest → 返回新 DebugSnapshot）
- *   POST /api/admin/executions/{id}/rerun 从指定节点重放（body: RerunRequest）
- *   GET  /api/admin/executions            列出执行快照（?workflowId=&page=&size=）
- *   GET  /api/admin/executions/{id}       查看执行快照详情
+ * Debug contract (the client holds the entire DebugSnapshot as state and passes it
+ * on every request):
+ *   - `POST /debug/start`      → execute the full workflow, return a DebugSnapshot
+ *   - `POST /debug/step`       → advance one node
+ *   - `POST /debug/continue`   → advance to the next breakpoint or end
+ *   - `POST /debug/mock`       → inject a MockRule into an existing DebugSnapshot
+ *   - `POST /executions/{id}/rerun` → replay from a specific node id
+ *
+ * Every mutating endpoint wraps its work in [DebugSecurityGuard] try/finally which
+ * rate-limits one active debug session per JVM / per-client token to avoid resource
+ * exhaustion from rogue UI tabs.
+ *
+ * Companion execution-observation endpoints:
+ *   - `GET /executions/{id}/query`   → current status (RUNNING / COMPLETED / FAILED)
+ *   - `GET /executions/running`      → list of in-flight executions
+ *   - `GET /executions`              → paginated snapshot listing
+ *   - `GET /executions/{id}`         → snapshot detail
+ *   - `POST /executions/{id}/signals`→ send a signal to a waiting execution
+ *
+ * Collaborates with: DebugService (pure debug state machine — no Spring dependency),
+ * DagExecutor (initial execution for debug/start), ExecutionTracker (running execs),
+ * SignalBroker (signal delivery to wait nodes), DebugSecurityGuard (concurrency),
+ * WfDefinitionService (load definitions by id), WfExecutionSnapshotService (snapshots).
  */
 @RestController
 @RequestMapping("/api/admin")
@@ -47,11 +62,16 @@ class DebugController(
     private val executionTracker: ExecutionTracker
 ) {
 
-    // ─── Debug Session ────────────────────────────────────────────
+    // ─── Debug Session endpoints ────────────────────────────────────
 
     /**
-     * 启动调试会话：执行一次完整工作流，返回初始 DebugSnapshot
-     * Body: { workflowId, params?, breakpoints? }
+     * Start a debugging session by running the workflow from scratch.
+     *
+     * Acquires the single-instance debug lock via [DebugSecurityGuard], executes the
+     * workflow via [DagExecutor], persists a snapshot for later re-inspection, then
+     * hands the EngineResult to DebugService.createSnapshot which prepares the first
+     * paused-at-head state. Breakpoints (node ids) can be pre-seeded so the UI can
+     * immediately call /continue to jump to the first interesting node.
      */
     @PostMapping("/debug/start")
     suspend fun debugStart(
@@ -66,7 +86,6 @@ class DebugController(
 
             val result = dagExecutor.execute(def, req.params ?: emptyMap())
 
-            // 持久化快照
             snapshotService.save(result, def.id, def.version)
 
             val snap = debugService.createSnapshot(
@@ -78,10 +97,7 @@ class DebugController(
         }
     }
 
-    /**
-     * 单步执行：执行快照中的下一个节点
-     * Body: DebugSnapshot（客户端保持状态）
-     */
+    /** Step forward one node (client passes the full DebugSnapshot). */
     @PostMapping("/debug/step")
     suspend fun debugStep(
         @RequestBody snap: DebugSnapshot,
@@ -95,10 +111,7 @@ class DebugController(
         }
     }
 
-    /**
-     * 继续执行到下一个断点（或工作流末尾）
-     * Body: DebugSnapshot
-     */
+    /** Continue execution from the current paused node until a breakpoint or terminal state. */
     @PostMapping("/debug/continue")
     suspend fun debugContinue(
         @RequestBody snap: DebugSnapshot,
@@ -113,8 +126,11 @@ class DebugController(
     }
 
     /**
-     * 设置/更新 Mock（在已有 DebugSnapshot 上注入 Mock 规则并返回新 Snapshot）
-     * Body: { snapshot, rule }
+     * Inject a [MockRule] into an existing snapshot and return a new snapshot.
+     *
+     * Uses the round-trip pattern: deserialize snapshot → mutate mock context →
+     * serialize back. All existing executed-node outputs are preserved so the user
+     * does not have to re-run the workflow from scratch just to add a mock.
      */
     @PostMapping("/debug/mock")
     fun debugMock(
@@ -137,11 +153,12 @@ class DebugController(
         }
     }
 
-    // ─── Rerun ───────────────────────────────────────────────────
+    // ─── Rerun from node ───────────────────────────────────────────
 
     /**
-     * 从指定节点重放执行
-     * Body: { nodeId, overrideInput? }
+     * Partial rerun: starting from [RerunRequest.nodeId]. All upstream node outputs
+     * are loaded from the original snapshot. Useful for fixing a script function
+     * and re-running only the downstream nodes without the full workflow cost.
      */
     @PostMapping("/executions/{executionId}/rerun")
     suspend fun rerun(
@@ -164,14 +181,14 @@ class DebugController(
         }
     }
 
-    // ─── 执行记录查询 ─────────────────────────────────────────────
-
-    // ─── Signal/Query ──────────────────────────────────────────
+    // ─── Signal / Query endpoints ──────────────────────────────────
 
     /**
-     * 发送信号到运行中的工作流执行
-     * POST /api/admin/executions/{executionId}/signals
-     * Body: { signalName, payload? }
+     * Send an ad-hoc signal to a running execution (simpler version of the
+     * generated ExecutionsApi.sendSignal — different payload shape).
+     *
+     * Returns the delivery status as a structured response instead of the
+     * generated 3-level enum model.
      */
     @PostMapping("/executions/{executionId}/signals")
     fun sendSignal(
@@ -187,8 +204,10 @@ class DebugController(
     }
 
     /**
-     * 查询运行中工作流的状态
-     * GET /api/admin/executions/{executionId}/query
+     * Combined "what's the status of this execution" query — checks live running
+     * state first (via [ExecutionTracker]), falls back to persisted snapshot when
+     * the execution has already completed. Running executions additionally include
+     * signal queues so the user can wait for approvals.
      */
     @GetMapping("/executions/{executionId}/query")
     fun queryExecution(
@@ -196,7 +215,6 @@ class DebugController(
     ): ResponseEntity<ApiResponse<Any>> {
         val running = executionTracker.getRunning(executionId)
         if (running == null) {
-            // 已完成，查快照
             val snap = snapshotService.findByExecutionIdRaw(executionId)
                 ?: return ResponseEntity.notFound().build()
             return ResponseEntity.ok(ApiResponse.ok(mapOf(
@@ -228,8 +246,8 @@ class DebugController(
     }
 
     /**
-     * 列出所有运行中的执行
-     * GET /api/admin/executions/running
+     * List every currently running execution in this JVM (plus its signal queue state).
+     * Useful for the admin "activity monitor" sidebar.
      */
     @GetMapping("/executions/running")
     fun listRunningExecutions(): ResponseEntity<ApiResponse<Any>> {
@@ -244,12 +262,9 @@ class DebugController(
         )}))
     }
 
-    // ─── 执行记录查询（原有） ─────────────────────────────────────
+    // ─── Execution snapshot list / detail (hand-written variant) ───
 
-    /**
-     * 分页查询执行快照列表
-     * ?workflowId=xxx&page=0&size=20
-     */
+    /** Paginated snapshot list (compatible with the debug UI sidebar). */
     @GetMapping("/executions")
     fun listExecutions(
         @RequestParam(required = false) workflowId: String?,
@@ -270,9 +285,7 @@ class DebugController(
         )))
     }
 
-    /**
-     * 查看单次执行快照详情
-     */
+    /** One snapshot detail (full JSON payloads) for the trace inspector. */
     @GetMapping("/executions/{executionId}")
     fun getExecution(
         @PathVariable executionId: String
@@ -282,41 +295,44 @@ class DebugController(
         return ResponseEntity.ok(ApiResponse.ok(snap.toDetailDto()))
     }
 
-    // ─── DTO ─────────────────────────────────────────────────────
+    // ─── Inline Request / Response DTOs ────────────────────────────
 
-    /** 启动调试会话请求体 */
+    /** Debug session starter payload. */
     data class DebugStartRequest(
         val workflowId: String,
         val params: Map<String, Any>? = null,
         val breakpoints: List<String>? = null
     )
 
-    /** 设置/更新 Mock 规则请求体 */
+    /** Apply a mock rule to an existing debug snapshot. */
     data class MockRequest(
         val snapshot: DebugSnapshot,
         val rule: MockRule
     )
 
-    /** 从指定节点重放请求体 */
+    /** Node-level rerun payload (optionally override the node's input value). */
     data class RerunRequest(
         val nodeId: String,
         val overrideInput: Any? = null
     )
 
-    /** 重放执行结果 DTO */
+    /** Node rerun summary DTO returned to the UI. */
     data class RerunResultDto(
         val nodeCount: Int,
         val success: Boolean,
         val traceIds: List<String>
     )
 
-    /** 发送信号请求体 */
+    /** Generic signal delivery payload. */
     data class SignalRequest(
         val signalName: String,
         val payload: Any? = null
     )
 
-    /** 统一 API 响应包装（success + data/error） */
+    /**
+     * Standard envelope for every hand-written endpoint response. Ensures uniform
+     * `{ success, data | error }` shape the debug UI relies on.
+     */
     data class ApiResponse<T>(
         val success: Boolean,
         val data: T? = null,
@@ -328,9 +344,9 @@ class DebugController(
         }
     }
 
-    // ─── Entity → DTO 扩展 ───────────────────────────────────────
+    // ─── Snapshot entity → DTO extension helpers ────────────────────
 
-    /** 快照实体 → 列表摘要 DTO（仅含关键字段） */
+    /** Minimal summary fields used by the list page (no large JSON blobs). */
     private fun com.fluxion.admin.entity.WfExecutionSnapshot.toSummaryDto() = mapOf(
         "executionId"     to executionId,
         "workflowId"      to workflowId,
@@ -340,7 +356,7 @@ class DebugController(
         "createdAt"       to createdAt
     )
 
-    /** 快照实体 → 详情 DTO（含完整 JSON 字段） */
+    /** Detail view payload — includes the raw JSON inputs / nodeOutputs / trace strings. */
     private fun com.fluxion.admin.entity.WfExecutionSnapshot.toDetailDto() = mapOf(
         "executionId"     to executionId,
         "workflowId"      to workflowId,

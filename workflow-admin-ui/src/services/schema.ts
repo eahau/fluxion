@@ -1,4 +1,5 @@
-import { apiGet, apiPost, apiPut, apiDelete } from './request';
+import { client, unwrap, silentHeaders } from '@/sdk';
+import { apiPost } from './request';
 import type { SchemaDefinition } from '@/types/schema';
 import type { RequestOptions } from './request';
 
@@ -12,11 +13,21 @@ export async function getSchemas(
   params?: { keyword?: string; schemaType?: string; page?: number; pageSize?: number },
   options?: RequestOptions,
 ) {
-  return apiGet<API.PageResponse<SchemaDefinition>>('/api/admin/schemas', params, options);
+  return unwrap(
+    await client.GET('/api/admin/schemas', {
+      params: { query: params ?? {} },
+      headers: silentHeaders(options),
+    }),
+  ) as unknown as API.PageResponse<SchemaDefinition>;
 }
 
 export async function getSchema(id: string, options?: RequestOptions) {
-  const result = await apiGet<SchemaDefinition>(`/api/admin/schemas/${id}`, undefined, options);
+  const result = unwrap(
+    await client.GET('/api/admin/schemas/{schemaName}', {
+      params: { path: { schemaName: id } },
+      headers: silentHeaders(options),
+    }),
+  ) as SchemaDefinition;
   if (result) {
     const key = String(result.id || (result as any).schemaName || id);
     schemaMemoryCache.set(key, result);
@@ -25,7 +36,12 @@ export async function getSchema(id: string, options?: RequestOptions) {
 }
 
 export async function createSchema(data: SchemaDefinition, options?: RequestOptions) {
-  const result = await apiPost<SchemaDefinition>('/api/admin/schemas', data, options);
+  const result = unwrap(
+    await client.POST('/api/admin/schemas', {
+      body: data as any,
+      headers: silentHeaders(options),
+    }),
+  ) as SchemaDefinition;
   if (result) {
     const key = String(result.id || (result as any).schemaName);
     schemaMemoryCache.set(key, result);
@@ -34,7 +50,13 @@ export async function createSchema(data: SchemaDefinition, options?: RequestOpti
 }
 
 export async function updateSchema(id: string, data: SchemaDefinition, options?: RequestOptions) {
-  const result = await apiPut<SchemaDefinition>(`/api/admin/schemas/${id}`, data, options);
+  const result = unwrap(
+    await client.PUT('/api/admin/schemas/{schemaName}', {
+      params: { path: { schemaName: id } },
+      body: data as any,
+      headers: silentHeaders(options),
+    }),
+  ) as SchemaDefinition;
   if (result) {
     const key = String(result.id || (result as any).schemaName || id);
     schemaMemoryCache.set(key, result);
@@ -43,9 +65,14 @@ export async function updateSchema(id: string, data: SchemaDefinition, options?:
 }
 
 export async function deleteSchema(id: string, options?: RequestOptions) {
-  const result = await apiDelete<void>(`/api/admin/schemas/${id}`, options);
+  unwrap(
+    await client.DELETE('/api/admin/schemas/{schemaName}', {
+      params: { path: { schemaName: id } },
+      headers: silentHeaders(options),
+    }),
+  );
   schemaMemoryCache.delete(String(id));
-  return result;
+  return undefined as void;
 }
 
 export interface ColumnMetadata {
@@ -80,43 +107,57 @@ export interface ForeignKeysResult {
 }
 
 export async function getTables(dataSource?: string, options?: RequestOptions) {
-  return apiGet<string[]>('/api/admin/schemas/tables', dataSource ? { dataSource } : undefined, options);
+  return unwrap(
+    await client.GET('/api/admin/schemas/tables', {
+      params: { query: dataSource ? { dataSource } : {} },
+      headers: silentHeaders(options),
+    }),
+  ) as unknown as string[];
 }
 
 export async function getTablesWithColumns(dataSource?: string, options?: RequestOptions) {
-  return apiGet<TableMetadata[]>(
-    '/api/admin/schemas/tables/detail',
-    dataSource ? { dataSource } : undefined,
-    options,
-  );
+  return unwrap(
+    await client.GET('/api/admin/schemas/tables/detail', {
+      params: { query: dataSource ? { dataSource } : {} },
+      headers: silentHeaders(options),
+    }),
+  ) as TableMetadata[];
 }
 
 export async function getTableColumns(table: string, dataSource?: string, options?: RequestOptions) {
-  return apiGet<ColumnMetadata[]>(
-    `/api/admin/schemas/tables/${encodeURIComponent(table)}/columns`,
-    dataSource ? { dataSource } : undefined,
-    options,
-  );
+  return unwrap(
+    await client.GET('/api/admin/schemas/tables/{tableName}/columns', {
+      params: { path: { tableName: table }, query: dataSource ? { dataSource } : {} },
+      headers: silentHeaders(options),
+    }),
+  ) as ColumnMetadata[];
 }
 
 export async function getTableForeignKeys(table: string, dataSource?: string, options?: RequestOptions) {
-  return apiGet<ForeignKeysResult>(
-    `/api/admin/schemas/tables/${encodeURIComponent(table)}/foreign-keys`,
-    dataSource ? { dataSource } : undefined,
-    options,
-  );
+  return unwrap(
+    await client.GET('/api/admin/schemas/tables/{tableName}/foreign-keys', {
+      params: { path: { tableName: table }, query: dataSource ? { dataSource } : {} },
+      headers: silentHeaders(options),
+    }),
+  ) as ForeignKeysResult;
 }
 
 export async function getTableJsonSchema(table: string, dataSource?: string, options?: RequestOptions) {
-  return apiGet<Record<string, any>>(
-    `/api/admin/schemas/tables/${encodeURIComponent(table)}/json-schema`,
-    dataSource ? { dataSource } : undefined,
-    options,
-  );
+  return unwrap(
+    await client.GET('/api/admin/schemas/tables/{tableName}/json-schema', {
+      params: { path: { tableName: table }, query: dataSource ? { dataSource } : {} },
+      headers: silentHeaders(options),
+    }),
+  ) as Record<string, any>;
 }
 
 export async function getSchemaVersions(id: string, options?: RequestOptions) {
-  return apiGet<SchemaDefinition[]>(`/api/admin/schemas/${id}/versions`, undefined, options);
+  return unwrap(
+    await client.GET('/api/admin/schemas/{schemaName}/versions', {
+      params: { path: { schemaName: id } },
+      headers: silentHeaders(options),
+    }),
+  ) as SchemaDefinition[];
 }
 
 export async function previewSql(
@@ -127,11 +168,7 @@ export async function previewSql(
 ) {
   return apiPost<{ columns: string[]; rows: Record<string, any>[] }>(
     '/api/admin/schemas/sql-preview',
-    {
-      sql,
-      params,
-      dataSource,
-    },
+    { sql, params, dataSource },
     options,
   );
 }

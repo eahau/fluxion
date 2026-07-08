@@ -16,23 +16,26 @@ import org.springframework.web.reactive.HandlerMapping
 import org.springframework.web.reactive.config.WebFluxConfigurer
 
 /**
- * HTTP WebFlux adapter auto-configuration.
+ * HTTP adapter auto-configuration for the WebFlux reactive stack.
  *
- * Assembles WebFlux dynamic route components when:
- *   - WebFlux is on the classpath (WebFluxConfigurer present)
- *   - Spring MVC DispatcherServlet is NOT present (avoid conflict)
+ * Activated when `WebFluxConfigurer` is on the classpath (reactive
+ * deployment). A parallel MVC auto-config exists for servlet deployments.
  *
- * Components:
- *   - [WebFluxWorkflowHandler]: handles incoming requests via ServerRequest/ServerResponse
- *   - [WebFluxRouteRegistry]: manages route definitions (ConcurrentHashMap)
- *   - [WorkflowHandlerMapping]: directly queries registry.resolveRoute() per request
- *   - [WorkflowHandlerAdapter]: bridges exchange → ServerRequest/ServerResponse for the handler
- *   - Route initializer: loads routes from RouteConfigStore on ApplicationReadyEvent
+ * Components wired:
+ * 1. [WebFluxRouteRegistry]   — holds route state (CHM), resolves per request.
+ * 2. [WebFluxWorkflowHandler] — suspend-based entry point for workflow execution.
+ * 3. [WorkflowHandlerAdapter] — bridges `ServerWebExchange` → `ServerRequest/ServerResponse`.
+ * 4. [WorkflowHandlerMapping] — Ordered=1 mapping that resolves routes on the fly.
+ * 5. `webFluxRouteInitializer` — loads initial routes from [RouteConfigStore] on
+ *    ApplicationReadyEvent, then starts the watch stream.
  *
- * Unlike the Spring MVC adapter which uses registerMapping() for incremental O(1)
- * registration, this adapter uses a direct-query strategy: the HandlerMapping resolves
- * the workflow route on every request by scanning routeDefinitions. This eliminates
- * the need for a composite RouterFunction and O(n) rebuild on every route change.
+ * Direct-query strategy (vs MVC's `registerMapping`):
+ * WebFlux's RouterFunction APIs have no supported runtime mutate operation —
+ * rebuilding the composite RouterFunction on every route change would be
+ * O(n). Instead we skip RouterFunction entirely: the HandlerMapping resolves
+ * the workflow route on EVERY request by scanning routeDefinitions. Route
+ * changes become O(1) CHM writes (no lock-contended framework registration)
+ * and request resolution is O(n) pattern match against typically <500 routes.
  */
 @AutoConfiguration(after = [WebFluxAutoConfiguration::class])
 @ConditionalOnClass(WebFluxConfigurer::class)
@@ -51,11 +54,8 @@ class HttpWebFluxAdapterAutoConfiguration {
     ): WebFluxWorkflowHandler = WebFluxWorkflowHandler(workflowRouter)
 
     /**
-     * Custom [org.springframework.web.reactive.HandlerAdapter] that bridges
-     * [ServerWebExchange] to [WebFluxWorkflowHandler] via ServerRequest/ServerResponse.
-     *
-     * Uses [ServerCodecConfigurer] to inject HTTP message readers/writers needed
-     * for body parsing and response serialization.
+     * HandlerAdapter bridges WebFlux exchange → ServerRequest/ServerResponse for our custom handler.
+     * Injects HTTP message readers from the shared ServerCodecConfigurer for seamless JSON parsing.
      */
     @Bean
     fun workflowHandlerAdapter(
@@ -65,13 +65,9 @@ class HttpWebFluxAdapterAutoConfiguration {
     )
 
     /**
-     * [WorkflowHandlerMapping] directly queries [WebFluxRouteRegistry.resolveRoute]
-     * for each incoming request, eliminating the RouterFunction intermediate layer.
-     *
-     * Priority order=1 (after RequestMappingHandlerMapping at 0)
-     * to ensure workflow routes are resolved before the default resource handler.
-     *
-     * The resolved [RouteMatch] is stored in exchange attributes for the handler to read.
+     * HandlerMapping runs per-request route resolution, injected at order=1 in
+     * DispatcherHandler's chain (just after RequestMappingHandlerMapping).
+     * Stores the resolved RouteMatch into exchange attributes for the handler.
      */
     @Bean
     fun workflowHandlerMapping(
@@ -80,10 +76,9 @@ class HttpWebFluxAdapterAutoConfiguration {
     ): HandlerMapping = WorkflowHandlerMapping(routeRegistry, handler)
 
     /**
-     * Load initial routes and start watching config center for changes.
-     *
-     * Uses [ObjectProvider] to defer RouteConfigStore resolution until ApplicationReadyEvent,
-     * avoiding bean creation order issues with @ConditionalOnBean.
+     * Boot lifecycle listener. Uses [ObjectProvider] for `RouteConfigStore` so
+     * deployments with NO config center (test / embedded) can still start up
+     * cleanly without needing a fallback RouteConfigStore bean.
      */
     @Bean
     fun webFluxRouteInitializer(

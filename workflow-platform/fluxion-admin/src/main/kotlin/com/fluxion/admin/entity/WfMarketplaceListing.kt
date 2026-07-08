@@ -5,55 +5,63 @@ import jakarta.persistence.Entity
 import jakarta.persistence.Table
 
 /**
- * 市场发布记录实体。
+ * Marketplace publish listing entity — a shareable workflow/function/template.
  *
- * 源表：`wf_marketplace_listing`
+ * A listing is created when a user *publishes* a private workflow/function to the
+ * shared Marketplace. Installations create WfMarketplaceInstall rows. The source
+ * object at publish time is snapshotted via `sourceVersion` so that subsequent
+ * private mutations do not affect marketplace consumers.
+ *
+ * Source table: `wf_marketplace_listing`.
+ *
+ * Collaborates with: WfMarketplaceListingRepository, MarketplaceService,
+ * WfMarketplaceInstall (installation trace).
  */
 @Entity
 @Table(name = "wf_marketplace_listing")
 class WfMarketplaceListing : BaseEntity() {
 
-    /** 市场 ID（列：`listing_id`） */
+    /** Stable marketplace listing identifier, maps to column `listing_id`. */
     @Column(name = "listing_id", nullable = false, unique = true, length = 128)
     var listingId: String = ""
 
-    /** 来源类型：WORKFLOW/FUNCTION/WORKFLOW_TEMPLATE（列：`source_type`） */
+    /** Kind of resource: WORKFLOW / FUNCTION / WORKFLOW_TEMPLATE, maps to column `source_type`. */
     @Column(name = "source_type", nullable = false, length = 16)
     var sourceType: String = "WORKFLOW"
 
-    /** 源工作流/函数 ID（列：`source_id`） */
+    /** Business ID of the original private workflow/function, maps to column `source_id`. */
     @Column(name = "source_id", nullable = false, length = 128)
     var sourceId: String = ""
 
-    /** 发布时锁定的版本（列：`source_version`） */
+    /** Version snapshot of the source at publish time, maps to column `source_version`. */
     @Column(name = "source_version", nullable = false)
     var sourceVersion: Int = 1
 
-    /** 市场展示标题（列：`title`） */
+    /** Marketplace display title, maps to column `title`. */
     @Column(name = "title", nullable = false, length = 256)
     var title: String = ""
 
-    /** 描述（列：`description`） */
+    /** Long-form description / documentation, maps to column `description`. */
     @Column(name = "description", columnDefinition = "TEXT")
     var description: String? = null
 
-    /** 标签列表（JSON 数组）（列：`tags`） */
+    /** JSON string array of tag strings for categorisation/search, maps to column `tags`. */
     @Column(name = "tags", columnDefinition = "JSON")
     var tags: String? = null
 
-    /** 发布者（列：`author`） */
+    /** Publishing username, maps to column `author`. */
     @Column(name = "author", nullable = false, length = 64)
     var author: String = ""
 
-    /** 状态：ACTIVE/DEPRECATED（列：`status`） */
+    /** Listing lifecycle: ACTIVE / DEPRECATED, maps to column `status`. */
     @Column(name = "status", nullable = false, length = 16)
     var status: String = "ACTIVE"
 
-    /** 安装次数（列：`install_count`） */
+    /** Denormalised counter of installations, maps to column `install_count`. */
     @Column(name = "install_count", nullable = false)
     var installCount: Int = 0
 
-    /** 模版配置（仅 WORKFLOW_TEMPLATE 时使用，JSON）（列：`template_config`） */
+    /** Template-specific configuration JSON (WORKFLOW_TEMPLATE only), maps to column `template_config`. */
     @Column(name = "template_config", columnDefinition = "TEXT")
     var templateConfig: String? = null
 }

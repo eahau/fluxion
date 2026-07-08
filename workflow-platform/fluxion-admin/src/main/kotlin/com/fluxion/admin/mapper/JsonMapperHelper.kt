@@ -6,7 +6,7 @@ import com.fluxion.core.util.JsonUtil
 import com.fluxion.core.util.castOrNull
 import com.fluxion.core.util.uncheckedCast
 import com.fluxion.admin.entity.WfFunction
-import org.slf4j.LoggerFactory
+import org.slf4j.*
 import com.fluxion.admin.generated.model.FunctionCategory
 import com.fluxion.admin.generated.model.FunctionNodeType
 import com.fluxion.admin.generated.model.FunctionStatus
@@ -29,32 +29,39 @@ import java.time.OffsetDateTime
 import java.time.ZoneId
 
 /**
- * JSON / 枚举 / 复杂字段转换辅助类
+ * Helper bean encapsulating JSON parsing, enum coercion and complex-field conversions
+ * shared across manual mapper implementations in the admin module.
  *
- * 以 Spring Bean 形式提供，供手写 Mapper 注入使用。
+ * Registered as a Spring `@Component` so it can be constructor-injected wherever
+ * DTO ↔ entity conversions are needed.
  */
 @Component
 class JsonMapperHelper {
 
     private val log = LoggerFactory.getLogger(javaClass)
 
-    // ─── Function 相关 ───────────────────────────────────────────
+    // === Function-related conversions ===========================================================
 
     /**
-     * 从实体读取统一配置 JSON。
+     * Parse the unified `config` JSON stored on `wf_function.config`.
      *
-     * `wf_function.config` 已聚合 description、paramSchema、outputSchema、
-     * scriptBody、className、publishTarget 等字段，新增配置项无需 DDL。
+     * This single JSON column aggregates description, paramSchema, outputSchema,
+     * scriptBody, className, publishTarget and any future extension fields, so new
+     * configuration items never require a DDL migration.
      */
     fun functionToConfig(fn: WfFunction): Map<String, Any>? =
         fn.config?.let { jsonToMap(it) }
 
     /**
-     * 将 DTO 的独立字段（script / publishTarget）与 config Map 合并，
-     * 生成待持久化的统一 config Map。独立字段优先级高于 config 中的同名 key。
+     * Merge DTO top-level fields (script / publishTarget) into the `config` Map,
+     * producing the unified config snapshot that will be persisted.
      *
-     * EXTERNAL 类型兼容旧版 `config.externalService` 嵌套结构：若存在则将其字段提升到顶层，
-     * 以适配 Worker 侧 [com.fluxion.core.function.external.ExternalFunctionConfigParser]。
+     * DTO top-level fields take precedence over any same-named keys already inside
+     * `dto.config`.
+     *
+     * For EXTERNAL-category functions the legacy nested `config.externalService`
+     * envelope is flattened so workers can parse it via
+     * `com.fluxion.core.function.external.ExternalFunctionConfigParser`.
      */
     fun buildFunctionConfig(dto: FunctionDefinition): Map<String, Any>? {
         val config = dto.config?.toMutableMap() ?: mutableMapOf()
@@ -75,7 +82,7 @@ class JsonMapperHelper {
         }
     }
 
-    /** 将统一 config Map 序列化为 JSON 字符串，供实体 `config` 字段存储。 */
+    /** Serialize the unified config Map back into a JSON string for entity storage. */
     fun functionConfigToJsonString(config: Map<String, Any>?): String? =
         mapToJson(config)
 
@@ -115,8 +122,14 @@ class JsonMapperHelper {
     fun functionConfigToPublishTargetJson(config: Map<String, Any>?): String? =
         config?.get("publishTarget")?.let { mapToJson(it.uncheckedCast<Map<String, Any>>()) }
 
-    // ─── Workflow 相关 ───────────────────────────────────────────
+    // === Workflow-related conversions ===========================================================
 
+    /**
+     * Parse the `dag_json` TEXT column into a list of editor `WorkflowNode` DTOs.
+     *
+     * Malformed JSON is swallowed with a warning and the caller receives an empty
+     * list so that detail pages still render (albeit without graph data).
+     */
     fun dagJsonToNodes(dagJson: String?): List<WorkflowNode> {
         if (dagJson.isNullOrBlank()) return emptyList()
         return try {
@@ -141,35 +154,38 @@ class JsonMapperHelper {
                 }
             }
         } catch (ex: Exception) {
-            log.warn("dagJsonToNodes parse failed, returning empty list. dagJson length=${dagJson?.length}, error: ${ex.message}")
+            log.warn { "dagJsonToNodes parse failed, returning empty list. dagJson length=${dagJson.length}, error: ${ex.message}" }
             emptyList()
         }
     }
 
     /**
-     * 安全解析 NodeType：兼容核心 NodeType（BUILTIN/EXTERNAL）、FunctionNodeType（DATA_QUERY 等）、以及未知值。
-     * 解析顺序：
-     *   1. 直接匹配 DTO NodeType 枚举（PARAM_VALIDATE / DATA_QUERY / CUSTOM 等 12 种）
-     *   2. 若为核心 NodeType（BUILTIN/EXTERNAL），根据 functionRef 推导 DTO NodeType
-     *   3. 兜底：CUSTOM
+     * Safely resolve a raw `type` string into the DTO `NodeType` enum.
+     *
+     * Resolution order:
+     *   1. Direct match against the 12 DTO `NodeType` values (PARAM_VALIDATE, DATA_QUERY, ...).
+     *   2. If the value is a core engine `NodeType` (BUILTIN / EXTERNAL / SCRIPT), derive the
+     *      DTO-side value from `functionRef`.
+     *   3. Fall back to `CUSTOM` and warn.
      */
     private fun safeNodeType(rawType: String, functionRef: String): NodeType {
-        // 1) 直接匹配
         DTO_NODE_TYPE_VALUES[rawType]?.let { return it }
-        // 2) 核心类型 → 根据 functionRef 推导
         return when {
             rawType == "BUILTIN" -> functionRefToNodeType(functionRef)
             rawType == "EXTERNAL" -> NodeType.CUSTOM
             rawType == "SCRIPT"   -> NodeType.SCRIPT
             else -> {
-                log.warn("Unknown node type '{}', functionRef='{}', fallback to CUSTOM", rawType, functionRef)
+                log.warn { "Unknown node type '$rawType', functionRef='$functionRef', fallback to CUSTOM" }
                 NodeType.CUSTOM
             }
         }
     }
 
     /**
-     * 根据 functionRef 前缀推导 DTO NodeType（与前端 flowConverter 保持一致）
+     * Derive DTO `NodeType` from a `functionRef` prefix.
+     *
+     * Kept in sync with the frontend `flowConverter` heuristic so the editor highlights
+     * nodes consistently regardless of which side authored the DAG.
      */
     private fun functionRefToNodeType(functionRef: String): NodeType {
         if (functionRef.isBlank()) return NodeType.CUSTOM
@@ -198,43 +214,39 @@ class JsonMapperHelper {
     }
 
     /**
-     * 将任意 type 值归一化为合法的 FunctionNodeType 字符串值。
-     * 供外部在持久化前清洗 dag_json 使用。
+     * Normalize a user-provided node `type` + `functionRef` pair to a valid DTO
+     * `FunctionNodeType`-compatible string before writing the DAG back to storage.
      *
-     * 归一化规则：
-     *   1. 若 functionRef 不为空，始终从 functionRef 推导（因为 type 可能已被 Jackson 兑底为 CUSTOM）
-     *   2. 若推导结果不是 CUSTOM，采用推导结果
-     *   3. 若 rawType 已是合法 FunctionNodeType，保持不变
-     *   4. 兑底：CUSTOM
+     * Rules:
+     *   1. If `functionRef` is non-blank it always wins (Jackson may have already
+     *      collapsed an unknown enum to CUSTOM, destroying the original value).
+     *   2. If the derived value is not CUSTOM, use it.
+     *   3. If `rawType` is still a valid `NodeType` string, keep it.
+     *   4. Otherwise fall back to CUSTOM.
      */
     fun normalizeToFunctionNodeType(rawType: String, functionRef: String): String {
-        // functionRef 不为空时，始终优先从 functionRef 推导
-        // （因为 Jackson 可能已将未知 type 兑底为 CUSTOM，丢失了原始值）
         if (functionRef.isNotBlank()) {
             val derived = functionRefToNodeType(functionRef)
             if (derived != NodeType.CUSTOM) return derived.value
         }
-        // functionRef 为空或推导出 CUSTOM，检查 rawType 是否合法
         if (rawType in DTO_NODE_TYPE_VALUES) return rawType
-        // 兑底
         return NodeType.CUSTOM.value
     }
 
-    // ─── 核心 WorkflowNode 解析（兼容 FunctionNodeType → NodeType） ────
+    // === Core WorkflowNode parsing (with FunctionNodeType → NodeType compatibility) ============
 
-    /**
-     * 核心 NodeType 枚举值集合，用于判断是否为合法的 NodeType
-     */
+    /** Set of legal core engine `NodeType` enum names. */
     private val CORE_NODE_TYPE_VALUES = CoreNodeType.entries.map { it.name }.toSet()
 
-    /**
-     * DTO NodeType 枚举值快速查找表
-     */
+    /** Fast lookup from DTO NodeType value string → enum instance. */
     private val DTO_NODE_TYPE_VALUES: Map<String, NodeType> = NodeType.entries.associateBy { it.value }
 
     /**
-     * 将 DAG JSON 中的节点列表解析为核心 WorkflowNode 列表。
-     * 兼容前端发送的 FunctionNodeType（如 DATA_QUERY）：自动根据 functionRef 前缀推导核心 NodeType。
+     * Parse DAG JSON nodes into core-engine `CoreWorkflowNode` objects.
+     *
+     * Frontend-generated DAGs use `FunctionNodeType` values (DATA_QUERY, etc.); these are
+     * automatically normalized back to the four core NodeType categories based on the
+     * `functionRef` prefix so the DAG executor sees a well-typed graph.
      */
     fun parseDagNodes(dagJson: String): List<CoreWorkflowNode> {
         val dagData = JsonUtil.toMap(dagJson)
@@ -243,8 +255,8 @@ class JsonMapperHelper {
     }
 
     /**
-     * 将原始节点 Map 列表转换为核心 WorkflowNode 列表，
-     * 对 type 字段做 FunctionNodeType → NodeType 容错转换。
+     * Convert raw node Map entries to core `CoreWorkflowNode` instances, repairing the
+     * `type` field along the way.
      */
     fun parseNodesFromMap(nodesJson: List<Map<String, Any>>): List<CoreWorkflowNode> {
         return nodesJson.map { nodeMap ->
@@ -254,8 +266,7 @@ class JsonMapperHelper {
     }
 
     /**
-     * 归一化节点 Map 的 type 字段：
-     * 若 type 不是合法的核心 NodeType 值，根据 functionRef 前缀推导。
+     * Fix up the `type` entry of a raw node Map so it is a valid core-engine `NodeType`.
      */
     private fun normalizeNodeType(nodeMap: Map<String, Any>): Map<String, Any> {
         val type = nodeMap["type"]?.toString() ?: "CUSTOM"
@@ -286,8 +297,8 @@ class JsonMapperHelper {
     }
 
     /**
-     * 将可能是 JSON 字符串的 Schema 解析为对象；
-     * 若已是对象/Map 则原样返回，解析失败也回退原值。
+     * Parse a schema payload that may be either a raw JSON string or an already-deserialized
+     * Map. Parse errors fall back to returning the input unchanged.
      */
     fun parseSchema(schema: Any?): Any? {
         if (schema is String) {
@@ -324,28 +335,28 @@ class JsonMapperHelper {
         scope?.value ?: WorkflowScope.PRIVATE.value
 
     /**
-     * 将数据库 `transaction_mode` 字段转换为 DTO 的 transactionConfig Map。
+     * Convert the legacy `transaction_mode` DB column into the newer `transactionConfig`
+     * Map returned to callers.
      *
-     * 兼容旧版 "SAGA" 模式：返回 {mode: "SAGA"}。
-     * 新版事务配置直接以 transactionConfig JSON 存储，不经过 transaction_mode 字段。
+     * Only the legacy SAGA mode is translated to `{mode: "SAGA"}`. Newer transaction
+     * configuration is stored directly in `transactionConfig` JSON and bypasses this
+     * column entirely.
      */
     fun transactionModeToConfig(transactionMode: String?): Map<String, Any>? =
         if (transactionMode == "SAGA") mapOf("mode" to "SAGA") else null
 
-    /**
-     * 从 DTO transactionConfig Map 中提取事务模式字符串（用于旧版 transaction_mode 字段）。
-     */
+    /** Extract the mode string (for the legacy column) from the new config Map. */
     fun transactionConfigToMode(config: Map<String, Any>?): String =
         config?.get("mode")?.toString() ?: "NONE"
 
-    // ─── 工作流级装饰器相关 ───────────────────────────────────────
+    // === Workflow-level decorator conversions ===================================================
 
     fun workflowDecoratorsJsonToList(json: String?): MutableList<String>? {
         if (json.isNullOrBlank()) return null
         return try {
             JsonUtil.deserializeList(json, String::class.java).toMutableList()
         } catch (ex: Exception) {
-            log.warn("Failed to parse workflowDecorators JSON: $json, error: ${ex.message}")
+            log.warn { "Failed to parse workflowDecorators JSON: $json, error: ${ex.message}" }
             null
         }
     }
@@ -364,7 +375,7 @@ class JsonMapperHelper {
                 object : com.fasterxml.jackson.core.type.TypeReference<MutableMap<String, MutableMap<String, Any>>>() {}
             )
         } catch (ex: Exception) {
-            log.warn("Failed to parse workflowDecoratorParams JSON: $json, error: ${ex.message}")
+            log.warn { "Failed to parse workflowDecoratorParams JSON: $json, error: ${ex.message}" }
             null
         }
     }
@@ -375,7 +386,7 @@ class JsonMapperHelper {
         return JsonUtil.serialize(map)
     }
 
-    // ─── Debug 相关 ──────────────────────────────────────────────
+    // === Debug-related conversions ==============================================================
 
     fun nodeStatusToTraceStatus(status: NodeStatus): NodeTraceStatus =
         when (status) {
@@ -415,7 +426,7 @@ class JsonMapperHelper {
 
     fun longToInt(value: Long): Int = value.toInt()
 
-    // ─── PublishTarget 相关 ─────────────────────────────────────
+    // === PublishTarget conversions ==============================================================
 
     fun publishTargetToString(target: PublishTarget?): String? {
         if (target == null) return null
@@ -436,7 +447,8 @@ class JsonMapperHelper {
     }
 
     /**
-     * 将 OpenAPI 生成的 PublishTarget 转换为 SPI 层的 PublishTarget
+     * Translate the OpenAPI-generated `PublishTarget` DTO into its SPI-layer counterpart
+     * used by the registry push mechanism.
      */
     fun toSpiPublishTarget(target: PublishTarget?): com.fluxion.adapter.spi.registry.PublishTarget {
         if (target == null || target.type == null || target.type == PublishType.ALL) {
@@ -454,7 +466,8 @@ class JsonMapperHelper {
     }
 
     /**
-     * 兼容旧版 targetGroups JSON：若 publishTarget 为空，尝试从 targetGroups 反推出 APP_GROUP
+     * Legacy compatibility shim: if `publishTarget` is empty, try to reconstruct an
+     * APP_GROUP target from the deprecated `targetGroups` JSON column.
      */
     fun fallbackPublishTarget(targetGroupsJson: String?): PublishTarget? {
         if (targetGroupsJson.isNullOrBlank()) return null

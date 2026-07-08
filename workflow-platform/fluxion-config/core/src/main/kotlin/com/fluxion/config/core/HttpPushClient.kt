@@ -1,3 +1,17 @@
+/**
+ * Fan-out HTTP push client used by the Admin to broadcast config changes
+ * to every registered Worker instance.
+ *
+ * Payloads are always JSON strings (serialised by the caller); this client
+ * focuses purely on the transport: target resolution, HTTP POST with a
+ * configurable timeout, concurrent fan-out via `CompletableFuture`, and
+ * aggregated success/failure counters returned to the caller.
+ *
+ * Instances are lightweight but hold an `HttpClient` and should be treated
+ * as singletons; the Spring Boot auto-config module creates one bean per
+ * push resource (schema/function/workflow) and injects it into the
+ * matching `*ConfigPublisher`.
+ */
 package com.fluxion.config.core
 
 import com.fluxion.adapter.spi.registry.InstanceDiscovery
@@ -14,9 +28,11 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * HTTP 推送客户端 — 把 JSON body 并发推送到一组 Worker 实例。
+ * Concurrent fan-out HTTP push helper.
  *
- * 用于 HTTP 默认实现中 Admin → Worker 的配置分发。
+ * @property log logger used for per-request warnings and errors
+ * @property connectTimeoutSeconds TCP connect timeout applied to the underlying client
+ * @property requestTimeoutSeconds per-request deadline
  */
 class HttpPushClient(
     private val log: Logger,
@@ -29,13 +45,14 @@ class HttpPushClient(
         .build()
 
     /**
-     * 把 [body] 推送到 [instances] 列表中的每个实例。
+     * Broadcasts `body` to every supplied instance concurrently and blocks
+     * until all requests complete (success or failure).
      *
-     * @param instances 目标实例
-     * @param pushPath  推送路径（如 `/internal/workflow/function/push`）
-     * @param body      JSON 字符串
-     * @param label     日志标签（如 functionName / workflowId）
-     * @return Pair(成功数, 失败数)
+     * @param instances target worker instances
+     * @param pushPath absolute path on the worker (e.g. `/internal/workflow/function/push`)
+     * @param body JSON payload string
+     * @param label human readable tag used for error attribution (functionName/workflowId)
+     * @return pair of (successCount, failureCount)
      */
     fun push(
         instances: List<InstanceInfo>,
@@ -68,7 +85,8 @@ class HttpPushClient(
     }
 
     /**
-     * 异步发送一次推送请求；返回是否 2xx。
+     * Fires a single async POST request; completes with `true` iff the
+     * response status is in the 2xx range.
      */
     fun sendAsync(
         inst: InstanceInfo,
@@ -95,7 +113,8 @@ class HttpPushClient(
 
     companion object {
         /**
-         * 根据 [PublishTarget] 从 [InstanceDiscovery] 解析目标实例列表。
+         * Resolves the list of target worker instances described by a
+         * [PublishTarget] through the supplied [InstanceDiscovery].
          */
         fun resolveTargetInstances(
             target: PublishTarget,

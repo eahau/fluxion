@@ -4,6 +4,8 @@ import com.googlecode.aviator.AviatorEvaluator
 import com.googlecode.aviator.AviatorEvaluatorInstance
 import com.googlecode.aviator.Options
 import org.slf4j.LoggerFactory
+import org.slf4j.warn
+import org.slf4j.debug
 import java.util.concurrent.ConcurrentHashMap
 import java.util.regex.Pattern
 

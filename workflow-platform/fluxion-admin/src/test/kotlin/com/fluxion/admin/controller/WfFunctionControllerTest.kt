@@ -22,10 +22,15 @@ import org.mockito.Mockito.mock
 import java.util.Optional
 
 /**
- * 函数测试接口 Controller 单元测试。
+ * Unit tests for the function test endpoint exposed by [WfFunctionController].
  *
- * 覆盖：BUILTIN 函数成功执行、出参 schema 校验失败、函数未找到、执行异常信息结构化、
- * directInput/workflowInput/declaredDeps 透传。
+ * Covers:
+ *  - BUILTIN function happy path + output schema validation
+ *  - Output schema validation failure (mismatched type)
+ *  - Function-not-found error response
+ *  - Execution exception structural normalization (errorType + errorStack)
+ *  - Pass-through of directInput / workflowInput / declaredDeps
+ *  - Default directInput = inputs when caller omits directInput
  */
 class WfFunctionControllerTest {
 

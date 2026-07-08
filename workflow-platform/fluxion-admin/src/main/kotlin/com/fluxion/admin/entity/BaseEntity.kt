@@ -9,23 +9,28 @@ import jakarta.persistence.PreUpdate
 import java.time.LocalDateTime
 
 /**
- * JPA 实体基类。
+ * Base mapped superclass for all JPA entities with a numeric auto-increment primary key.
  *
- * 提供自增主键与标准时间戳字段，所有以数值型 `id` 为主键的业务表实体均应继承此类。
+ * Provides standard audit timestamp fields (`created_at`, `updated_at`) and auto-updates
+ * `updatedAt` on every entity flush. All business entities using a numeric `id` as their
+ * primary key should inherit from this class.
+ *
+ * Collaborates with: Flyway (DDL generation via `id` BIGINT PK convention), Spring Data JPA
+ * repositories (`JpaRepository<T, Long>`).
  */
 @MappedSuperclass
 abstract class BaseEntity {
 
-    /** 自增主键（列：`id`） */
+    /** Auto-increment numeric primary key, maps to column `id`. */
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     var id: Long = 0
 
-    /** 创建时间（列：`created_at`） */
+    /** Entity creation timestamp, maps to column `created_at`. */
     @Column(name = "created_at", nullable = false)
     var createdAt: LocalDateTime = LocalDateTime.now()
 
-    /** 更新时间（列：`updated_at`） */
+    /** Entity last-update timestamp, maps to column `updated_at`. Auto-refreshed via @PreUpdate. */
     @Column(name = "updated_at", nullable = false)
     var updatedAt: LocalDateTime = LocalDateTime.now()
 

@@ -1,27 +1,22 @@
+/**
+ * Protobuf-backed [SchemaDataProvider] enabling transparent field access on
+ * [DynamicMessage] payloads via the generic `inputField("name")` workflow API.
+ *
+ * Also accepts plain `Map<String, *>` as a fallback so mixed workloads that
+ * sometimes receive JSON-decoded maps and sometimes DynamicMessages behave
+ * consistently. Nested messages, repeated fields and `ByteString` values are
+ * recursively converted to Kotlin collections when [toMap] is called.
+ */
 package com.fluxion.schema.protobuf
 
 import com.fluxion.schema.api.SchemaDataProvider
 import com.google.protobuf.Descriptors
 import com.google.protobuf.DynamicMessage
 import org.slf4j.LoggerFactory
+import org.slf4j.*
 
 /**
- * Protobuf 数据访问提供者。
- *
- * 支持两种数据对象类型：
- * - [DynamicMessage]：通过 `getField(FieldDescriptor)` 访问字段
- * - `Map<String, Any?>`：作为 fallback，使用标准 Map 访问
- *
- * ### 使用场景
- *
- * 当工作流入参经过 Protobuf 协议解码后产生 `DynamicMessage` 对象时，
- * 此 provider 使得 NodeInput 能够透明地通过 `inputField("fieldName")` 访问字段，
- * 无需调用方感知底层数据类型。
- *
- * ```kotlin
- * // 在 WorkflowFunction 中
- * val name = input.inputField("name")  // 自动使用 DynamicMessage.getField()
- * ```
+ * Exposes Protobuf DynamicMessage fields through the generic data SPI.
  */
 class ProtobufSchemaDataProvider : SchemaDataProvider {
 
@@ -35,10 +30,9 @@ class ProtobufSchemaDataProvider : SchemaDataProvider {
                 if (fieldDescriptor != null) {
                     data.getField(fieldDescriptor)
                 } else {
-                    log.debug(
-                        "Protobuf field [{}] not found in message type [{}]",
-                        field, descriptor.fullName
-                    )
+                    // DEBUG level because missing fields often represent
+                    // legitimate optional-value cases on proto3 messages.
+                    log.debug { "Protobuf field [$field] not found in message type [${descriptor.fullName}]" }
                     null
                 }
             }
@@ -83,11 +77,9 @@ class ProtobufSchemaDataProvider : SchemaDataProvider {
     }
 
     /**
-     * 将 DynamicMessage 递归转换为 Map。
-     *
-     * - 嵌套 Message → 递归转为 Map
-     * - Repeated 字段 → 转为 List
-     * - 基本类型 → 直接使用 Java 值
+     * Recursively flatten a [DynamicMessage] into a Kotlin LinkedHashMap
+     * (preserves field declaration order) while translating Protobuf-specific
+     * value types to standard JVM equivalents.
      */
     private fun dynamicMessageToMap(message: DynamicMessage): Map<String, Any?> {
         val result = linkedMapOf<String, Any?>()

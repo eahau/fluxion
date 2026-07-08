@@ -1,3 +1,13 @@
+/**
+ * Produces a uniform [SchemaField] tree from a compiled Protobuf message
+ * [Descriptors.Descriptor].
+ *
+ * Covers:
+ * * scalar-type mapping (int32→INTEGER, string→STRING, …)
+ * * recursive nested MESSAGE extraction with cycle protection via `visited`
+ * * `repeated` fields and `oneof` membership propagated via metadata
+ * * field numbers exposed as `fieldNumber` metadata for downstream tooling.
+ */
 package com.fluxion.schema.protobuf
 
 import com.fluxion.schema.api.SchemaFieldExtractor
@@ -7,17 +17,10 @@ import com.fluxion.schema.model.SchemaField
 import com.google.protobuf.Descriptors
 
 /**
- * Protobuf Schema 字段提取器。
+ * Field extractor for the PROTOBUF schema format.
  *
- * 从 [Descriptors.Descriptor] 中提取 message 字段定义，
- * 转换为统一的 [SchemaField] 树供前端使用。
- *
- * 支持：
- * - 基本类型映射（int32/int64/string/bool 等）
- * - 嵌套 message 递归提取
- * - repeated 字段标记
- * - oneof 字段标记
- * - 字段编号（field number）
+ * Empty schemas (parsed value is the sentinel) return an empty list so
+ * "any-value" callers never fail on a missing descriptor cast.
  */
 class ProtobufSchemaFieldExtractor : SchemaFieldExtractor {
 
@@ -31,15 +34,16 @@ class ProtobufSchemaFieldExtractor : SchemaFieldExtractor {
     }
 
     /**
-     * 从 Descriptor 提取字段列表。
+     * Recursively extract fields from a message descriptor.
      *
-     * @param visited 已访问的 message 全名集合，用于循环引用检测
+     * @param visited set of fully-qualified message names already on the
+     *                current recursion stack; used to break cyclic message
+     *                references (e.g. `message Tree { Tree parent = 1; }`).
      */
     private fun extractMessageFields(
         descriptor: Descriptors.Descriptor,
         visited: MutableSet<String>
     ): List<SchemaField> {
-        // 循环引用检测
         if (descriptor.fullName in visited) return emptyList()
         visited.add(descriptor.fullName)
 
@@ -54,7 +58,7 @@ class ProtobufSchemaFieldExtractor : SchemaFieldExtractor {
             SchemaField(
                 name = field.name,
                 type = fieldType,
-                required = false,  // Protobuf 3 没有 required
+                required = false,
                 description = null,
                 format = field.type.name,
                 nestedFields = nested,

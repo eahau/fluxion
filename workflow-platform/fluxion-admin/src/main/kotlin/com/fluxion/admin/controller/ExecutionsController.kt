@@ -18,7 +18,24 @@ import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 
 /**
- * 执行历史与重放 REST API
+ * Workflow execution history, re-run, and signal-delivery REST controller
+ * (implements OpenAPI-generated [ExecutionsApi]).
+ *
+ * Covers three execution-centric concerns:
+ *   1. **List / inspect** past executions stored in `wf_execution_snapshot`
+ *      (keyword + status + workflowId filters applied in-memory after page fetch).
+ *   2. **Re-run** either a full execution (replay inputs against the latest def)
+ *      or a single-node partial rerun (uses DebugService.rerunFromNode to splice
+ *      nodeOutputs from the old execution upstream of the rerun start).
+ *   3. **Signal API** — send a named signal payload to a running (wait-node-blocked)
+ *      execution, or list the pending / waiting signals for a given execution id.
+ *      Requires an optional [SignalBroker] bean; when missing the API gracefully
+ *      falls back to 503 / empty lists (admin UI can still show non-signal features).
+ *
+ * Collaborates with: WfExecutionSnapshotService (snapshot persistence + SPI for
+ * DebugService), WfDefinitionService (load defs for reruns), DebugService
+ * (rerunFromNode), DagExecutor (full rerun), DebugMapper (NodeTrace rendering),
+ * SignalBroker (optional — wait-node / pending-signal queries).
  */
 @RestController
 class ExecutionsController(
@@ -30,6 +47,14 @@ class ExecutionsController(
     private val signalBroker: SignalBroker? = null
 ) : ExecutionsApi {
 
+    /**
+     * Paginated execution listing.
+     *
+     * Filtering is done in-memory after the page fetch (good balance given that
+     * snapshots are append-only and paged by newest-first: users typically browse
+     * the first 2-3 pages only). Keyword matches executionId OR workflowId; status
+     * matches SUCCESS / FAILED; workflowId is an exact match on the FK column.
+     */
     override fun listExecutions(
         keyword: String?,
         status: String?,
@@ -60,12 +85,23 @@ class ExecutionsController(
         })
     }
 
+    /** Fetch a single execution detail (trace + inputs + node outputs) by execution id. */
     override fun getExecution(executionId: String): ResponseEntity<TraceDetail> {
         val snap = snapshotService.findByExecutionIdRaw(executionId)
             ?: return ResponseEntity.notFound().build()
         return ResponseEntity.ok(toTraceDetail(snap))
     }
 
+    /**
+     * Rerun a previous execution.
+     *
+     * Two modes:
+     *   - `nodeId` blank = **full rerun** — load original inputs from snapshot and
+     *     execute the current (ACTIVE) version of the workflow definition from scratch.
+     *   - `nodeId` present = **partial rerun** — delegated to DebugService which
+     *     rebuilds upstream state from the original snapshot and only (re)executes
+     *     downstream nodes.
+     */
     override fun rerunExecution(
         executionId: String,
         rerunExecutionRequest: RerunExecutionRequest?
@@ -90,12 +126,17 @@ class ExecutionsController(
         }
     }
 
+    // ─── Trace DTO helpers ───────────────────────────────────────────
+
+    /** EngineResult → TraceDetail (convenience overload for full reruns). */
     private fun toTraceDetail(executionId: String, result: com.fluxion.core.value.EngineResult, workflowName: String = ""): TraceDetail =
         toTraceDetail(executionId, workflowName, result.trace)
 
+    /** RerunResult → TraceDetail convenience overload. */
     private fun toTraceDetail(executionId: String, result: com.fluxion.core.value.RerunResult): TraceDetail =
         toTraceDetail(executionId, "", result.trace)
 
+    /** Shared base: NodeExecutionRecord trace list → TraceDetail. */
     private fun toTraceDetail(
         executionId: String,
         workflowName: String,
@@ -108,6 +149,7 @@ class ExecutionsController(
         traces = trace.map { toTraceNode(debugMapper.toNodeTrace(it)) }.toMutableList()
     }
 
+    /** generated.NodeTrace (DebugMapper) → generated.TraceNode for the UI panel. */
     private fun toTraceNode(nodeTrace: NodeTrace): TraceNode = TraceNode().apply {
         nodeId = nodeTrace.nodeId
         nodeName = nodeTrace.nodeName
@@ -118,6 +160,7 @@ class ExecutionsController(
         error = nodeTrace.error
     }
 
+    /** Snapshot row → ExecutionRecord summary for the list page. */
     private fun toExecutionRecord(snap: com.fluxion.admin.entity.WfExecutionSnapshot): ExecutionRecord {
         val def = definitionService.getEntity(snap.workflowId)
         return ExecutionRecord().apply {
@@ -126,11 +169,12 @@ class ExecutionsController(
             workflowName = def?.workflowName ?: ""
             this.status = if (snap.success) "SUCCESS" else "FAILED"
             totalDurationMs = 0
-            startTime = snap.createdAt.atZone(java.time.ZoneId.systemDefault()).toOffsetDateTime()
-            endTime = snap.createdAt.atZone(java.time.ZoneId.systemDefault()).toOffsetDateTime()
+            startTime = snap.createdAt.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+            endTime = snap.createdAt.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
         }
     }
 
+    /** Snapshot row → full TraceDetail for the detail view. */
     private fun toTraceDetail(snap: com.fluxion.admin.entity.WfExecutionSnapshot): TraceDetail {
         val def = definitionService.getEntity(snap.workflowId)
         val nodeTraces = snap.traceJson?.let {
@@ -155,12 +199,15 @@ class ExecutionsController(
         }
     }
 
-    // ─── Signal API（等待节点恢复） ────────────────────────────────
+    // ─── Signal delivery API (wait-node resume) ────────────────────
 
     /**
-     * 向运行中的工作流发送信号，恢复等待节点。
-     *
-     * 用于人工审批、外部回调等场景。
+     * Deliver a signal to a waiting execution. If no [SignalBroker] is configured
+     * in the Spring context we return 503 with a BUFFERED status so the UI can
+     * display the correct affordance (admin JVM is running in no-signal mode).
+     * Otherwise status mirrors what the broker reports: DELIVERED = a wait node
+     * picked up the signal immediately; BUFFERED = execution hasn't reached the
+     * wait node yet (signal lives on the pending queue until it does).
      */
     @PostMapping("/api/admin/executions/{executionId}/signal")
     override fun sendSignal(
@@ -196,7 +243,11 @@ class ExecutionsController(
     }
 
     /**
-     * 查询工作流正在等待的信号列表。
+     * Query a running execution for two signal queues:
+     *   - `waiting`  — signal names the execution is currently blocked on (wait nodes)
+     *   - `buffered` — signals already delivered but not yet consumed (in transit)
+     *
+     * Returns empty lists when no SignalBroker is present in the application context.
      */
     @GetMapping("/api/admin/executions/{executionId}/signals/waiting")
     override fun getWaitingSignals(@PathVariable executionId: String): ResponseEntity<com.fluxion.admin.generated.model.GetWaitingSignals200Response> {

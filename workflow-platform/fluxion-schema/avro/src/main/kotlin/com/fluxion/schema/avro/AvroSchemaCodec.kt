@@ -1,3 +1,14 @@
+/**
+ * [SchemaCodec] implementation for Avro payloads.
+ *
+ * Provides two separate encodings consistent with the Avro ecosystem:
+ * * [serialize] / [deserialize] use Avro binary encoding (compact, fast).
+ * * [toJson] / [fromJson] use Avro JSON encoding (human-readable, preserves
+ *   union tags for non-nullable unions).
+ *
+ * Both paths go through [AvroDataConverter] so arbitrary Map/POJO values can
+ * be accepted without generated Avro-specific classes.
+ */
 package com.fluxion.schema.avro
 
 import com.fluxion.schema.api.SchemaCodec
@@ -10,11 +21,7 @@ import org.apache.avro.io.EncoderFactory
 import java.io.ByteArrayOutputStream
 
 /**
- * Avro Schema 编解码器。
- *
- * 支持 Avro 的 JSON 编码和 Binary 编码两种序列化方式：
- * - [serialize] / [deserialize]：使用 Avro Binary 编码（高效紧凑）
- * - [toJson] / [fromJson]：使用 Avro JSON 编码（可读性强）
+ * Binary and JSON codec for Avro-schematised payloads.
  */
 class AvroSchemaCodec : SchemaCodec {
 

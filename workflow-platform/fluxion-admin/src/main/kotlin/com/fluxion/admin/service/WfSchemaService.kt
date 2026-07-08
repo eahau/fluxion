@@ -12,7 +12,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import org.slf4j.LoggerFactory
+import org.slf4j.*
+import org.slf4j.error
+import org.slf4j.info
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.security.access.AccessDeniedException
@@ -22,12 +24,18 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
 /**
- * Schema 定义管理 Service
+ * Business service for managing [WfSchema] data-schema definitions.
  *
- * 职责：
- *   1. CRUD Schema 定义（wf_schema 表）
- *   2. 通过 SchemaConfigPublisher 将 Schema 变更推送到 Worker 实例
- *   3. 提供全量/单条 Schema 快照供 Worker 拉取
+ * Responsibilities:
+ *   1. CRUD on the `wf_schema` table via [WfSchemaRepository]
+ *   2. Asynchronously publish schema mutations to Worker instances through the
+ *      optional [SchemaConfigPublisher] SPI (so runtime validation stays in sync)
+ *   3. Provide full and single-schema snapshot endpoints for Worker HTTP pull bootstrap
+ *   4. Permission-aware frozen-state enforcement and schema-reference integrity checks
+ *
+ * Collaborates with: SecurityContextHelper (tenant visibility), SchemaConfigPublisher
+ * (worker push), WfDefinitionRepository (referrer back-link checks), SchemaCompatibilityValidator
+ * (upgrade-policy guard wired in the caller).
  */
 @Service
 class WfSchemaService(
@@ -40,19 +48,26 @@ class WfSchemaService(
     private val asyncScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     companion object {
-        /** 解锁/修改被冻结 Schema 所需的权限 */
+        /** Permission required to edit/deprecate a frozen schema. */
         const val SCHEMA_UNLOCK_PERMISSION = "schema:unlock"
 
-        /** 编辑 Schema 所需的权限 */
+        /** Permission required for general schema edit mutations. */
         const val SCHEMA_EDIT_PERMISSION = "schema:edit"
 
-        /** Schema 引用前缀（JSON Schema $ref 中使用 schema:<name> 引用已注册 Schema） */
+        /** Prefix used inside JSON Schema `$ref` values to reference a registered schema by name. */
         const val SCHEMA_REF_PREFIX = "schema:"
 
-        /** Schema 引用正则：匹配 $ref: "schema:<name>" 格式（要求前缀前是 " ，避免误匹配 json-schema: 前缀） */
+        /**
+         * Matches `$ref` entries that point to a schema via the `schema:` prefix.
+         *
+         * Anchors the lookbehind to a leading `"` before the `$ref` key so that references
+         * under a different protocol (e.g. `json-schema:`) do not accidentally match.
+         */
         private val SCHEMA_REF_REGEX = Regex("\"\\\$ref\"\\s*:\\s*\"schema:([^\"]+)\"")
 
-        /** 判断某 JSON 内容里是否包含对指定 schemaName 的精确引用（排除 json-schema: 前缀造成的误匹配） */
+        /**
+         * Returns true if the JSON payload contains an exact `schema:schemaName` reference.
+         */
         private fun containsReferenceTo(schemaJson: String, schemaName: String): Boolean {
             return SCHEMA_REF_REGEX.findAll(schemaJson)
                 .any { it.groupValues[1] == schemaName }
@@ -60,14 +75,12 @@ class WfSchemaService(
     }
 
     /**
-     * 判断当前登录用户是否具备指定权限。
+     * Returns true when the current security context holds the requested permission.
      *
-     * 与 SecurityContextHelper.isAdmin() 保持完全一致：
-     *   - 未认证 / 匿名认证 = local/dev 免鉴权环境 = ADMIN = 拥有所有权限
-     *   - 已认证用户：具体权限命中，或 authorities 中包含 ROLE_ADMIN / ADMIN 任意一种
-     *
-     * 这样避免「前端看到冻结 Switch（前端 canUnlock=true）但后端实际 canUnlock=false
-     * 导致 frozen=true 提交后又被复原为 false」的权限判断不一致问题。
+     * Mirrors the semantics in SecurityContextHelper.isAdmin exactly so the UI and backend
+     * never disagree on frozen/unlock capability:
+     *   - No auth / AnonymousAuthenticationToken → local/dev bypass = ADMIN = all permissions
+     *   - Authenticated user → exact permission match, or ROLE_ADMIN / ADMIN authority grants
      */
     private fun hasPermission(permission: String): Boolean {
         val auth = SecurityContextHolder.getContext().authentication
@@ -79,6 +92,11 @@ class WfSchemaService(
                authorities.contains("ADMIN")
     }
 
+    /**
+     * Paginated search that returns lightweight [WfSchema] projections (schemaJson is
+     * stripped). Delegates to [searchSummaries] and rebuilds the entity skeleton so the
+     * DTO mapper contract stays unchanged.
+     */
     fun search(keyword: String?, schemaType: String?, pageable: Pageable): Page<WfSchema> {
         return searchSummaries(keyword, schemaType, pageable)
             .map { s ->
@@ -98,30 +116,31 @@ class WfSchemaService(
     }
 
     /**
-     * 列表页专用的轻量搜索方法。
+     * Lightweight listing query optimised for the admin schema list page.
      *
-     * 优化点（对应 TTFB 1.21s + 下载 279ms 的两个爆炸点）：
-     * 1. 只用 JPQL SELECT NEW 查轻量 DTO [WfSchemaSummary]，不查大 TEXT 字段 schemaJson
-     *    → JDBC 网络 I/O 从 2MB 降到 ~20KB，TTFB 至少快 100x
-     * 2. keyword / scope 条件下推 SQL，不再 repository.findAll() 全表加载
-     * 3. schemaType 多值精确匹配（逗号分隔 split）保留在内存，轻量 DTO 即使 1000 条也仅 ~200KB
-     * 4. 最后内存分页（保持与旧逻辑完全一致的分页结果）
-     *
-     * @return 轻量投影 Page，不包含 schemaJson 大字段，下游配合 [SchemaMapper.toDto(WfSchemaSummary)] 用
+     * Performance design (addresses the two hotspots identified in profiling):
+     * 1. Uses `SELECT NEW` JPQL to project [WfSchemaSummary] without loading the large
+     *    `schemaJson` TEXT column — reduces JDBC I/O from ~2MB to ~20KB per page.
+     * 2. Pushes keyword/scope filtering down to SQL instead of calling `findAll()`.
+     * 3. Applies the comma-separated `schemaType` filter in memory (JPQL cannot express
+     *    exact multi-tag matching); the lightweight DTO keeps 1000 rows at ~200KB.
+     * 4. Performs the final pagination in memory to preserve identical ordering semantics
+     *    to the previous `findAll() + page` implementation.
      */
     fun searchSummaries(keyword: String?, schemaType: String?, pageable: Pageable): Page<WfSchemaSummary> {
         val accessibleGroups = securityContext.accessibleAppGroups()
 
+        // Scope filter encoding: 0 = only PLATFORM, 1 = PLATFORM + user's PRIVATE groups, 2 = everything
         val (scopeFilter, appGroups) = when {
-            accessibleGroups == null -> 2 to emptyList<String>()   // 免鉴权 / ADMIN：scope 全不过滤
-            accessibleGroups.isEmpty() -> 0 to emptyList()        // 无分组权限：仅 PLATFORM
-            else -> 1 to accessibleGroups                         // 普通用户：PLATFORM + 自己的 PRIVATE 分组
+            accessibleGroups == null -> 2 to emptyList<String>()
+            accessibleGroups.isEmpty() -> 0 to emptyList()
+            else -> 1 to accessibleGroups
         }
 
-        // ① DB 层：轻量查询 + keyword/scope 下推（不查 schemaJson，不做分页）
+        // Step 1: DB — lightweight SELECT NEW + keyword/scope push-down
         var all = repository.listSummaries(keyword, scopeFilter, appGroups)
 
-        // ② 内存层：schemaType 精确匹配（多值逗号分隔，JPQL 无法准确表达）
+        // Step 2: memory — schemaType exact comma-split match (cannot be expressed cleanly in JPQL)
         if (!schemaType.isNullOrBlank()) {
             val target = schemaType.uppercase()
             all = all.filter { entity ->
@@ -129,34 +148,43 @@ class WfSchemaService(
             }
         }
 
-        // ③ 内存分页（保持与旧 API 完全一致的 Page 语义）
+        // Step 3: memory pagination — identical semantics to the legacy list API
         return all.toPage(pageable)
     }
 
+    /** Lookup by the stable schema reference name used in `$ref`. */
     fun getByName(schemaName: String): WfSchema? {
         return repository.findBySchemaName(schemaName).orElse(null)
     }
 
+    /**
+     * Insert a new schema. Validates that all `schema:` references inside the payload
+     * point to already-existing schemas (self-reference is not allowed during CREATE
+     * because the schema is not yet saved).
+     */
     fun save(entity: WfSchema): WfSchema {
-        // 创建前校验所有 schema 引用是否合法（不允许自引用，因为自身尚未保存）
         validateSchemaReferences(entity.schemaJson, null)
         val saved = repository.save(entity)
-        log.info("Saved schema [{}]", saved.schemaName)
+        log.info { "Saved schema [${saved.schemaName}]" }
         publishToWorkers(saved)
         return saved
     }
 
+    /**
+     * Update an existing schema by name. Enforces frozen-state gating, validates references
+     * (self-reference is allowed on UPDATE since the row already exists), then persists and
+     * publishes the delta to workers.
+     */
     @Transactional
     fun update(schemaName: String, entity: WfSchema): WfSchema {
         val existing = repository.findBySchemaName(schemaName)
-            .orElseThrow { IllegalArgumentException("Schema not found: $schemaName") }
+            .orElseThrow { IllegalArgumentException("Schema not found: `$schemaName") }
 
         val canUnlock = hasPermission(SCHEMA_UNLOCK_PERMISSION)
         if (existing.frozen && !canUnlock) {
-            throw AccessDeniedException("Schema [$schemaName] 已冻结，当前用户无权限修改")
+            throw AccessDeniedException("Schema [$schemaName] is frozen, current user has no permission to edit")
         }
 
-        // 更新前校验 schema 引用是否合法（允许自引用）
         validateSchemaReferences(entity.schemaJson, schemaName)
 
         existing.schemaType = entity.schemaType
@@ -165,42 +193,44 @@ class WfSchemaService(
         existing.description = entity.description
         existing.scope = entity.scope
         existing.appGroup = entity.appGroup
-        // 仅具备 schema:unlock 权限的用户才能变更冻结状态
+        // Only unlock-privileged callers are allowed to mutate frozen state
         if (canUnlock) {
             existing.frozen = entity.frozen
         }
 
         val saved = repository.save(existing)
-        log.info("Updated schema [{}], frozen={}", schemaName, saved.frozen)
+        log.info { "Updated schema [$schemaName], frozen=${saved.frozen}" }
         publishToWorkers(saved)
         return saved
     }
 
+    /**
+     * Delete a schema by name. Enforces the frozen-state gate, blocks deletion when the
+     * schema is still referenced by another schema or any workflow input/output schema,
+     * then unpublishes from workers.
+     */
     @Transactional
     fun delete(schemaName: String) {
         val entity = repository.findBySchemaName(schemaName)
-            .orElseThrow { IllegalArgumentException("Schema 不存在: $schemaName") }
+            .orElseThrow { IllegalArgumentException("Schema not found: $schemaName") }
 
         if (entity.frozen && !hasPermission(SCHEMA_UNLOCK_PERMISSION)) {
-            throw AccessDeniedException("Schema [$schemaName] 已冻结，当前用户无权限删除")
+            throw AccessDeniedException("Schema [$schemaName] is frozen, current user has no permission to delete")
         }
 
-        // 检查是否被其他 Schema 或工作流定义引用
         val referrers = findReferrers(schemaName)
         if (referrers.isNotEmpty()) {
             throw IllegalArgumentException(
-                "Schema [$schemaName] 正在被引用，无法删除。引用来源: ${referrers.joinToString(", ")}"
+                "Schema [$schemaName] is still referenced and cannot be deleted. Referrers: ${referrers.joinToString(", ")}"
             )
         }
 
         repository.delete(entity)
-        log.info("Deleted schema [{}]", schemaName)
+        log.info { "Deleted schema [$schemaName]" }
         unpublishFromWorkers(schemaName)
     }
 
-    /**
-     * 从 Schema JSON 内容中提取所有被引用的 Schema 名称。
-     */
+    /** Extract every distinct `schema:<name>` target referenced inside a JSON Schema payload. */
     fun extractReferencedSchemaNames(schemaJson: String): Set<String> {
         return SCHEMA_REF_REGEX.findAll(schemaJson)
             .map { it.groupValues[1] }
@@ -208,8 +238,11 @@ class WfSchemaService(
     }
 
     /**
-     * 校验 Schema 中所有引用的目标 Schema 是否都存在。
-     * @throws IllegalArgumentException 如果存在引用了不存在的 Schema
+     * Validates that every `schema:` reference inside `schemaJson` points to an already
+     * existing schema. [selfName] — when non-null — allows self-references (used on UPDATE
+     * where the current schema already has a row).
+     *
+     * @throws IllegalArgumentException if any referenced target schema does not exist.
      */
     fun validateSchemaReferences(schemaJson: String, selfName: String? = null) {
         val referenced = extractReferencedSchemaNames(schemaJson)
@@ -221,23 +254,20 @@ class WfSchemaService(
         }
         if (invalidRefs.isNotEmpty()) {
             throw IllegalArgumentException(
-                "Schema 引用了不存在的目标 Schema：${invalidRefs.joinToString(", ")}。" +
-                    "请先创建这些 Schema，或修正引用关系。"
+                "Schema references non-existing target Schema: ${invalidRefs.joinToString(", ")}. " +
+                    "Please create these Schema first, or fix the reference relations."
             )
         }
     }
 
     /**
-     * 查找引用了指定 Schema 的所有来源。
-     *
-     * 引用可能出现在：
-     * 1. 其他 Schema 的 schemaJson 中（通过 `$ref: "schema:<name>"` 引用）
-     * 2. 工作流定义的 inputSchema / outputSchema 中（通过 `$ref: "schema:<name>"` 引用）
+     * Returns all sources that reference [schemaName] — either via another schema's
+     * `schemaJson` or via any workflow definition's input/output schemas.
      */
     private fun findReferrers(schemaName: String): List<String> {
         val referrers = mutableListOf<String>()
 
-        // 1. 扫描其他 Schema（使用精确正则匹配，避免误判 json-schema: 前缀）
+        // 1. Scan other schemas using exact regex (avoids false-positive json-schema: prefix matches)
         repository.findAll().forEach { other ->
             if (other.schemaName != schemaName &&
                 containsReferenceTo(other.schemaJson.orEmpty(), schemaName)
@@ -246,7 +276,7 @@ class WfSchemaService(
             }
         }
 
-        // 2. 扫描工作流定义的 inputSchema / outputSchema
+        // 2. Scan every workflow definition's input/output schema columns
         definitionRepository.findAll().forEach { wf ->
             val inInput = wf.inputSchema?.let { containsReferenceTo(it, schemaName) } == true
             val inOutput = wf.outputSchema?.let { containsReferenceTo(it, schemaName) } == true
@@ -259,30 +289,28 @@ class WfSchemaService(
     }
 
     /**
-     * 查询某 Schema 的所有版本（当前实现：仅返回自身作为唯一版本）
+     * Returns historical versions for a schema. Current implementation is 1-version-only
+     * (no row-level versioning yet); returns the current entity as the sole entry.
      */
     fun findVersions(schemaName: String): List<WfSchema> {
         val entity = repository.findBySchemaName(schemaName).orElse(null) ?: return emptyList()
         return listOf(entity)
     }
 
-    // ─── Schema 配置分发 ────────────────────────────────────────────
+    // ===== Schema config distribution =====
 
-    /**
-     * 全量拉取所有 Schema 快照（供 Worker HTTP 拉取）
-     */
+    /** Full snapshot pull used by Worker instances during HTTP bootstrap. */
     fun loadAllSchemaSnapshots(): List<SchemaConfigSnapshot> {
         return repository.findAll().map { toSnapshot(it) }
     }
 
-    /**
-     * 获取单个 Schema 快照
-     */
+    /** Single-schema snapshot pull for incremental refresh. */
     fun getSnapshot(schemaName: String): SchemaConfigSnapshot? {
         val entity = repository.findBySchemaName(schemaName).orElse(null) ?: return null
         return toSnapshot(entity)
     }
 
+    /** Fire-and-forget push of a schema snapshot to every connected worker. */
     private fun publishToWorkers(entity: WfSchema) {
         val publisher = schemaConfigPublisher ?: return
         asyncScope.launch {
@@ -290,23 +318,24 @@ class WfSchemaService(
                 val snapshot = toSnapshot(entity)
                 publisher.publish(snapshot)
             } catch (e: Exception) {
-                log.error("Failed to publish schema [${entity.schemaName}] to workers", e)
-                // 不阻断 DB 事务，降级为仅本地（下次发布可重试）
+                log.error(e) { "Failed to publish schema [${entity.schemaName}] to workers" }
             }
         }
     }
 
+    /** Fire-and-forget removal of a schema from every connected worker. */
     private fun unpublishFromWorkers(schemaName: String) {
         val publisher = schemaConfigPublisher ?: return
         asyncScope.launch {
             try {
                 publisher.unpublish(schemaName)
             } catch (e: Exception) {
-                log.error("Failed to unpublish schema [$schemaName] from workers", e)
+                log.error(e) { "Failed to unpublish schema [$schemaName] from workers" }
             }
         }
     }
 
+    /** Convert a WfSchema entity to the wire-format snapshot expected by the SPI. */
     private fun toSnapshot(entity: WfSchema): SchemaConfigSnapshot {
         return SchemaConfigSnapshot(
             schemaName = entity.schemaName,

@@ -1,17 +1,20 @@
 package com.fluxion.admin.exception
 
 /**
- * Admin 后台统一错误响应体。
+ * Unified error DTO returned by every admin exception path.
  *
- * 后端所有未处理的异常最终都会被 [GlobalExceptionHandler] 捕获并转换为该结构返回，
- * 前端据此展示统一、可定位的错误提示。
+ * Both `GlobalExceptionHandler` and the servlet error fallback `AdminErrorController`
+ * convert caught exceptions into this structure so the frontend always sees a single,
+ * machine-parseable envelope.
  *
- * @property code 错误码，用于程序判断与问题定位
- * @property message 面向用户的错误描述
- * @property timestamp 错误发生时间戳（毫秒）
+ * @property code stable short error key used by frontend routing and i18n lookups.
+ * @property message human-readable display text (already localized on the server).
+ * @property detail optional per-field or extra diagnostic details (e.g. validation errors).
+ * @property timestamp wall-clock millis of when the response was assembled.
  */
 data class AdminErrorResponse(
     val code: String,
     val message: String,
+    val detail: Map<String, String>? = null,
     val timestamp: Long = System.currentTimeMillis()
 )

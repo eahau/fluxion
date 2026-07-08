@@ -1,9 +1,17 @@
 package com.fluxion.schema.exception
 
 /**
- * Schema 严格校验失败时抛出的异常。
+ * Thrown by strict-mode schema validation (see
+ * [com.fluxion.schema.api.SchemaValidator.validateStrict]) when the input
+ * data fails one or more schema constraints.
  *
- * @property errors 校验错误信息列表
+ * The [errors] list carries the same plain-string error messages that a
+ * non-strict [com.fluxion.schema.model.ValidationResult] would return, so
+ * callers can choose between "check result" and "catch exception" styles
+ * without losing information.
+ *
+ * @property errors flat list of validation failure messages; order is not
+ *   guaranteed to match any particular schema traversal.
  */
 class SchemaValidationException(
     message: String,

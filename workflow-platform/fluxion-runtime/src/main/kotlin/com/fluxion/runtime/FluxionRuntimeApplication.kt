@@ -4,13 +4,19 @@ import org.springframework.boot.autoconfigure.SpringBootApplication
 import org.springframework.boot.runApplication
 
 /**
- * Fluxion 运行面（Data Plane / Worker）启动类。
+ * Fluxion Runtime (Data Plane / Worker) Spring Boot entry point.
  *
- * 职责：
- *   - 向 fluxion-admin（控制面）注册自身
- *   - 从配置中心拉取工作流定义与函数配置
- *   - 通过 HTTP / RPC / MQ 暴露工作流执行能力
- *   - 供 Java 8 业务系统作为 sidecar 远程调用
+ * A deployed Worker instance is responsible for:
+ * - Self-registering with the Admin control plane (via [InstanceRegistry]).
+ * - Pulling and hot-reloading workflow definitions and function configs
+ *   from the chosen config center (Apollo / Nacos / Admin-HTTP).
+ * - Exposing published workflow execution capability through one or more
+ *   transport adapters (HTTP SpringMVC / WebFlux, Dubbo, gRPC, Kafka).
+ * - Acting as a lightweight sidecar for Java 8 monolith workloads that
+ *   cannot embed the platform directly.
+ *
+ * Activation: `workflow.instance.role=worker` must be set in the environment
+ * for the auto-configurations in this module to actually wire beans.
  */
 @SpringBootApplication
 class FluxionRuntimeApplication

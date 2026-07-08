@@ -12,10 +12,10 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
 
 /**
- * Protobuf Schema 全链路集成测试。
+ * Protobuf Schema 鍏ㄩ摼璺泦鎴愭祴璇曘€?
  *
- * 覆盖：Parser → Validator → FieldExtractor → Codec → DefaultSchemaManager 多格式路由。
- * 使用 FileDescriptorProto JSON 格式（protoc --descriptor_set_out --json_format 输出）。
+ * 瑕嗙洊锛歅arser 鈫?Validator 鈫?FieldExtractor 鈫?Codec 鈫?DefaultSchemaManager 澶氭牸寮忚矾鐢便€?
+ * 浣跨敤 FileDescriptorProto JSON 鏍煎紡锛坧rotoc --descriptor_set_out --json_format 杈撳嚭锛夈€?
  */
 class ProtobufSchemaIntegrationTest {
 
@@ -24,7 +24,7 @@ class ProtobufSchemaIntegrationTest {
     private val extractor = ProtobufSchemaFieldExtractor()
     private val codec = ProtobufSchemaCodec()
 
-    // FileDescriptorProto JSON 格式（动态 Schema，无需 .proto 编译）
+    // FileDescriptorProto JSON 鏍煎紡锛堝姩鎬?Schema锛屾棤闇€ .proto 缂栬瘧锛?
     private val sampleDescriptorJson = """
     {
       "name": "user.proto",
@@ -58,7 +58,7 @@ class ProtobufSchemaIntegrationTest {
         val schema = parser.parse(null, sampleDescriptorJson)
         val data = mapOf("id" to 1, "name" to "Alice", "email" to "alice@test.com")
         val result = validator.validate(schema, data)
-        // 骨架校验：结构合法即通过
+        // 楠ㄦ灦鏍￠獙锛氱粨鏋勫悎娉曞嵆閫氳繃
         assertThat(result.valid).isTrue()
     }
 

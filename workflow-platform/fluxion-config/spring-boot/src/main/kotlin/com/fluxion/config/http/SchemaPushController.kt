@@ -9,9 +9,9 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 
 /**
- * HTTP Schema 推送接收端点 — Worker 侧
+ * HTTP Schema 鎺ㄩ€佹帴鏀剁鐐?鈥?Worker 渚?
  *
- * 接收 Admin 通过 [HttpSchemaConfigPublisher] 推送的 Schema 配置变更。
+ * 鎺ユ敹 Admin 閫氳繃 [HttpSchemaConfigPublisher] 鎺ㄩ€佺殑 Schema 閰嶇疆鍙樻洿銆?
  */
 @RestController
 @RequestMapping("/internal/workflow/schema")

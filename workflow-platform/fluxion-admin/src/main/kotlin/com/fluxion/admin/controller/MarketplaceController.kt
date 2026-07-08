@@ -6,9 +6,18 @@ import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 
 /**
- * 工作流市场 REST API
+ * Marketplace REST controller — browse / publish / install / uninstall workflows,
+ * functions, and parameterised workflow templates.
  *
- * 提供市场浏览、搜索、发布、安装、卸载等功能。
+ * All mutation endpoints (publish, install, uninstall) are tenant-gated:
+ *   - publishers must be able to access the source resource's appGroup
+ *   - installers must be members of the target appGroup
+ *
+ * Request/response DTOs are declared inline because this API is not yet part of
+ * the generated OpenAPI spec (hand-written JSON maps keep iteration fast).
+ *
+ * Collaborates with: MarketplaceService (business logic), SecurityContextHelper
+ * (tenant access checks + current user for audit fields on install receipts).
  */
 @RestController
 @RequestMapping("/api/admin/marketplace")
@@ -17,27 +26,21 @@ class MarketplaceController(
     private val securityContext: SecurityContextHelper,
 ) {
 
-    /**
-     * 列出所有 ACTIVE 的市场 listing
-     */
+    /** List every ACTIVE marketplace listing (browse index). */
     @GetMapping
     fun listListings(): ResponseEntity<List<Map<String, Any?>>> {
         val listings = marketplaceService.listActive()
         return ResponseEntity.ok(listings.map { it.toMap() })
     }
 
-    /**
-     * 搜索市场
-     */
+    /** Keyword search over title + description (case-insensitive, both OR'd). */
     @GetMapping("/search")
     fun search(@RequestParam keyword: String): ResponseEntity<List<Map<String, Any?>>> {
         val listings = marketplaceService.search(keyword)
         return ResponseEntity.ok(listings.map { it.toMap() })
     }
 
-    /**
-     * 获取单个 listing 详情
-     */
+    /** Fetch a single listing detail by stable listing id. */
     @GetMapping("/{listingId}")
     fun getListing(@PathVariable listingId: String): ResponseEntity<Map<String, Any?>> {
         val listing = marketplaceService.getListing(listingId)
@@ -45,9 +48,7 @@ class MarketplaceController(
         return ResponseEntity.ok(listing.toMap())
     }
 
-    /**
-     * 发布工作流到市场
-     */
+    /** Publish a workflow definition to the marketplace (author = current session user). */
     @PostMapping("/publish/workflow")
     fun publishWorkflow(@RequestBody request: PublishRequest): ResponseEntity<Map<String, Any?>> {
         val listing = marketplaceService.publishWorkflow(
@@ -61,9 +62,7 @@ class MarketplaceController(
         return ResponseEntity.ok(listing.toMap())
     }
 
-    /**
-     * 发布函数到市场
-     */
+    /** Publish a registered function to the marketplace. */
     @PostMapping("/publish/function")
     fun publishFunction(@RequestBody request: PublishRequest): ResponseEntity<Map<String, Any?>> {
         val listing = marketplaceService.publishFunction(
@@ -77,9 +76,7 @@ class MarketplaceController(
         return ResponseEntity.ok(listing.toMap())
     }
 
-    /**
-     * 发布工作流模版到市场
-     */
+    /** Publish a parameterised workflow template to the marketplace. */
     @PostMapping("/publish/template")
     fun publishTemplate(@RequestBody request: PublishTemplateRequest): ResponseEntity<Map<String, Any?>> {
         val listing = marketplaceService.publishTemplate(
@@ -95,13 +92,13 @@ class MarketplaceController(
     }
 
     /**
-     * 安装市场工作流/函数到指定 app_group
+     * Install a listing into a consumer's appGroup.
      *
-     * 需要身份验证：当前用户必须是目标 app_group 的成员
+     * Creates a scope=PRIVATE copy whose sourceRef points back to the original.
+     * Dispatches to the correct service method based on listing.sourceType.
      */
     @PostMapping("/install")
     fun install(@RequestBody request: InstallRequest): ResponseEntity<Map<String, Any>> {
-        // 租户权限校验
         securityContext.requireAppGroupAccess(request.appGroup)
 
         val listing = marketplaceService.getListing(request.listingId)
@@ -123,9 +120,7 @@ class MarketplaceController(
         return ResponseEntity.ok(result)
     }
 
-    /**
-     * 卸载市场安装
-     */
+    /** Uninstall a listing → delete the PRIVATE copy and roll back the install count. */
     @DeleteMapping("/install")
     fun uninstall(@RequestParam listingId: String, @RequestParam appGroup: String): ResponseEntity<Unit> {
         securityContext.requireAppGroupAccess(appGroup)
@@ -133,9 +128,7 @@ class MarketplaceController(
         return ResponseEntity.noContent().build()
     }
 
-    /**
-     * 获取某 app_group 的安装记录
-     */
+    /** List every install receipt for an app_group (team installed-apps screen). */
     @GetMapping("/installs")
     fun getInstalls(@RequestParam appGroup: String): ResponseEntity<List<Map<String, Any?>>> {
         securityContext.requireAppGroupAccess(appGroup)
@@ -150,8 +143,9 @@ class MarketplaceController(
         })
     }
 
-    // ─── DTO ────────────────────────────────────────────────────────
+    // ─── Request DTOs ────────────────────────────────────────────────
 
+    /** Payload for workflow / function publish endpoints. */
     data class PublishRequest(
         val listingId: String,
         val sourceId: String,
@@ -160,6 +154,7 @@ class MarketplaceController(
         val tags: List<String>? = null,
     )
 
+    /** Extended publish payload for templates (carries a template parameter map). */
     data class PublishTemplateRequest(
         val listingId: String,
         val sourceId: String,
@@ -169,14 +164,16 @@ class MarketplaceController(
         val templateConfig: Map<String, Any>? = null,
     )
 
+    /** Install a listing into an appGroup; carries optional template params. */
     data class InstallRequest(
         val listingId: String,
         val appGroup: String,
         val templateParams: Map<String, Any>? = null,
     )
 
-    // ─── Helper ──────────────────────────────────────────────────────
+    // ─── Entity → Map conversion helper ──────────────────────────────
 
+    /** Convert a DB listing entity to the UI's flat map response format. */
     private fun com.fluxion.admin.entity.WfMarketplaceListing.toMap(): Map<String, Any?> = mapOf(
         "listingId" to listingId,
         "sourceType" to sourceType,

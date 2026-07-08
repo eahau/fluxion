@@ -1,3 +1,12 @@
+/**
+ * Shared JSON deserialisation helpers for config-centre snapshots.
+ *
+ * Each backend (Apollo, Nacos, internal HTTP push) ships a raw JSON text
+ * payload; instead of duplicating `objectMapper.readValue` + try/catch in
+ * every subscriber implementation, the platform centralises the logic here
+ * so parsing error logs share a consistent tag vocabulary and failure
+ * handling is uniform across backends.
+ */
 package com.fluxion.config.core
 
 import com.fluxion.adapter.spi.config.FunctionConfigSnapshot
@@ -5,19 +14,22 @@ import com.fluxion.core.util.JsonUtil
 import org.slf4j.*
 
 /**
- * 配置快照通用解析工具
- *
- * 避免在 Apollo/Nacos/HTTP 各实现中重复写 objectMapper.readValue + try/catch。
+ * Stateless parser converting raw config-centre JSON payloads into strongly
+ * typed snapshot records.
  */
 object SnapshotParser {
 
     /**
-     * 解析函数配置快照。
+     * Parses a function config snapshot JSON payload.
      *
-     * @param json 原始 JSON 字符串
-     * @param functionName 函数名（仅用于日志）
-     * @param log 日志记录器
-     * @return 解析后的快照；失败返回 null
+     * Deserialisation failures are logged at ERROR level with the offending
+     * `functionName` tag and `null` is returned so callers can continue
+     * processing other entries rather than failing the whole push batch.
+     *
+     * @param json raw JSON string from the config centre
+     * @param functionName owning function key, used only for error tagging
+     * @param log logger to report parse errors against
+     * @return parsed snapshot or `null` on failure
      */
     fun parseFunctionSnapshot(
         json: String,
@@ -33,7 +45,16 @@ object SnapshotParser {
     }
 
     /**
-     * 解析函数索引集合（Nacos 索引专用）。
+     * Parses a Nacos-style function-name index set (JSON array of strings).
+     *
+     * Nacos backends list available function keys in a dedicated index entry
+     * before pulling each individual snapshot; this helper returns the
+     * empty set on parse failure so subscribers can fall back to full
+     * enumeration rather than crashing.
+     *
+     * @param content JSON array text
+     * @param log logger to report parse errors against
+     * @return set of function keys or empty set on failure
      */
     fun parseFunctionIndex(
         content: String,

@@ -2,20 +2,24 @@ package com.fluxion.admin.security
 
 import jakarta.servlet.http.HttpServletRequest
 import org.slf4j.*
+import org.slf4j.warn
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * Debug 接口安全守卫
+ * Three-layered gatekeeper for debug / step-through endpoints.
  *
- * 三层防护：
- *   1. 全局并发容量限制（maxConcurrent）
- *   2. 单 IP 速率限制（maxPerMinutePerIp）
- *   3. 角色校验（需要 DEVELOPER 角色，可通过 Spring Security 扩展实现）
+ * 1. **Global concurrency cap** (`maxConcurrent`) – avoids saturating the admin instance with
+ *    heavy in-memory workflow executions.
+ * 2. **Per-IP sliding rate limit** (`maxPerMinutePerIp`) – based on a 60-second window with
+ *    per-IP counters held in a `ConcurrentHashMap`.
+ * 3. **Role check** (DEVELOPER role) – enforced upstream by Spring Security; this class does
+ *    not re-implement it.
  *
- * 采用简单滑动计数器（内存），生产环境可替换为 Redis ZSET 实现。
+ * The in-memory counters are intentionally simple. For clustered production deployments the
+ * implementation should be swapped for a Redis-backed ZSET / token-bucket approach.
  */
 @Component
 class DebugSecurityGuard(
@@ -27,16 +31,17 @@ class DebugSecurityGuard(
 
     private val activeCount = AtomicInteger(0)
 
-    /** IP → (windowStartMs, count) */
+    /** IP → (windowStartMs, count) sliding-window counter. */
     private val ipCounters = ConcurrentHashMap<String, IpCounter>()
 
-    // ─── Public API ──────────────────────────────────────────────
+    // === Public API =============================================================================
 
     /**
-     * 前置校验（在 Controller 方法入口调用）
-     * @throws DebugNotEnabledException  debug 功能未开启
-     * @throws DebugCapacityException    并发容量已满
-     * @throws DebugRateLimitException   IP 速率超限
+     * Pre-flight check invoked at the very top of each debug controller handler.
+     *
+     * @throws DebugNotEnabledException if the debug feature toggle is off
+     * @throws DebugCapacityException   if the global concurrency pool is exhausted
+     * @throws DebugRateLimitException  if the calling IP exceeded its per-minute allowance
      */
     fun checkAndAcquire(request: HttpServletRequest) {
         if (!debugEnabled) {
@@ -45,11 +50,9 @@ class DebugSecurityGuard(
 
         val ip = resolveIp(request)
 
-        // 速率限制
         val counter = ipCounters.computeIfAbsent(ip) { IpCounter() }
         counter.increment(maxPerMinutePerIp, ip)
 
-        // 并发容量
         val current = activeCount.incrementAndGet()
         if (current > maxConcurrent) {
             activeCount.decrementAndGet()
@@ -58,12 +61,12 @@ class DebugSecurityGuard(
         }
     }
 
-    /** 执行结束后释放并发计数 */
+    /** Release a concurrency permit after a debug session completes (or fails). */
     fun release() {
         activeCount.decrementAndGet()
     }
 
-    // ─── IP 解析 ─────────────────────────────────────────────────
+    // === IP resolution ==========================================================================
 
     private fun resolveIp(request: HttpServletRequest): String =
         (request.getHeader("X-Forwarded-For")?.split(",")?.firstOrNull()?.trim()
@@ -71,7 +74,7 @@ class DebugSecurityGuard(
             ?: request.remoteAddr)
             .take(64)
 
-    // ─── 内部计数器 ──────────────────────────────────────────────
+    // === Per-IP counter =========================================================================
 
     private class IpCounter {
         @Volatile private var windowStart = System.currentTimeMillis()
@@ -80,7 +83,6 @@ class DebugSecurityGuard(
         fun increment(limit: Int, ip: String) {
             val now = System.currentTimeMillis()
             if (now - windowStart > 60_000L) {
-                // 新窗口：重置
                 windowStart = now
                 count.set(0)
             }
@@ -92,7 +94,7 @@ class DebugSecurityGuard(
         }
     }
 
-    // ─── 异常类 ──────────────────────────────────────────────────
+    // === Exception types ========================================================================
 
     class DebugNotEnabledException(msg: String)  : RuntimeException(msg)
     class DebugCapacityException(msg: String)    : RuntimeException(msg)

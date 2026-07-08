@@ -6,13 +6,15 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
 /**
- * 租户（app_group）管理服务
+ * Multi-tenant (app_group) membership and access-control service.
  *
- * 负责用户与应用分组的关联管理，以及租户权限校验。
+ * Access rules:
+ *   - ADMIN users implicitly have access to every app_group (no rows needed in this table)
+ *   - Non-ADMIN users only see PRIVATE resources whose app_group is present in their
+ *     user_app_groups rows
  *
- * 权限规则：
- *   - ADMIN 角色用户隐式拥有所有 app_group 权限（不需要在此表中添加记录）
- *   - 非 ADMIN 用户只能访问自己在 user_app_groups 中关联的 app_group
+ * Collaborates with: UserAppGroupRepository (persistence), SecurityContextHelper (uses
+ * [getUserAppGroups] for scope-filter calculation), controllers (role/tenant admin UI).
  */
 @Service
 class TenantService(
@@ -20,27 +22,24 @@ class TenantService(
 ) {
 
     /**
-     * 校验用户是否有权访问指定 app_group
+     * Returns true when `username` is allowed to operate on `appGroup` resources.
      *
-     * @param username  用户名
-     * @param appGroup  应用分组
-     * @param isAdmin   是否为 ADMIN 角色
-     * @return true 表示有权访问
+     * Short-circuits to true for ADMINs (implicit grant). Otherwise falls back to a
+     * membership presence check in the join table.
      */
     fun hasAccess(username: String, appGroup: String, isAdmin: Boolean = false): Boolean {
         if (isAdmin) return true
         return userAppGroupRepository.existsByUsernameAndAppGroup(username, appGroup)
     }
 
-    /**
-     * 获取用户可访问的所有 app_group 列表
-     */
+    /** Return the (possibly empty) list of app_group identifiers visible to `username`. */
     fun getUserAppGroups(username: String): List<String> {
         return userAppGroupRepository.findByUsername(username).map { it.appGroup }
     }
 
     /**
-     * 为用户分配 app_group
+     * Idempotently add a user to a single app_group.
+     * No-op if the membership row already exists (avoids UK constraint violation).
      */
     @Transactional
     fun assignAppGroup(username: String, appGroup: String) {
@@ -52,25 +51,19 @@ class TenantService(
         userAppGroupRepository.save(entity)
     }
 
-    /**
-     * 批量为用户分配 app_group
-     */
+    /** Batch add multiple group memberships for one user (per-entry idempotency). */
     @Transactional
     fun assignAppGroups(username: String, appGroups: List<String>) {
         appGroups.forEach { assignAppGroup(username, it) }
     }
 
-    /**
-     * 移除用户的 app_group 关联
-     */
+    /** Remove one user↔group membership row. Safe even if the row does not exist. */
     @Transactional
     fun removeAppGroup(username: String, appGroup: String) {
         userAppGroupRepository.deleteByUsernameAndAppGroup(username, appGroup)
     }
 
-    /**
-     * 查询某 app_group 下的所有用户
-     */
+    /** Return all users who belong to a given app_group (team listing). */
     fun getMembers(appGroup: String): List<String> {
         return userAppGroupRepository.findByAppGroup(appGroup).map { it.username }
     }

@@ -28,47 +28,71 @@ import java.util.concurrent.Executor
 import java.util.concurrent.Executors
 
 /**
- * 瑁呴グ鍣ㄥ疄鐜?Spring Boot 鑷姩閰嶇疆
+ * Spring Boot auto-configuration that wires up all built-in decorator
+ * implementations.
+ *
+ * Beans are registered on an opt-in basis: each decorator bean is only
+ * created when its prerequisite dependency is present (e.g. `MetricsDecorator`
+ * requires a Micrometer `MeterRegistry`), giving deployments a no-op default
+ * for infrastructure they haven't opted into.
  */
 @AutoConfiguration
 class DecoratorImplAutoConfiguration {
 
-    @Bean @ConditionalOnBean(MeterRegistry::class) @ConditionalOnMissingBean(WorkflowMetrics::class)
-    fun workflowMetrics(meterRegistry: MeterRegistry): WorkflowMetrics = MicrometerWorkflowMetrics(meterRegistry)
+    @Bean
+    @ConditionalOnBean(MeterRegistry::class)
+    @ConditionalOnMissingBean(WorkflowMetrics::class)
+    fun workflowMetrics(meterRegistry: MeterRegistry): WorkflowMetrics =
+        MicrometerWorkflowMetrics(meterRegistry)
 
-    @Bean @ConditionalOnBean(MeterRegistry::class)
+    @Bean
+    @ConditionalOnBean(MeterRegistry::class)
     fun metricsDecorator(meterRegistry: MeterRegistry) = MetricsDecorator(meterRegistry)
 
-    @Bean @ConditionalOnMissingBean(RateLimitDecorator::class)
-    fun rateLimitDecorator(store: RateLimitStore?) = RateLimitDecorator(store ?: LocalRateLimitStore())
+    @Bean
+    @ConditionalOnMissingBean(RateLimitDecorator::class)
+    fun rateLimitDecorator(store: RateLimitStore?) =
+        RateLimitDecorator(store ?: LocalRateLimitStore())
 
-    @Bean @ConditionalOnBean(CacheStore::class)
+    @Bean
+    @ConditionalOnBean(CacheStore::class)
     fun cacheDecorator(cacheStore: CacheStore) = CacheDecorator(cacheStore)
 
-    @Bean @ConditionalOnBean(AsyncCallback::class)
+    @Bean
+    @ConditionalOnBean(AsyncCallback::class)
     fun asyncDecorator(
         asyncCallback: AsyncCallback,
         taskInterceptor: TaskInterceptor,
         @Autowired(required = false) taskExecutor: Executor?
     ) = AsyncDecorator(
-        taskExecutor ?: Executors.newThreadPerTaskExecutor(Thread.ofVirtual().name("fluxion-async", 0).factory()),
+        taskExecutor ?: Executors.newThreadPerTaskExecutor(
+            Thread.ofVirtual().name("fluxion-async", 0).factory()
+        ),
         asyncCallback, taskInterceptor
     )
 
-    @Bean @ConditionalOnMissingBean(LoggingDecorator::class)
+    @Bean
+    @ConditionalOnMissingBean(LoggingDecorator::class)
     fun loggingDecorator() = LoggingDecorator()
 
-    @Bean @ConditionalOnBean(DistributedLockProvider::class)
-    fun distributedLockDecorator(lockProvider: DistributedLockProvider) = DistributedLockDecorator(lockProvider)
+    @Bean
+    @ConditionalOnBean(DistributedLockProvider::class)
+    fun distributedLockDecorator(lockProvider: DistributedLockProvider) =
+        DistributedLockDecorator(lockProvider)
 
-    @Bean @ConditionalOnBean(DistributedLockProvider::class)
-    fun workflowLockDecorator(lockProvider: DistributedLockProvider) = WorkflowLockDecorator(lockProvider)
+    @Bean
+    @ConditionalOnBean(DistributedLockProvider::class)
+    fun workflowLockDecorator(lockProvider: DistributedLockProvider) =
+        WorkflowLockDecorator(lockProvider)
 
-    @Bean @ConditionalOnMissingBean(WorkflowRateLimitDecorator::class)
-    fun workflowRateLimitDecorator(store: RateLimitStore?) = WorkflowRateLimitDecorator(store ?: LocalRateLimitStore())
+    @Bean
+    @ConditionalOnMissingBean(WorkflowRateLimitDecorator::class)
+    fun workflowRateLimitDecorator(store: RateLimitStore?) =
+        WorkflowRateLimitDecorator(store ?: LocalRateLimitStore())
 
-    /** OTel Context 璺ㄧ嚎绋嬩紶鎾嫤鎴櫒锛圖agExecutor async(Dispatchers.IO) 鍦烘櫙锛?*/
-    @Bean @ConditionalOnMissingBean(TaskInterceptor::class)
+    /** Default OTel-based context propagator; replaced by a NOOP if OTel is absent. */
+    @Bean
+    @ConditionalOnMissingBean(TaskInterceptor::class)
     fun otelContextTaskInterceptor(): TaskInterceptor = OtelContextTaskInterceptor()
 
     @Bean
@@ -85,7 +109,8 @@ class DecoratorImplAutoConfiguration {
 }
 
 /**
- * 瑁呴グ鍣ㄦ敞鍐屽櫒 鈥?鑷姩鏀堕泦鎵€鏈?[NodeDecorator] Bean 骞舵敞鍐?
+ * Startup registrar -- collects every [NodeDecorator] bean in the application
+ * context and hands them to [DecoratorRegistry.registerAll].
  */
 class DecoratorImplRegistrar(
     registry: DecoratorRegistry,
@@ -102,7 +127,8 @@ class DecoratorImplRegistrar(
 }
 
 /**
- * 宸ヤ綔娴佺骇瑁呴グ鍣ㄦ敞鍐屽櫒 鈥?鑷姩鏀堕泦鎵€鏈?[WorkflowDecorator] Bean 骞舵敞鍐?
+ * Startup registrar -- collects every [WorkflowDecorator] bean and hands them
+ * to [WorkflowDecoratorRegistry.registerAll].
  */
 class WorkflowDecoratorRegistrarBean(
     registry: WorkflowDecoratorRegistry,

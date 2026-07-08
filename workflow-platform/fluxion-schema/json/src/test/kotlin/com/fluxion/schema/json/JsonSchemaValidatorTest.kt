@@ -12,7 +12,7 @@ class JsonSchemaValidatorTest {
 
     private fun parse(schema: String) = parser.parse(null, schema)
 
-    // ─── null / 空 Schema ───────────────────────────────────────
+    // 鈹€鈹€鈹€ null / 绌?Schema 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
     @Test
     fun `empty schema returns valid`() {
@@ -33,7 +33,7 @@ class JsonSchemaValidatorTest {
         assertTrue(result.valid)
     }
 
-    // ─── 类型校验 ───────────────────────────────────────────────
+    // 鈹€鈹€鈹€ 绫诲瀷鏍￠獙 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
     @Test
     fun `string type validation passes`() {
@@ -100,7 +100,7 @@ class JsonSchemaValidatorTest {
         assertTrue(validator.validate(parse(schema), mapOf("tags" to listOf("a", "b"))).valid)
     }
 
-    // ─── Map Schema 输入 ────────────────────────────────────────
+    // 鈹€鈹€鈹€ Map Schema 杈撳叆 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
     @Test
     fun `map schema input validation`() {
@@ -113,7 +113,7 @@ class JsonSchemaValidatorTest {
         assertTrue(result.valid)
     }
 
-    // ─── 严格模式 ───────────────────────────────────────────────
+    // 鈹€鈹€鈹€ 涓ユ牸妯″紡 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
     @Test
     fun `validate strict throws on failure`() {
@@ -123,7 +123,7 @@ class JsonSchemaValidatorTest {
         }
     }
 
-    // ─── 格式校验 ───────────────────────────────────────────────
+    // 鈹€鈹€鈹€ 鏍煎紡鏍￠獙 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
     @Test
     fun `email format validation`() {
@@ -132,7 +132,7 @@ class JsonSchemaValidatorTest {
         assertFalse(validator.validate(parse(schema), mapOf("email" to "not-an-email")).valid)
     }
 
-    // ─── Schema 对象校验 ─────────────────────────────────────────
+    // 鈹€鈹€鈹€ Schema 瀵硅薄鏍￠獙 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
     @Test
     fun `schema format is json schema`() {

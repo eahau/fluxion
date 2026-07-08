@@ -7,7 +7,7 @@ import com.fluxion.core.util.JsonUtil
 import org.slf4j.*
 
 /**
- * Apollo 实现 — 实例注册（业务实例侧）
+ * Apollo 瀹炵幇 鈥?瀹炰緥娉ㄥ唽锛堜笟鍔″疄渚嬩晶锛?
  */
 class ApolloInstanceRegistry(
     private val openApiClient: ApolloOpenApiClient,

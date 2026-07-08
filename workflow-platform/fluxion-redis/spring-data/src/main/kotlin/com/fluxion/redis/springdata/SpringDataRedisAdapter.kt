@@ -8,12 +8,14 @@ import org.springframework.data.redis.core.script.DefaultRedisScript
 import java.util.concurrent.TimeUnit
 
 /**
- * RedisClientAdapter 的 Spring Data Redis 实现
+ * Spring Data Redis implementation of [RedisClientAdapter].
  *
- * 将 builtin:redisCommand 的命令字符串映射到 StringRedisTemplate API。
- * 作为 Lettuce / Redisson 之外的轻量替代方案，适用于已引入 spring-boot-starter-data-redis 的应用。
+ * Maps the `builtin:redisCommand` command strings onto the familiar
+ * [StringRedisTemplate] ops-family API. Intended as a lightweight fallback for
+ * applications that already pull in `spring-boot-starter-data-redis` and do not
+ * want the additional classpath weight of Lettuce / Redisson directly.
  *
- * 支持的命令（按数据结构分组）：
+ * Supported commands (grouped by data structure):
  *   String:     GET, SET, SETEX, MGET, MSET, INCR, INCRBY, DECR, DECRBY, SETNX
  *   Hash:       HGET, HSET, HMSET, HMGET, HGETALL, HDEL, HEXISTS, HLEN, HKEYS, HVALS
  *   Set:        SADD, SREM, SMEMBERS, SISMEMBER, SCARD, SUNION, SINTER, SDIFF
@@ -21,7 +23,11 @@ import java.util.concurrent.TimeUnit
  *   List:       LPUSH, RPUSH, LPOP, RPOP, LRANGE, LLEN, LINDEX, LSET
  *   Key:        DEL, EXISTS, EXPIRE, TTL, PERSIST, RENAME, TYPE, KEYS
  *   Pub/Sub:    PUBLISH
- *   Lua:        通过 eval() / evalSha() / scriptLoad() 方法
+ *   Lua:        eval() / evalSha() / scriptLoad()
+ *
+ * Commands that are not listed above throw [UnsupportedOperationException]; callers
+ * should wrap such operations in a short Lua EVAL script or switch to the
+ * Lettuce/Redisson adapter for full command coverage.
  */
 class SpringDataRedisAdapter(
     private val redisTemplate: StringRedisTemplate
@@ -29,7 +35,7 @@ class SpringDataRedisAdapter(
 
     override fun execute(command: String, key: String, args: List<String>): Any? {
         return when (command.uppercase()) {
-            // ─── String ───────────────────────────────────────────────────
+            // ─── String ──────────────────────────────────────────────────
             "GET"     -> redisTemplate.opsForValue().get(key)
             "SET"     -> {
                 redisTemplate.opsForValue().set(key, args.getOrElse(0) { "" })
@@ -46,7 +52,7 @@ class SpringDataRedisAdapter(
             "DECR"    -> redisTemplate.opsForValue().decrement(key)
             "DECRBY"  -> redisTemplate.opsForValue().decrement(key, args.getOrElse(0) { "1" }.toLong())
             "MGET"    -> redisTemplate.opsForValue().multiGet(listOf(key) + args)
-            // ─── Hash ─────────────────────────────────────────────────────
+            // ─── Hash ────────────────────────────────────────────────────
             "HGET"    -> redisTemplate.opsForHash<String, String>().get(key, args.getOrElse(0) { "" })
             "HGETALL" -> redisTemplate.opsForHash<String, String>().entries(key)
             "HSET"    -> {
@@ -63,13 +69,13 @@ class SpringDataRedisAdapter(
             "HLEN"    -> redisTemplate.opsForHash<String, String>().size(key)
             "HKEYS"   -> redisTemplate.opsForHash<String, String>().keys(key)
             "HVALS"   -> redisTemplate.opsForHash<String, String>().values(key)
-            // ─── Set ──────────────────────────────────────────────────────
+            // ─── Set ─────────────────────────────────────────────────────
             "SADD"    -> redisTemplate.opsForSet().add(key, *args.toTypedArray())
             "SREM"    -> redisTemplate.opsForSet().remove(key, *args.toTypedArray())
             "SMEMBERS"-> redisTemplate.opsForSet().members(key)
             "SISMEMBER" -> redisTemplate.opsForSet().isMember(key, args.getOrElse(0) { "" })
             "SCARD"   -> redisTemplate.opsForSet().size(key)
-            // ─── Sorted Set ───────────────────────────────────────────────
+            // ─── Sorted Set ─────────────────────────────────────────────
             "ZADD"    -> {
                 // args: [score, member, score, member, ...]
                 var count = 0L
@@ -97,7 +103,7 @@ class SpringDataRedisAdapter(
             "ZINCRBY" -> redisTemplate.opsForZSet().incrementScore(
                 key, args.getOrElse(1) { "" }, args.getOrElse(0) { "0" }.toDouble()
             )
-            // ─── List ─────────────────────────────────────────────────────
+            // ─── List ───────────────────────────────────────────────────
             "LPUSH"   -> redisTemplate.opsForList().leftPushAll(key, args)
             "RPUSH"   -> redisTemplate.opsForList().rightPushAll(key, args)
             "LPOP"    -> redisTemplate.opsForList().leftPop(key)
@@ -108,7 +114,7 @@ class SpringDataRedisAdapter(
                 redisTemplate.opsForList().range(key, start, stop)
             }
             "LLEN"    -> redisTemplate.opsForList().size(key)
-            // ─── Key ──────────────────────────────────────────────────────
+            // ─── Key ────────────────────────────────────────────────────
             "DEL"     -> redisTemplate.delete(key).let { if (it) 1L else 0L }
             "EXISTS"  -> if (redisTemplate.hasKey(key)) 1L else 0L
             "EXPIRE"  -> redisTemplate.expire(key, args.getOrElse(0) { "0" }.toLong(), TimeUnit.SECONDS)
@@ -116,7 +122,7 @@ class SpringDataRedisAdapter(
             "PERSIST" -> redisTemplate.persist(key)
             "RENAME"  -> { redisTemplate.rename(key, args.getOrElse(0) { "" }); "OK" }
             "TYPE"    -> redisTemplate.type(key).code()
-            // ─── Pub/Sub ──────────────────────────────────────────────────
+            // ─── Pub/Sub ───────────────────────────────────────────────
             "PUBLISH" -> redisTemplate.convertAndSend(key, args.getOrElse(0) { "" })
             else      -> throw UnsupportedOperationException(
                 "Command not supported by SpringDataRedisAdapter: $command. " +

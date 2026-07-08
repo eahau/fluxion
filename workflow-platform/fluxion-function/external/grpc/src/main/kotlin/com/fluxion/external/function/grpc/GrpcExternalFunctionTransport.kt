@@ -56,7 +56,7 @@ import io.grpc.reflection.v1alpha.ServerReflectionRequest
 import io.grpc.reflection.v1alpha.ServerReflectionResponse
 import io.grpc.stub.ClientCalls
 import io.grpc.stub.StreamObserver
-import org.slf4j.LoggerFactory
+import org.slf4j.*
 import java.io.ByteArrayInputStream
 import java.io.InputStream
 import java.util.concurrent.ConcurrentHashMap

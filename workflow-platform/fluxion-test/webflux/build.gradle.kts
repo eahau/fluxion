@@ -1,3 +1,7 @@
+// fluxion-test:webflux - WebFlux-based test application for reactive HTTP adapter validation.
+// Spring Boot executable using WebFlux stack to exercise fluxion-adapter-http:webflux adapter,
+// with all runtime components auto-wired through individual spring-boot starters.
+// Key plugins: Spring Boot application plugin (runnable), Kotlin JVM + Spring plugin.
 plugins {
     kotlin("jvm")
     kotlin("plugin.spring")
@@ -6,53 +10,64 @@ plugins {
 }
 
 dependencies {
-    // ============ 项目模块依赖 ============
-    // Runtime 核心（框架无关的执行引擎）
+    // ===== Internal Fluxion Modules =====
+    // Runtime core engine: framework-agnostic DAG executor + workflow orchestration.
     implementation(project(":fluxion-runtime:core"))
-    // Runtime Spring Boot 自动装配层
+    // Runtime Spring Boot auto-configuration layer for runtime beans assembly.
     implementation(project(":fluxion-runtime:spring-boot"))
-    // 核心引擎 Spring Boot 装配
-    implementation(project(":fluxion-core-spring-boot"))
-    // 适配器 SPI
+    // Core engine Spring Boot starter (capability domain beans registration).
+    implementation(project(":fluxion-core:spring-boot"))
+    // Adapter SPI: router / subscriber / definition provider interfaces.
     implementation(project(":fluxion-adapter-spi"))
-    // HTTP 适配器核心
+    // HTTP adapter core abstractions (RouteMatch, HttpRequestProcessor, AbstractRouteRegistry).
     implementation(project(":fluxion-adapter-http:core"))
-    // HTTP WebFlux 适配器
+    // WebFlux reactive HTTP adapter implementation (RouterFunction-based).
     implementation(project(":fluxion-adapter-http:webflux"))
-    // 内置函数
-    implementation(project(":fluxion-builtin-functions:spring-boot"))
-    // 依赖注入
+    // Built-in workflow functions + registry auto-configuration.
+    implementation(project(":fluxion-function:spring-boot"))
+    // Spring DI bridge: ApplicationContext-backed FunctionInstanceProvider.
     implementation(project(":fluxion-di:spring"))
-    // 脚本引擎
+    // Groovy script engine Spring Boot starter + dynamic evaluation.
     implementation(project(":fluxion-script-engine:spring-boot"))
-    // 横切能力
-    implementation(project(":fluxion-decorator-impl:spring-boot"))
-    // 配置中心
+    // Cross-cutting decorator Spring Boot starter (metrics/tracing/cache beans).
+    implementation(project(":fluxion-decorator:spring-boot"))
+    // Config center Spring Boot auto-configuration.
     implementation(project(":fluxion-config:spring-boot"))
-    implementation(project(":fluxion-config:http"))          // HTTP 自举模式（type=http 时生效）
-    implementation(project(":fluxion-config:nacos"))         // Nacos 配置中心（type=nacos 时生效）
-    // 注册中心
-    implementation(project(":fluxion-config:registry-http")) // HTTP 自举注册中心（type=http 时生效）
-    // Nacos 路由配置存储（框架无关，复用 springmvc:nacos 中的 NacosRouteConfigStore 实现）
+    // HTTP bootstrap config backend (activated when workflow.config.type=http).
+    implementation(project(":fluxion-config:http"))
+    // Nacos config backend (activated when workflow.config.type=nacos).
+    implementation(project(":fluxion-config:nacos"))
+    // HTTP-based service registry (bootstrap mode discovery).
+    implementation(project(":fluxion-config:registry-http"))
+    // Nacos route configuration store (reuses springmvc:nacos implementation for shared Nacos storage).
     implementation(project(":fluxion-adapter-http:springmvc:nacos"))
-    // Nacos Client（nacos 模式运行时必需）
+    // Nacos Client SDK - required for Nacos mode runtime operation.
     implementation("com.alibaba.nacos:nacos-client")
 
-    // ============ Spring Boot 核心 ============
+    // ===== Spring Boot Starters =====
+    // DevTools for live-reload during local test-application development.
     developmentOnly("org.springframework.boot:spring-boot-devtools")
+    // Spring WebFlux (reactive web server) - RouterFunction-based request handling.
     implementation("org.springframework.boot:spring-boot-starter-webflux")
+    // Log4j2 logging implementation (root build.gradle.kts excludes default Logback globally).
     implementation("org.springframework.boot:spring-boot-starter-log4j2")
-    runtimeOnly("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml")  // Log4j2 YAML 配置解析
+    // Jackson YAML dataformat for Log4j2 YAML configuration file parsing.
+    runtimeOnly("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml")
+    // Actuator endpoints: health, metrics, info for the WebFlux test application.
     implementation("org.springframework.boot:spring-boot-starter-actuator")
+    // JSR-303 validation (Hibernate Validator engine).
     implementation("org.springframework.boot:spring-boot-starter-validation")
 
-    // Kotlin Coroutines reactive bridge
+    // Kotlin Coroutines reactive bridge: mono { } / flux { } coroutine builder support.
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-reactor")
 
-    // ============ 测试 ============
+    // ===== Testing Dependencies =====
+    // Spring Boot Test starter (integration test context bootstrap, WebTestClient).
     testImplementation("org.springframework.boot:spring-boot-starter-test")
 }
 
+// Local development bootRun customization: JDWP remote debugging on port 5006 (distinct from
+// fluxion-admin port 5005) when the `-Pdebug` Gradle project property is provided.
 tasks.bootRun {
     if (project.hasProperty("debug")) {
         jvmArgs = listOf(

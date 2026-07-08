@@ -8,8 +8,7 @@ import com.fluxion.core.function.WorkflowFunction
 import com.fluxion.core.model.NodeInput
 import com.fluxion.core.value.FunctionResult
 import com.fluxion.core.value.SideEffect
-import org.slf4j.LoggerFactory
-
+import org.slf4j.*
 /**
  * Built-in message-queue publish function (`builtin:mqPublish`).
  *

@@ -1,4 +1,3 @@
-
 package com.fluxion.admin.service
 
 import com.fluxion.builtin.db.DataSourceProvider
@@ -7,21 +6,30 @@ import org.springframework.stereotype.Service
 import java.sql.DatabaseMetaData
 
 /**
- * 数据库表结构元数据查询服务。
+ * Introspect JDBC [DatabaseMetaData] to produce admin-facing schema tooling:
+ *   - list registered DataSource names
+ *   - enumerate tables / columns / foreign keys in user schemas (filtering out
+ *     system catalogs, Flyway history, and default Fluxion auth tables)
+ *   - auto-generate JSON-Schema documents for any table column set (used by
+ *     workflow builders when scaffolding dbExecute inputs)
  *
- * 通过 JDBC [DatabaseMetaData] 读取指定 DataSource 的表列表与列信息，
- * 用于前端可视化选择表/列，以及从真实表结构生成 JSON Schema。
- * 支持多数据源：未指定 dataSource 时使用默认数据源。
+ * Driven entirely by JDBC so it works across MySQL / PostgreSQL / H2 without any
+ * vendor-specific SQL.
+ *
+ * Collaborates with: [DataSourceProvider] (builtin multi-tenant DataSource registry).
  */
 @Service
 class TableMetadataService(private val dataSourceProvider: DataSourceProvider) {
 
     private val log = LoggerFactory.getLogger(javaClass)
 
+    /** Enumerate every DataSource name registered with the builtin provider. */
+    fun listDataSources(): List<String> = dataSourceProvider.listDataSourceNames()
+
     /**
-     * 列出当前数据库中所有用户表（过滤掉系统/内置表）。
-     *
-     * @param dataSource 数据源名称，为空则使用默认数据源
+     * List all non-system tables in a DataSource. Defaults to the `"default"`
+     * DataSource when `dataSource` is not supplied. Results are sorted by name
+     * for stable admin UI rendering.
      */
     fun listTables(dataSource: String? = null): List<String> {
         return dataSourceProvider.getDataSource(dataSource ?: "default").connection.use { conn ->
@@ -34,7 +42,7 @@ class TableMetadataService(private val dataSourceProvider: DataSourceProvider) {
                 while (rs.next()) {
                     val tableName = rs.getString("TABLE_NAME") ?: continue
                     if (!isSystemTable(tableName)) {
-                        tables.add(tableName)
+                        tables += tableName
                     }
                 }
                 tables.sorted()
@@ -43,14 +51,14 @@ class TableMetadataService(private val dataSourceProvider: DataSourceProvider) {
     }
 
     /**
-     * 获取指定表的所有列元数据。
-     *
-     * @param tableName 逻辑表名或真实表名
-     * @param dataSource 数据源名称，为空则使用默认数据源
+     * Enumerate column metadata for a given table. Results are sorted by the JDBC
+     * ORDINAL_POSITION (left-to-right column order). `tableName` is rejected if it
+     * contains backticks or single quotes to avoid accidental SQL injection in
+     * drivers that do not properly parameterise `meta.getColumns(...)`.
      */
     fun getColumns(tableName: String, dataSource: String? = null): List<ColumnMetadata> {
-        require(tableName.isNotBlank()) { "表名不能为空" }
-        require(!tableName.contains('`') && !tableName.contains('\'')) { "表名包含非法字符: $tableName" }
+        require(tableName.isNotBlank()) { "Table name cannot be blank" }
+        require(!tableName.contains('`') && !tableName.contains('\'')) { "Table name contains illegal characters: $tableName" }
 
         return dataSourceProvider.getDataSource(dataSource ?: "default").connection.use { conn ->
             val meta = conn.metaData
@@ -80,29 +88,34 @@ class TableMetadataService(private val dataSourceProvider: DataSourceProvider) {
     }
 
     /**
-     * 一次性获取所有用户表及其列信息，用于前端设计器侧边栏展示。
+     * Batch helper: every user-visible table paired with its columns.
+     * Used by the schema visualiser / ER-diagram tools.
      */
     fun getTablesWithColumns(dataSource: String? = null): List<TableMetadata> {
         return dataSourceProvider.getDataSource(dataSource ?: "default").connection.use { conn ->
-            val meta = conn.metaData
-            val catalog = conn.catalog
-            val schema: String? = null
             val tables = listTables(dataSource)
-            tables.map { tableName ->
+            tables.map { tn ->
                 TableMetadata(
-                    name = tableName,
-                    columns = getColumns(tableName, dataSource)
+                    name = tn,
+                    columns = getColumns(tn, dataSource)
                 )
             }
         }
     }
 
     /**
-     * 获取指定表的外键信息（入站：其他表引用本表；出站：本表引用其他表）。
+     * Foreign-key inspection for a single table. Returns both directions:
+     *   - [ForeignKeysResult.incoming]: keys exported FROM this table (i.e. other
+     *     tables whose FK references our PK)
+     *   - [ForeignKeysResult.outgoing]: keys imported INTO this table (i.e. FKs
+     *     this table declares against other tables' primary keys)
+     *
+     * Results within each list are sorted by FK name then key sequence so
+     * multi-column foreign keys reproduce in order.
      */
     fun getForeignKeys(tableName: String, dataSource: String? = null): ForeignKeysResult {
-        require(tableName.isNotBlank()) { "表名不能为空" }
-        require(!tableName.contains('`') && !tableName.contains('\'')) { "表名包含非法字符: $tableName" }
+        require(tableName.isNotBlank()) { "Table name cannot be blank" }
+        require(!tableName.contains('`') && !tableName.contains('\'')) { "Table name contains illegal characters: $tableName" }
 
         return dataSourceProvider.getDataSource(dataSource ?: "default").connection.use { conn ->
             val meta = conn.metaData
@@ -149,7 +162,16 @@ class TableMetadataService(private val dataSourceProvider: DataSourceProvider) {
     }
 
     /**
-     * 根据表结构生成 JSON Schema（对象）。
+     * Build a JSON-Schema 2020-12 style document for `tableName`.
+     *
+     * Produced shape:
+     *   - top-level `object` with title / description / properties / required
+     *   - one property per column with:
+     *       * `type` (mapped via [sqlTypeToJsonType])
+     *       * `description` human-readable column info (DB type + nullability + COMMENT)
+     *       * `autoIncrement: true` flag when applicable
+     *   - `required` array includes every non-nullable column that has no default
+     *     and is NOT auto-increment (those are generated server side)
      */
     fun generateJsonSchema(tableName: String, dataSource: String? = null): Map<String, Any?> {
         val columns = getColumns(tableName, dataSource)
@@ -167,6 +189,7 @@ class TableMetadataService(private val dataSourceProvider: DataSourceProvider) {
             if (col.isAutoIncrement) {
                 prop["autoIncrement"] = true
             }
+            // Required = non-nullable, non-auto-increment, no default
             if (!col.nullable && !col.isAutoIncrement && col.defaultValue == null) {
                 required.add(col.name)
             }
@@ -182,6 +205,14 @@ class TableMetadataService(private val dataSourceProvider: DataSourceProvider) {
         )
     }
 
+    /**
+     * Map a [java.sql.Types] constant to the best JSON-Schema type string.
+     *
+     * Fallback strategy: if the numeric JDBC type is not in the well-known list
+     * (vendor-specific extensions), inspect the driver-reported string type name
+     * — e.g. PostgreSQL `json` columns get mapped to JSON-Schema `object` while
+     * everything else falls back to `string`.
+     */
     private fun sqlTypeToJsonType(sqlType: Int, dataType: String?): String {
         return when (sqlType) {
             java.sql.Types.BIGINT, java.sql.Types.INTEGER, java.sql.Types.SMALLINT,
@@ -199,6 +230,10 @@ class TableMetadataService(private val dataSourceProvider: DataSourceProvider) {
         }
     }
 
+    /**
+     * Build the human-readable `description` string that accompanies each column
+     * in the generated JSON schema: `<TYPE_NAME> | auto increment | not null | <REMARKS>`.
+     */
     private fun buildDescription(col: ColumnMetadata): String {
         val parts = mutableListOf<String>()
         col.dataType?.let { parts.add(it) }
@@ -209,7 +244,13 @@ class TableMetadataService(private val dataSourceProvider: DataSourceProvider) {
     }
 
     /**
-     * 过滤数据库内置表（Flyway 历史表、MySQL 系统表等）。
+     * Table name filter used by [listTables]. Hides:
+     *   - Flyway schema-history tables
+     *   - standard SQL/RDBMS system catalogs (information_schema / performance_schema
+     *     / pg_catalog prefix / mysql / sys)
+     *   - Fluxion built-in auth tables (users / roles) — those are administered
+     *     through the dedicated User/Role screens
+     *   - Internal trace_* tables
      */
     private fun isSystemTable(name: String): Boolean {
         val lower = name.lowercase()
@@ -219,23 +260,19 @@ class TableMetadataService(private val dataSourceProvider: DataSourceProvider) {
             lower.startsWith("mysql") ||
             lower.startsWith("sys") ||
             lower.startsWith("pg_") ||
-            (lower.startsWith("trace_")) ||
+            lower.startsWith("trace_") ||
             lower == "users" ||
             lower == "roles"
     }
 }
 
-/**
- * 表元数据（含列）。
- */
+/** Aggregate: table name + its column list. */
 data class TableMetadata(
     val name: String,
     val columns: List<ColumnMetadata>
 )
 
-/**
- * 列元数据。
- */
+/** Per-column metadata as reported by JDBC DatabaseMetaData.getColumns. */
 data class ColumnMetadata(
     val name: String,
     val dataType: String?,
@@ -248,9 +285,7 @@ data class ColumnMetadata(
     val isAutoIncrement: Boolean
 )
 
-/**
- * 外键元数据。
- */
+/** One foreign-key column pair (part of a potentially multi-column FK). */
 data class ForeignKeyMetadata(
     val fkName: String?,
     val sourceTable: String,
@@ -260,9 +295,7 @@ data class ForeignKeyMetadata(
     val keySeq: Int
 )
 
-/**
- * 外键关系结果。
- */
+/** Two-directional FK result set for a single table. */
 data class ForeignKeysResult(
     val incoming: List<ForeignKeyMetadata>,
     val outgoing: List<ForeignKeyMetadata>

@@ -1,3 +1,13 @@
+/**
+ * Dynamically converts generic Java/Kotlin data structures (Map, List,
+ * primitives) into Avro [GenericRecord] instances using a runtime schema.
+ *
+ * The key subtlety handled here is Avro UNION resolution: because unions
+ * carry no explicit tag on plain JVM values, the converter tries each
+ * non-null branch with an [isCompatible] type check and uses the first
+ * match. This matches the behaviour of most Avro JSON codecs without
+ * requiring callers to wrap values in `GenericData.EnumSymbol` etc.
+ */
 package com.fluxion.schema.avro
 
 import org.apache.avro.Schema as AvroSchema
@@ -6,21 +16,18 @@ import org.apache.avro.generic.GenericRecord
 import org.apache.avro.util.Utf8
 
 /**
- * Avro 动态数据转换器。
- *
- * 将普通 Java/Kotlin 数据结构（Map / List / 基本类型）转换为 Avro [GenericRecord]，
- * 无需代码生成，完全动态解释 Schema。
- *
- * 核心难点：Avro union 类型（如 `["null", "string"]`）需要显式指定分支类型，
- * 本转换器根据值的实际类型自动推断正确的 union 分支。
+ * Internal conversion helper reused by [AvroSchemaValidator], [AvroSchemaCodec]
+ * and [AvroSchemaDataProvider] to coerce arbitrary values to the Avro type
+ * system.
  */
 internal object AvroDataConverter {
 
     /**
-     * 将任意数据转换为 GenericRecord。
+     * Convert a value into a [GenericRecord] conforming to [schema].
      *
-     * @param data   Map 或 POJO（POJO 先通过 Jackson 转为 Map）
-     * @param schema Avro Schema（必须是 record 类型）
+     * Accepts GenericRecord (returned as-is), raw Map instances, `null`
+     * (yields an empty record), or any POJO — POJOs first pass through
+     * Jackson to obtain a Map representation.
      */
     fun toGenericRecord(data: Any?, schema: AvroSchema): GenericRecord {
         val effectiveSchema = unwrapUnion(schema)
@@ -47,12 +54,13 @@ internal object AvroDataConverter {
     }
 
     /**
-     * 递归转换值，按 Schema 类型匹配。
+     * Recursively coerce a scalar/collection value to match the declared
+     * Avro schema type.
      */
     private fun convertValue(value: Any?, schema: AvroSchema): Any? {
         if (value == null) {
             return if (isNullable(schema)) null
-            else throw IllegalArgumentException("Non-nullable field got null value for schema: $schema")
+            else throw IllegalArgumentException("Non-nullable field got null value for schema: `$schema")
         }
 
         return when (schema.type) {
@@ -110,27 +118,31 @@ internal object AvroDataConverter {
     }
 
     /**
-     * 处理 union 类型：根据值的实际类型选择匹配的分支。
+     * Select the appropriate UNION branch for [value] by iterating the
+     * non-null types with an [isCompatible] probe. Falls back to the first
+     * non-null branch if nothing matches, letting the low-level type
+     * coercion produce a clearer error than "no union branch matched".
      */
     private fun convertUnion(value: Any?, schema: AvroSchema): Any? {
         if (value == null) return null
 
         val branches = schema.types
-        // 优先匹配非 null 分支
         for (branch in branches) {
             if (branch.type == AvroSchema.Type.NULL) continue
             if (isCompatible(value, branch)) {
                 return convertValue(value, branch)
             }
         }
-        // fallback：使用第一个非 null 分支
         val fallback = branches.firstOrNull { it.type != AvroSchema.Type.NULL }
-            ?: throw IllegalArgumentException("No compatible union branch for value: $value")
+            ?: throw IllegalArgumentException("No compatible union branch for value: `$value")
         return convertValue(value, fallback)
     }
 
     /**
-     * 判断值是否与指定 Schema 类型兼容。
+     * Quick type-compatibility check used to pick the correct UNION branch
+     * before invoking full [convertValue]. Intentionally permissive: numeric
+     * widening (Int↔Long↔Float↔Double) is accepted because downstream
+     * [convertValue] handles the actual narrowing/widening call.
      */
     private fun isCompatible(value: Any, schema: AvroSchema): Boolean {
         return when (schema.type) {

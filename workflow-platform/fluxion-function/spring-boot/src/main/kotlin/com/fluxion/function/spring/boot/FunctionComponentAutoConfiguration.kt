@@ -4,6 +4,7 @@ import com.fluxion.core.function.FunctionComponent
 import com.fluxion.core.function.FunctionRegistry
 import com.fluxion.di.FunctionInstanceProvider
 import org.springframework.boot.autoconfigure.AutoConfiguration
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.context.annotation.Bean
 
 /**
@@ -22,6 +23,7 @@ import org.springframework.context.annotation.Bean
 class FunctionComponentAutoConfiguration {
 
     @Bean
+    @ConditionalOnMissingBean(name = ["functionComponentConfiguration"])
     fun functionComponentConfiguration(
         registry: FunctionRegistry,
         components: List<FunctionComponent>,

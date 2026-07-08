@@ -247,11 +247,11 @@ private val FORBIDDEN_DDL_KEYWORDS = Regex(
 )
 
 /**
- * Matches `-- line` and `/* block * /` comments so they can be stripped before
+ * Matches `-- line` and block comments so they can be stripped before
  * safety scanning — otherwise a user could hide DROP inside a comment to
  * bypass the keyword check and then smuggle it in via variable substitution.
  */
-private val SQL_COMMENT_REGEX = Regex("--[^\\n]*|/\\*[\\s\\S]*?\\*/")
+private val SQL_COMMENT_REGEX = Regex("""--[^\n]*|/\*[\s\S]*?\*/""")
 
 /**
  * Returns true for read-only-style SQL prefixes.

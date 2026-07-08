@@ -14,10 +14,17 @@ import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.RequestBody
 
 /**
- * Convert Spring MVC [HttpServletRequest] to [UnifiedRequest].
+ * Extension on [HttpServletRequest] that converts a Servlet-native request
+ * into the protocol-agnostic [UnifiedRequest] consumed by [WorkflowRouter].
  *
- * Extracts query params, headers from the framework-specific request
- * and merges them with path variables and body into a protocol-agnostic [UnifiedRequest].
+ * Extracts:
+ * - Query params from `parameterMap` (single → String, multi → List).
+ * - All HTTP headers as `String → String` map.
+ * - Path variables already resolved by the interceptor.
+ * - Optional raw string body (null for GET/DELETE/etc.)
+ *
+ * All three input sets are merged via [mergeParams] with well-defined
+ * precedence.
  */
 fun HttpServletRequest.toUnifiedRequest(
     workflowId: String,
@@ -40,11 +47,16 @@ fun HttpServletRequest.toUnifiedRequest(
 }
 
 /**
- * Spring MVC 动态路由处理器。
+ * Spring MVC handler bean that every dynamically-registered HTTP route points at.
  *
- * 所有动态路由（由 MvcRouteRegistry 注册）均指向此 Bean 的 handle() 方法。
- * Spring MVC 6 原生支持 suspend controller 方法：
- *   Tomcat 线程在 suspend 时释放，resume 时重新分配。
+ * All routes published by `MvcRouteRegistry` via `RequestMappingHandlerMapping`
+ * are bound to the single [handle] method on this bean — that's how a single
+ * handler can serve thousands of distinct URL shapes without recompilation.
+ *
+ * Coroutine support: `handle()` is a `suspend fun`. Spring Framework 6+
+ * supports suspend controller methods natively — the Tomcat request thread
+ * is released on `suspend` and reacquired from the pool on `resume`, so
+ * concurrent throughput stays high even when a DAG does slow I/O.
  */
 class MvcWorkflowHandler(
     private val workflowRouter: WorkflowRouter
@@ -52,10 +64,27 @@ class MvcWorkflowHandler(
     private val log = LoggerFactory.getLogger(javaClass)
 
     companion object {
+        /** Mirror of [HttpRequestProcessor.ATTR_ROUTE_MATCH] — copied for call-site convenience. */
         const val ATTR_ROUTE_MATCH = HttpRequestProcessor.ATTR_ROUTE_MATCH
+        /** Mirror of [HttpRequestProcessor.HEADER_EXECUTION_ID] — copied for call-site convenience. */
         const val HEADER_EXECUTION_ID = HttpRequestProcessor.HEADER_EXECUTION_ID
     }
 
+    /**
+     * Handle a single matched dynamic MVC route.
+     *
+     * Flow:
+     * 1. Read the pre-resolved [RouteMatch] from request attributes (set by
+     *    the `WorkflowRouteInterceptor` registered in the auto-config).
+     * 2. Convert the Servlet request → [UnifiedRequest].
+     * 3. Delegate to the shared [WorkflowRouter] (coroutine-native suspend path).
+     * 4. Emit the response with `X-Execution-Id` tracing header.
+     *
+     * @param request Servlet-native request; body is injected by Spring's
+     *                `@RequestBody` argument resolver only if there is content.
+     * @param body    Optional raw request body string (null for empty bodies).
+     * @return HTTP 200 with `result.data` as body, plus tracing headers.
+     */
     suspend fun handle(
         request: HttpServletRequest,
         @RequestBody(required = false) body: String?

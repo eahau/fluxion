@@ -7,19 +7,25 @@ import com.fluxion.core.engine.CachedExecution
 import com.fluxion.core.engine.IdempotencyStore
 import com.fluxion.core.value.EngineResult
 import kotlinx.coroutines.runBlocking
-import org.slf4j.LoggerFactory
-
+import org.slf4j.*
 /**
- * 幂等路由器 — WorkflowRouter 装饰器
+ * Idempotency-aware [WorkflowRouter] decorator.
  *
- * 从 [UnifiedRequest.headers] 中提取 `X-Idempotency-Key`：
- *   - 命中缓存 → 直接返回缓存结果，不执行工作流
- *   - 未命中 → 委托内部路由器执行，执行完成后缓存结果
- *   - 未携带 header → 透传，不做幂等处理
+ * Adds at-most-once semantics on top of any inner router by keying results
+ * against a caller-supplied idempotency key. Supports three outcomes for
+ * every request:
+ * 1. **Cache HIT**  → return the saved [CachedExecution] directly, no DAG run.
+ * 2. **Cache MISS** → run the inner delegate; save its result on success.
+ * 3. **No key**     → transparently passthrough to the delegate.
  *
- * 线程安全：
- *   并发相同 key 的请求时，可能存在短暂的重复执行（cache stampede），
- *   这对工作流场景是可接受的（最终一致性），如需严格互斥请在上层加分布式锁。
+ * Threading / cache-stampede note: concurrent identical keys can still
+ * double-execute (there is no built-in lock here). That's intentional:
+ * workflows are expected to be eventually-consistent under re-execution.
+ * For strict serialization, stack a [DistributedLockRouter] **outside** this
+ * decorator (see [FluxionRuntimeAutoConfiguration] for the canonical order).
+ *
+ * @param delegate Inner router to wrap
+ * @param store    Idempotency cache backend (Redis, DB, in-memory… up to impl)
  */
 class IdempotencyRouter(
     private val delegate: WorkflowRouter,
@@ -29,7 +35,7 @@ class IdempotencyRouter(
     private val log = LoggerFactory.getLogger(javaClass)
 
     companion object {
-        /** 幂等键 header 名称 */
+        /** Header name used by callers to supply an idempotency key. */
         const val HEADER_IDEMPOTENCY_KEY = "X-Idempotency-Key"
     }
 
@@ -43,30 +49,25 @@ class IdempotencyRouter(
 
         val workflowId = request.workflowId ?: request.protocol
 
-        // 1. 查询缓存（按工作流维度定位缓存策略）
         val cached = store.get(key, workflowId)
         if (cached != null) {
-            log.debug("Idempotency cache HIT key=$key workflow=$workflowId executionId=${cached.executionId}")
+            log.debug { "Idempotency cache HIT key=$key workflow=$workflowId executionId=${cached.executionId}" }
             return cached.toResponse()
         }
 
-        // 2. 执行
-        log.debug("Idempotency cache MISS key=$key workflow=$workflowId, executing workflow")
+        log.debug { "Idempotency cache MISS key=$key workflow=$workflowId, executing workflow" }
         val response = delegate.executeSuspend(request)
 
-        // 3. 缓存结果（仅缓存成功结果，失败结果不缓存，允许重试）
         if (response.success) {
             try {
                 store.put(key, response.toEngineResult(), workflowId)
             } catch (ex: Exception) {
-                log.warn("Failed to cache idempotency result key=$key workflow=$workflowId", ex)
+                log.warn(ex) { "Failed to cache idempotency result key=$key workflow=$workflowId" }
             }
         }
 
         return response
     }
-
-    // ─── 转换辅助 ─────────────────────────────────────────────────
 
     private fun CachedExecution.toResponse() = UnifiedResponse(
         success = success,

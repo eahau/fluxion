@@ -1,3 +1,6 @@
+// fluxion-config:registry-http - HTTP-based lightweight service registry implementation.
+// Implements service discovery SPI through simple HTTP polling (no heavyweight registry
+// infrastructure required). Suitable for bootstrap and single-machine deployments.
 plugins {
     java
 }
@@ -11,8 +14,11 @@ sourceSets {
 }
 
 dependencies {
+    // Adapter SPI: base registry/discovery contracts this module implements.
     implementation(project(":fluxion-adapter-spi"))
 
+    // Jackson Databind for JSON serialization of registry payloads.
     implementation("com.fasterxml.jackson.core:jackson-databind")
-    implementation("org.slf4j:slf4j-api")
+    // Unified logging extensions (lazy lambda wrappers over SLF4J).
+    implementation(project(":fluxion-log"))
 }

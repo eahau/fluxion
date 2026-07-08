@@ -1,14 +1,25 @@
+/**
+ * Apollo-backed function-config subscriber (Worker side).
+ *
+ * Kept as a thin subclass instead of instantiating [ApolloKeyedConfigSubscriber]
+ * directly because the [mapKeyToSnapshot] override needs access to the
+ * subclass logger; the parent `log` field is not initialised yet during the
+ * super constructor call, so passing it as a lambda at construction time
+ * would reference an uninitialised value.
+ *
+ * The namespace `workflow-functions` is hard-coded to match the convention
+ * used by [ApolloFunctionConfigPublisher] on the Admin side.
+ */
 package com.fluxion.config.apollo
 
 import com.fluxion.adapter.spi.config.FunctionConfigSnapshot
 import com.fluxion.config.core.SnapshotParser
 import org.slf4j.LoggerFactory
+import org.slf4j.*
 
 /**
- * Apollo 实现 — 函数配置订阅器（Worker 侧）
- *
- * 保留为 thin subclass 的唯一原因：[mapKeyToSnapshot] 需要引用子类 log，
- * 而 log 在 super 构造调用时尚未初始化，无法作为 mapper lambda 传入。
+ * Indexed keyed subscriber that converts raw Apollo JSON payloads to
+ * [FunctionConfigSnapshot] records via [SnapshotParser].
  */
 class ApolloFunctionConfigSubscriber :
     ApolloKeyedConfigSubscriber<FunctionConfigSnapshot>(

@@ -1,14 +1,22 @@
+/**
+ * Admin-side [InstanceRegistry] implementation that accepts worker
+ * registration / heartbeat / deregistration calls over HTTP.
+ *
+ * All mutations are delegated to [InMemoryInstanceStore] which owns the
+ * backing [ConcurrentHashMap] and the periodic expired-entry evictor. This
+ * class only adds structured audit logging so operators can trace instance
+ * lifecycle events through the Admin logs.
+ */
 package com.fluxion.registry.http
 
 import com.fluxion.adapter.spi.registry.InstanceInfo
 import com.fluxion.adapter.spi.registry.InstanceRegistry
 import org.slf4j.LoggerFactory
+import org.slf4j.*
 
 /**
- * HTTP 默认实现 — Admin 侧实例注册接收器
- *
- * 接收 Worker 通过 HTTP 发送的注册 / 心跳 / 注销请求，
- * 实际实例信息保存在 [InMemoryInstanceStore] 中。
+ * HTTP-facing instance registry used when Admin runs without an external
+ * service-discovery system (e.g. no Nacos discovery or Apollo meta-server).
  */
 class HttpAdminInstanceRegistry(
     private val store: InMemoryInstanceStore
@@ -18,18 +26,18 @@ class HttpAdminInstanceRegistry(
 
     override fun register(instance: InstanceInfo) {
         store.register(instance)
-        log.info("Instance registered: instanceId=${instance.instanceId} appGroup=${instance.appGroup} ${instance.host}:${instance.port}")
+        log.info { "Instance registered: instanceId=${instance.instanceId} appGroup=${instance.appGroup} ${instance.host}:${instance.port}" }
     }
 
     override fun deregister(instanceId: String) {
         val removed = store.deregister(instanceId)
         if (removed != null) {
-            log.info("Instance deregistered: instanceId=$instanceId appGroup=${removed.appGroup}")
+            log.info { "Instance deregistered: instanceId=$instanceId appGroup=${removed.appGroup}" }
         }
     }
 
     override fun heartbeat(instanceId: String) {
         store.heartbeat(instanceId)
-        log.debug("Heartbeat received: instanceId=$instanceId")
+        log.debug { "Heartbeat received: instanceId=$instanceId" }
     }
 }

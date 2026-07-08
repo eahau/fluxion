@@ -6,49 +6,70 @@ import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
 /**
- * 框架无关的 HTTP 路由注册基类。
+ * Framework-agnostic HTTP route registry base class.
  *
- * 本类承担的职责（Spring MVC 和 WebFlux 实现共享）：
- *   - 路由 diff 算法：新增 / 移除过期 / 更新变更
- *   - PRIVATE > PLATFORM scope 优先级去重
- *   - 线程安全的并发状态管理
- *   - routeKey → HttpRouteDefinition 映射（唯一数据源）
+ * Shared between Spring MVC and WebFlux so the same state-management logic
+ * doesn't have to be duplicated. Responsibilities handled here:
+ * - Diff algorithm against config-center snapshots (add / update / remove).
+ * - `PRIVATE > PLATFORM` scope tie-breaking when a routeKey is published twice.
+ * - Thread-safe concurrent state management via `ReentrantLock` + `ConcurrentHashMap`.
+ * - Single source of truth for `routeKey → HttpRouteDefinition` mappings.
  *
- * 子类只需实现框架相关的注册操作：
- *   - [doRegister]:   调用框架 API 注册路由（如 RequestMappingHandlerMapping 或 RouterFunction）
- *   - [doUnregister]: 调用框架 API 注销路由
- *   - [activeRouteKeys]: 返回当前已注册的 routeKey 集合
+ * Subclasses only implement three framework-specific hooks:
+ * - [doRegister]   — call framework registration API (e.g. `RequestMappingHandlerMapping#registerMapping`
+ *                    for Spring MVC, or write to shared state for WebFlux).
+ * - [doUnregister] — tear down the framework-side route.
+ * - [activeRouteKeys] — return the set of route keys currently live in the
+ *                    framework view (for diff computation).
  */
 abstract class AbstractRouteRegistry : RouteChangeListener {
 
     protected val log = LoggerFactory.getLogger(javaClass)
 
     /**
-     * routeKey → 完整路由定义 — 所有路由状态的**唯一数据源**。
+     * `routeKey → HttpRouteDefinition` — the **single source of truth** for
+     * all HTTP route state.
      *
-     * `workflowId`、`scope`、`path`、`method` 均可通过存储的
-     * [HttpRouteDefinition] 获取，无需额外的投影 Map。
+     * `workflowId`, `scope`, `path`, and `method` are all reachable by
+     * querying this map directly. There are intentionally no duplicate
+     * projection maps (e.g. `workflowId→Set<RouteKey>`) because writes
+     * are infrequent (config-center pushes only) and reads are fast enough
+     * on `ConcurrentHashMap` to keep the model simple.
      *
-     * 由 [onRouteRegistered] / [onRouteUnregistered] 管理；子类通过它
-     * 重建框架特定的路由对象或直接查询以解析请求。
+     * Mutated exclusively via [onRouteRegistered] / [onRouteUnregistered]
+     * — subclasses MUST call those hooks at the end of register/unregister
+     * to keep framework state and shared state in sync.
      */
     val routeDefinitions = ConcurrentHashMap<String, HttpRouteDefinition>()
 
-    /** 根据 routeKey 查找 workflowId（[routeDefinitions] 的便捷快捷方式） */
+    /**
+     * Convenience lookup: resolve `workflowId` by `routeKey`.
+     *
+     * Thin wrapper around [routeDefinitions] used by the MVC interceptor's
+     * exact-match fast path.
+     *
+     * @param routeKey Canonical `"METHOD:path"` key
+     * @return workflowId bound to the key, or null if unbound
+     */
     fun resolveWorkflowId(routeKey: String): String? = routeDefinitions[routeKey]?.workflowId
 
     protected val lock = ReentrantLock()
 
-    // ─── RouteChangeListener：diff 算法 ────────────────────────────
+    // ----- RouteChangeListener: diff algorithm ---------------------------------
 
     /**
-     * 配置中心推送新路由快照时触发。
+     * Config-center push entry point — called for every snapshot.
      *
-     * 执行 diff：
-     *   1. 过滤已启用的路由
-     *   2. 按 routeKey 去重（PRIVATE 优先于 PLATFORM）
-     *   3. 移除不再存在或已禁用的路由
-     *   4. 注册新路由；重新注册 workflowId 变更的路由
+     * Computes and applies the diff under a single `ReentrantLock` so the
+     * framework view and `routeDefinitions` cannot drift apart if two
+     * config-center notifications interleave. Sequence inside the lock:
+     * 1. Filter disabled routes and dedupe by scope.
+     * 2. Remove routes no longer present in the new snapshot.
+     * 3. Register new routes and re-register routes whose `workflowId` changed
+     *    (unregister + register pair guarantees framework state is consistent).
+     *
+     * Routes with identical `routeKey` + `workflowId` between old and new
+     * snapshots are SKIPPED to avoid pointless framework churn.
      */
     override fun onRoutesChanged(snapshot: List<HttpRouteDefinition>) {
         lock.withLock {
@@ -56,11 +77,9 @@ abstract class AbstractRouteRegistry : RouteChangeListener {
             val newKeys = deduped.map { it.routeKey }.toSet()
             val oldKeys = activeRouteKeys()
 
-            // 1. 移除过期或已禁用的路由
             val toRemove = oldKeys - newKeys
             toRemove.forEach { doUnregister(it) }
 
-            // 2. 注册新路由 / 重新注册变更的路由
             deduped.forEach { route ->
                 val existing = routeDefinitions[route.routeKey]?.workflowId
                 when {
@@ -69,7 +88,6 @@ abstract class AbstractRouteRegistry : RouteChangeListener {
                         doUnregister(route.routeKey)
                         doRegister(route)
                     }
-                    // 路径和 workflowId 均未变更 → 跳过
                 }
             }
 
@@ -82,50 +100,90 @@ abstract class AbstractRouteRegistry : RouteChangeListener {
     }
 
     /**
-     * 使用启动时加载的路由进行初始化。
-     * 由自动装配在应用上下文就绪后调用。
+     * Bootstrap helper — populate the registry on Worker startup.
+     *
+     * Called by the auto-config after the Spring context reaches
+     * `ApplicationReadyEvent` (so `RequestMappingHandlerMapping` is fully
+     * initialised for the MVC path).
+     *
+     * @param initialRoutes First snapshot returned by `RouteConfigStore.loadAll()`
      */
     fun init(initialRoutes: List<HttpRouteDefinition>) {
         log.info { "Loading ${initialRoutes.size} initial HTTP routes..." }
         onRoutesChanged(initialRoutes)
     }
 
-    // ─── 抽象钩子 ───────────────────────────────────────────────────
-
-    /** 返回当前活跃路由 key 集合（由框架特定存储提供） */
-    protected abstract fun activeRouteKeys(): Set<String>
-
-    /** 在框架中注册路由（如 Spring MVC RequestMapping）或写入共享状态（如 WebFlux 直接查询） */
-    protected abstract fun doRegister(route: HttpRouteDefinition)
-
-    /** 按 routeKey 从框架中注销路由 */
-    protected abstract fun doUnregister(routeKey: String)
-
-    // ─── 共享内部状态管理 ──────────────────────────────────────────────
+    // ----- Template methods: framework-specific hooks --------------------------
 
     /**
-     * 框架注册成功后更新共享状态。
-     * 子类应在 [doRegister] 末尾调用此方法。
+     * Return the set of `routeKey`s currently live in the framework view.
+     *
+     * MVC subclasses can read directly from [routeDefinitions].
+     * WebFlux does the same (no intermediate framework state to query).
+     *
+     * @return Live route-key snapshot for diff computation
+     */
+    protected abstract fun activeRouteKeys(): Set<String>
+
+    /**
+     * Framework-side registration.
+     *
+     * Implementations MUST call [onRouteRegistered] AFTER the framework API
+     * succeeds so the shared `routeDefinitions` map stays consistent.
+     *
+     * @param route Route to register
+     */
+    protected abstract fun doRegister(route: HttpRouteDefinition)
+
+    /**
+     * Framework-side removal by `routeKey`.
+     *
+     * Implementations MUST call [onRouteUnregistered] AFTER the framework API
+     * succeeds so the shared `routeDefinitions` map stays consistent.
+     *
+     * @param routeKey Canonical key of the route to drop
+     */
+    protected abstract fun doUnregister(routeKey: String)
+
+    // ----- Shared internal state management hooks -----------------------------
+
+    /**
+     * Subclasses must call at the END of a successful framework registration
+     * (inside [doRegister]) so shared state reflects the framework view.
      */
     protected fun onRouteRegistered(route: HttpRouteDefinition) {
         routeDefinitions[route.routeKey] = route
     }
 
     /**
-     * 框架注销后清除共享状态。
-     * 子类应在 [doUnregister] 末尾调用此方法。
+     * Subclasses must call at the END of a successful framework deregistration
+     * (inside [doUnregister]) so shared state reflects the framework view.
      */
     protected fun onRouteUnregistered(routeKey: String) {
         routeDefinitions.remove(routeKey)
     }
 
-    /** 当前已注册路由快照：routeKey → workflowId（用于健康检查/监控） */
+    /**
+     * Diagnostic snapshot — `routeKey → workflowId` map for health endpoints
+     * and Admin status dashboards.
+     *
+     * @return Immutable snapshot of the registry contents (defensive copy)
+     */
     fun registeredRoutes(): Map<String, String> =
         routeDefinitions.mapValues { it.value.workflowId }
 
-    // ─── 私有方法 ──────────────────────────────────────────────────────
+    // ----- Private helpers -----------------------------------------------------
 
-    /** 去重：同一 routeKey 同时存在 PRIVATE 和 PLATFORM 时，PRIVATE 优先 */
+    /**
+     * Deduplicate routes published under both scopes to the same `routeKey`.
+     *
+     * Policy: `PRIVATE` always wins over `PLATFORM` because the PRIVATE-scope
+     * publish is usually a tenant-specific override of a shared platform
+     * route. `MARKETPLACE` routes fall through to the first (arbitrary) pick
+     * since they are never published alongside a conflicting PRIVATE variant.
+     *
+     * @return De-duplicated list where each `routeKey` appears exactly once
+     */
     private fun dedupeRoutes(snapshot: List<HttpRouteDefinition>): List<HttpRouteDefinition> =
         snapshot
             .filter { it.enabled }

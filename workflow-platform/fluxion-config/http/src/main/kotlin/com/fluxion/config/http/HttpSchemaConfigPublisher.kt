@@ -9,9 +9,9 @@ import com.fluxion.core.util.JsonUtil
 import org.slf4j.LoggerFactory
 
 /**
- * HTTP Schema 配置发布器 — Admin 侧
+ * HTTP Schema 閰嶇疆鍙戝竷鍣?鈥?Admin 渚?
  *
- * 将 Schema 变更推送到所有 Worker 实例的 `/internal/workflow/schema/push` 端点。
+ * 灏?Schema 鍙樻洿鎺ㄩ€佸埌鎵€鏈?Worker 瀹炰緥鐨?`/internal/workflow/schema/push` 绔偣銆?
  */
 class HttpSchemaConfigPublisher(
     instanceDiscovery: InstanceDiscovery

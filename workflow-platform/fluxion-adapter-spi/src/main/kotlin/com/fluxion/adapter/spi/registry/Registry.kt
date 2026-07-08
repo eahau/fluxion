@@ -1,39 +1,68 @@
 package com.fluxion.adapter.spi.registry
 
 /**
- * 发布目标类型枚举
+ * Runtime instance registry and discovery SPI contracts.
+ *
+ * Supports a simple service-discovery mechanism where Worker (data-plane)
+ * instances self-register with an Admin-facing registry, enabling:
+ * - Targeted config push (per app-group or per-instance)
+ * - Health monitoring and liveness tracking
+ * - Load-aware routing decisions from the control plane
+ */
+
+/**
+ * Strategy for targeting which worker instances receive a configuration push.
  */
 enum class TargetType {
-    /** 全量广播（所有实例） */
     ALL,
-    /** 按应用群组（指定群组内所有实例） */
     APP_GROUP,
-    /** 按具体实例（指定实例 ID 列表） */
     INSTANCES
 }
 
 /**
- * 发布目标 — 指定工作流定义推送的范围
+ * Opaque descriptor that describes which worker instances a config push
+ * should target.
+ *
+ * Composed with a [TargetType] plus optional filter lists:
+ * - ALL: broadcast to every registered instance
+ * - APP_GROUP: only instances whose `appGroup` field matches one of [groups]
+ * - INSTANCES: only instances whose `instanceId` is in [instanceIds]
+ *
+ * @param type        Targeting strategy
+ * @param groups      App-group filter list (used with APP_GROUP)
+ * @param instanceIds Instance-ID filter list (used with INSTANCES)
  */
 data class PublishTarget(
     val type: TargetType,
     val groups: List<String> = emptyList(),
     val instanceIds: List<String> = emptyList()
 ) {
-    /** 是否全量广播 */
+    /**
+     * Convenience check: does this target represent a broadcast (ALL)?
+     */
     val isAll: Boolean get() = type == TargetType.ALL
 
     companion object {
-        /** 全量广播（所有实例） */
+        /**
+         * Create a broadcast target (all instances).
+         */
         @JvmStatic
         fun all(): PublishTarget = PublishTarget(TargetType.ALL)
 
-        /** 按应用群组发布 */
+        /**
+         * Create a target scoped to specific application groups.
+         *
+         * @param groups List of app-group identifiers (defensive copy made)
+         */
         @JvmStatic
         fun ofGroups(groups: List<String>): PublishTarget =
             PublishTarget(TargetType.APP_GROUP, groups = groups.toList())
 
-        /** 按具体实例发布 */
+        /**
+         * Create a target scoped to specific instance IDs.
+         *
+         * @param instanceIds List of instance identifiers (defensive copy made)
+         */
         @JvmStatic
         fun ofInstances(instanceIds: List<String>): PublishTarget =
             PublishTarget(TargetType.INSTANCES, instanceIds = instanceIds.toList())
@@ -41,7 +70,15 @@ data class PublishTarget(
 }
 
 /**
- * 业务实例元信息
+ * Self-registered runtime instance metadata — stored by [InstanceRegistry]
+ * and queried via [InstanceDiscovery].
+ *
+ * @param instanceId      Globally unique instance identifier (generated on start)
+ * @param appGroup        Logical application group (for targeted config push)
+ * @param host            Network host address
+ * @param port            Listening HTTP port
+ * @param metadata        Arbitrary key/value metadata pairs (protocol, version, etc.)
+ * @param lastHeartbeatMs Epoch-millis timestamp of the last received heartbeat
  */
 data class InstanceInfo(
     val instanceId: String,
@@ -51,15 +88,27 @@ data class InstanceInfo(
     val metadata: Map<String, String> = emptyMap(),
     val lastHeartbeatMs: Long = System.currentTimeMillis()
 ) {
-    /** 返回带有更新心跳时间的新实例 */
+    /**
+     * Return a copy with an updated heartbeat timestamp.
+     *
+     * @param heartbeatMs New epoch-millis timestamp
+     * @return Updated InstanceInfo
+     */
     fun withHeartbeat(heartbeatMs: Long): InstanceInfo = copy(lastHeartbeatMs = heartbeatMs)
 
-    /** 判断实例是否存活（心跳未超时） */
+    /**
+     * Liveness check: is this instance still alive given a timeout window?
+     *
+     * @param timeoutMs Allowed milliseconds without a heartbeat before considered dead
+     * @return true if the last heartbeat is within the timeout window
+     */
     fun isAlive(timeoutMs: Long): Boolean =
         (System.currentTimeMillis() - lastHeartbeatMs) < timeoutMs
 
     companion object {
-        /** 创建实例信息（心跳时间取当前） */
+        /**
+         * Convenience factory for minimal InstanceInfo.
+         */
         @JvmStatic
         fun of(instanceId: String, appGroup: String, host: String, port: Int): InstanceInfo =
             InstanceInfo(instanceId, appGroup, host, port)
@@ -67,44 +116,52 @@ data class InstanceInfo(
 }
 
 /**
- * 实例注册接口 — 业务实例侧
- *
- * 业务应用启动时调用 register() 向注册中心注册自身，
- * 运行期间定时发送心跳，应用关闭时 deregister() 注销。
- *
- * 实现约束：
- *   - register() 必须幂等（重复注册不产生副作用）
- *   - deregister() 不存在时静默忽略
- *   - 网络失败应抛出 RuntimeException，由调用方决定是否重试
+ * Worker-side registry — data-plane instances call these methods to report
+ * their lifecycle to the control plane.
  */
 interface InstanceRegistry {
-    /** 注册实例到注册中心 */
+    /**
+     * Register a new instance with the registry.
+     *
+     * @param instance Full instance metadata
+     */
     fun register(instance: InstanceInfo)
 
-    /** 从注册中心注销实例 */
+    /**
+     * Explicitly unregister a previously-registered instance on shutdown.
+     *
+     * @param instanceId Instance to remove
+     */
     fun deregister(instanceId: String)
 
-    /** 发送心跳续约 */
+    /**
+     * Report that the instance is still alive.
+     *
+     * @param instanceId Instance reporting in
+     */
     fun heartbeat(instanceId: String)
 }
 
 /**
- * 实例发现接口 — Admin 侧
- *
- * Admin 后台通过此接口查询当前存活的业务实例，
- * 用于定向发布和管理面板展示。
- *
- * 实现约束：
- *   - getAllInstances() 应只返回存活（心跳未过期）的实例
- *   - 返回结果为当前时刻的快照，不保证实时一致性
+ * Admin-side discovery — control plane components use this to enumerate
+ * registered instances and decide push targets.
  */
 interface InstanceDiscovery {
-    /** 获取所有存活实例 */
+    /**
+     * List every currently-registered (live) instance.
+     */
     fun getAllInstances(): List<InstanceInfo>
 
-    /** 按应用群组获取实例 */
+    /**
+     * List instances that belong to a specific app-group.
+     *
+     * @param appGroup Group identifier filter
+     * @return Matching instances
+     */
     fun getInstancesByGroup(appGroup: String): List<InstanceInfo>
 
-    /** 获取所有已注册的应用群组名称 */
+    /**
+     * List all distinct app-group names currently registered.
+     */
     fun getAllGroups(): List<String>
 }

@@ -6,15 +6,16 @@ import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.stereotype.Component
 
 /**
- * 安全上下文辅助工具
+ * Helpers that read the current Spring `SecurityContext` to expose the caller identity and
+ * enforce multi-tenant (app-group) scoping.
  *
- * 从 Spring SecurityContext 中提取当前用户信息，
- * 并提供租户（app_group）权限校验方法。
- *
- * 权限规则：
- *   - ADMIN 角色用户隐式拥有所有 app_group 权限
- *   - 非 ADMIN 用户只能访问自己在 user_app_groups 中关联的 app_group
- *   - local / dev 环境下未认证时，视为 ADMIN（免鉴权调试）
+ * Access rules:
+ *   - Users holding `ROLE_ADMIN` (or raw `ADMIN` authority) implicitly have access to every
+ *     `app_group`.
+ *   - Non-admin users may only access `app_group`s to which they are linked via the
+ *     `user_app_groups` join table.
+ *   - When the context is unauthenticated (typical local/dev with auth disabled) the helper
+ *     treats the caller as `admin` with unrestricted access to ease testing.
  */
 @Component
 class SecurityContextHelper(
@@ -22,8 +23,8 @@ class SecurityContextHelper(
 ) {
 
     /**
-     * 获取当前认证用户名。
-     * 未认证（local 环境）时返回 "admin"。
+     * Return the current authenticated username.
+     * Falls back to `"admin"` in local/dev environments where no authentication is set up.
      */
     fun currentUsername(): String {
         val auth = SecurityContextHolder.getContext().authentication
@@ -32,20 +33,18 @@ class SecurityContextHelper(
         return auth.name
     }
 
-    /**
-     * 判断当前用户是否为 ADMIN 角色
-     */
+    /** Return `true` if the caller holds the ADMIN role (or auth is disabled). */
     fun isAdmin(): Boolean {
         val auth = SecurityContextHolder.getContext().authentication
-            ?: return true  // 未认证 = local 环境 = ADMIN
+            ?: return true
         if (auth is AnonymousAuthenticationToken) return true
         return auth.authorities.any { it.authority == "ROLE_ADMIN" || it.authority == "ADMIN" }
     }
 
     /**
-     * 校验当前用户是否有权访问指定 app_group
+     * Verify that the current caller may access data owned by `appGroup`.
      *
-     * @throws TenantAccessDeniedException 无权访问时抛出
+     * @throws TenantAccessDeniedException if access is disallowed.
      */
     fun requireAppGroupAccess(appGroup: String) {
         if (appGroup.isBlank()) return
@@ -57,8 +56,8 @@ class SecurityContextHelper(
     }
 
     /**
-     * 获取当前用户可访问的所有 app_group 列表。
-     * ADMIN 返回 null（表示不限制）。
+     * List every `app_group` the caller can see; `null` is returned for ADMIN callers and
+     * means "no restriction" (callers should interpret accordingly).
      */
     fun accessibleAppGroups(): List<String>? {
         if (isAdmin()) return null
@@ -67,7 +66,8 @@ class SecurityContextHelper(
 }
 
 /**
- * 租户访问被拒绝异常
+ * Thrown when a user attempts to read or write data belonging to an app group they are
+ * not authorized to access.
  */
 class TenantAccessDeniedException(
     val username: String,

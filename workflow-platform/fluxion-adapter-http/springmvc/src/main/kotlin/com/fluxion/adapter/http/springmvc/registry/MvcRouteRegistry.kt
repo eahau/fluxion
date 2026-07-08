@@ -15,32 +15,35 @@ import org.springframework.web.util.pattern.PathPatternParser
 import kotlin.reflect.jvm.javaMethod
 
 /**
- * Spring MVC 路由注册表 — 继承自 [AbstractRouteRegistry]。
+ * Spring MVC HTTP route registry — concrete subclass of [AbstractRouteRegistry].
  *
- * MVC 特有职责：
- *   - 通过 [RequestMappingHandlerMapping] 注册/注销路由
- *   - 将入站请求解析为 workflowId + 路径变量
- *   - 通过工作流路由拦截器将 workflowId 和 pathVariables 注入 request attributes
+ * MVC-specific responsibilities:
+ * - Register/unregister routes via `RequestMappingHandlerMapping` dynamic APIs.
+ * - Resolve incoming requests to `workflowId` + path variables.
+ * - Wire up a `HandlerInterceptor` (via the auto-config) so the handler can
+ *   consume a pre-resolved [RouteMatch] from request attributes.
  *
- * 路由状态管理：
- *   与 [com.fluxion.adapter.http.webflux.WebFluxRouteRegistry] 一致，完全以
- *   父类 [AbstractRouteRegistry.routeDefinitions] 作为**唯一数据源**。
- *   `unregisterMapping()` 所需的 [RequestMappingInfo] 由 [buildMappingInfo] 从
- *   `routeDefinitions` 中的 path/method 即时重建（RequestMappingInfo 基于值相等）。
+ * Single-source-of-truth invariant (same as WebFlux implementation):
+ * `AbstractRouteRegistry.routeDefinitions` is ALWAYS authoritative.
+ * `RequestMappingInfo` instances used for `unregisterMapping()` are NOT cached;
+ * they are re-built on the fly from `routeDefinitions` through [buildMappingInfo].
+ * This works because `RequestMappingInfo.equals()` is value-based (paths, methods,
+ * options conditions) — rebuilt instances compare equal to the originally
+ * registered ones.
  */
 class MvcRouteRegistry(
     private val requestMappingHandlerMapping: RequestMappingHandlerMapping,
     private val dynamicHandler: MvcWorkflowHandler
 ) : AbstractRouteRegistry(), ApplicationListener<ApplicationReadyEvent> {
 
-    /** handle() 方法的 Java Method 引用，`registerMapping()` 所需 */
+    /** `java.lang.reflect.Method` reference to [MvcWorkflowHandler.handle] required by the registerMapping API. */
     private val handleMethod = MvcWorkflowHandler::handle.javaMethod!!
 
     override fun onApplicationEvent(event: ApplicationReadyEvent) {
-        log.info { "MvcRouteRegistry 已就绪，等待 RouteConfigStore 推送路由配置..." }
+        log.info { "MvcRouteRegistry ready, waiting for RouteConfigStore route config push..." }
     }
 
-    // ─── AbstractRouteRegistry 钩子 ─────────────────────────────────────
+    // ----- AbstractRouteRegistry hooks ----------------------------------------
 
     override fun activeRouteKeys(): Set<String> = routeDefinitions.keys.toSet()
 
@@ -49,9 +52,9 @@ class MvcRouteRegistry(
             val info = buildMappingInfo(route.path, route.method)
             requestMappingHandlerMapping.registerMapping(info, dynamicHandler, handleMethod)
             onRouteRegistered(route)
-            log.info { "已注册路由: ${route.method} ${route.path} [${route.scope}] → workflowId=[${route.workflowId}]" }
+            log.info { "Registered route: ${route.method} ${route.path} [${route.scope}] → workflowId=[${route.workflowId}]" }
         } catch (ex: Exception) {
-            log.error(ex) { "注册路由失败 ${route.method} ${route.path}: ${ex.message}" }
+            log.error(ex) { "Failed to register route ${route.method} ${route.path}" }
         }
     }
 
@@ -60,15 +63,18 @@ class MvcRouteRegistry(
         val info = buildMappingInfo(route.path, route.method)
         requestMappingHandlerMapping.unregisterMapping(info)
         onRouteUnregistered(routeKey)
-        log.info { "已注销路由: $routeKey" }
+        log.info { "Unregistered route: $routeKey" }
     }
 
     /**
-     * 从 path + method 重建 [RequestMappingInfo]。
+     * Reconstruct a `RequestMappingInfo` value object from path + method.
      *
-     * [RequestMappingInfo] 基于值相等（paths / methods / options 等 conditions），
-     * 因此重建的对象与原始注册对象在 `equals()` 下完全等价，可正确执行
-     * `unregisterMapping()` 查找和移除。
+     * Uses the parent handler-mapping's own `PathPatternParser` if set, otherwise
+     * falls back to the global default, so pattern syntax stays consistent with
+     * compile-time registered controllers.
+     *
+     * @return Value-based RequestMappingInfo instance — safe to use for both
+     *         registerMapping and unregisterMapping.
      */
     private fun buildMappingInfo(path: String, method: String): RequestMappingInfo {
         val options = RequestMappingInfo.BuilderConfiguration().apply {
@@ -82,17 +88,20 @@ class MvcRouteRegistry(
             .build()
     }
 
-    // ─── 请求解析（由拦截器调用）─────────────────────────────────────────
+    // ----- Request resolution (called by interceptor) -------------------------
 
     /**
-     * 解析入站请求的 workflowId。
-     * 由工作流路由拦截器调用。
+     * Fast-path resolution that only returns `workflowId`.
+     *
+     * Kept as a separate public method because some lightweight interceptors
+     * only need to know whether the request targets a workflow at all, without
+     * extracting path variables yet.
+     *
+     * @return workflowId for this request, or null if no route matches
      */
     fun resolveWorkflowId(method: String, path: String): String? {
-        // 1. 精确匹配（无路径变量）
         super.resolveWorkflowId(HttpRouteDefinition.keyOf(method, path))?.let { return it }
 
-        // 2. 模式匹配
         val requestPath = PathContainer.parsePath(path)
         val patternParser = requestMappingHandlerMapping.patternParser
             ?: PathPatternParser.defaultInstance
@@ -109,16 +118,22 @@ class MvcRouteRegistry(
     }
 
     /**
-     * 解析 workflowId + 路径变量。
-     * 由工作流路由拦截器调用，注入 ATTR_ROUTE_MATCH。
+     * Full resolution: `workflowId` + extracted URI variables.
+     *
+     * Invoked by `WorkflowRouteInterceptor` on every inbound request so the
+     * handler can read the result directly from request attributes.
+     *
+     * Two-stage lookup:
+     * 1. Exact match (no path variables) — O(1) hash lookup against routeDefinitions.
+     * 2. Pattern match with `matchAndExtract` — O(n) scan but short-circuits on first hit.
+     *
+     * @return Route match if a route fits, null otherwise
      */
     fun resolveRoute(method: String, path: String): RouteMatch? {
-        // 1. 精确匹配（无路径变量）
         resolveWorkflowId(HttpRouteDefinition.keyOf(method, path))?.let {
             return RouteMatch(it, emptyMap())
         }
 
-        // 2. 模式匹配并提取路径变量
         val requestPath = PathContainer.parsePath(path)
         val patternParser = requestMappingHandlerMapping.patternParser
             ?: PathPatternParser.defaultInstance

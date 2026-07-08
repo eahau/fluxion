@@ -12,7 +12,7 @@ import com.fluxion.admin.mapper.JsonMapperHelper
 import com.fluxion.admin.repository.WfFunctionRepository
 import com.fluxion.admin.security.SecurityContextHelper
 import com.fluxion.admin.service.WfFunctionService
-import com.fluxion.core.decorator.NodeDecorator
+import com.fluxion.decorator.decorator.NodeDecorator
 import com.fluxion.core.function.FunctionRegistry
 import com.fluxion.core.function.WorkflowFunction
 import com.fluxion.core.function.external.ExternalFunctionTransportRegistry
@@ -32,9 +32,25 @@ import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.RestController
 
 /**
- * 工作流函数管理 Controller
+ * Function registry & testing REST controller (implements OpenAPI-generated [FunctionsApi]).
  *
- * 实现 OpenAPI 生成的 FunctionsApi 接口，确保前后端契约一致。
+ * Functions have two distinct sources of truth that are merged for list / get endpoints:
+ *   1. **BUILTIN functions** — source of truth is the in-memory [FunctionRegistry]
+ *      (code-registered at boot). These functions do NOT have DB rows.
+ *   2. **Non-BUILTIN functions** (SCRIPT_GROOVY / EXTERNAL / CUSTOM) — source of truth
+ *      is the `wf_function` DB table (tenant-scoped, versioned).
+ *
+ * The `/test` endpoint lets developers ad-hoc execute a function by name against
+ * provided inputs — it constructs a temporary function instance (Registry for BUILTINs,
+ * DB definition for scripts/externals), wraps it with a capturing test decorator,
+ * and validates outputs against the declared outputSchema.
+ *
+ * Collaborates with: FunctionRegistry (builtin functions + resolution),
+ * WfFunctionRepository (DB persistence), FunctionMapper (DTO mapping),
+ * WfFunctionService (persist + worker push), SecurityContextHelper (tenant filtering
+ * for list + tenant gating for PRIVATE edits), JsonMapperHelper (config JSON parsing),
+ * GroovyScriptFunction (script execution engine for tests), SchemaManager (output
+ * validation during tests).
  */
 @RestController
 class WfFunctionController(
@@ -50,6 +66,15 @@ class WfFunctionController(
 
     private val log = LoggerFactory.getLogger(javaClass)
 
+    /**
+     * Paginated function list with optional keyword + category filter.
+     *
+     * Results are the concatenation of (registry builtins) + (DB non-builtins),
+     * filtered in memory, then manually sliced into a page (Spring Data pageables
+     * cannot span two heterogeneous data sources). Tenant filtering is applied to
+     * DB rows the same way as schemas/workflows: ADMIN sees everything, non-ADMIN
+     * sees PLATFORM + MARKETPLACE + PRIVATE rows whose appGroup they belong to.
+     */
     override fun listFunctions(
         keyword: String?,
         category: FunctionCategory?,
@@ -59,7 +84,7 @@ class WfFunctionController(
         val size = pageSize.coerceAtMost(100)
         val pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "updatedAt"))
 
-        // 1. BUILTIN 函数：以 FunctionRegistry（代码）为唯一权威数据源
+        // Source 1: BUILTIN functions registered in the engine's FunctionRegistry
         val registryFunctions = functionRegistry.listAll()
             .map { meta -> functionMapper.registryMetaToDto(meta) }
             .filter { dto ->
@@ -71,12 +96,11 @@ class WfFunctionController(
             }
             .sortedBy { it.name }
 
-        // 2. 非 BUILTIN 函数（SCRIPT / EXTERNAL / CUSTOM）：以 DB 为权威数据源
+        // Source 2: DB-backed non-BUILTIN functions
         val accessibleGroups = securityContext.accessibleAppGroups()
         val dbFunctions = functionRepository.findAll()
-            .filter { fn -> fn.functionType != "BUILTIN" }  // BUILTIN 只看 Registry
+            .filter { fn -> fn.functionType != "BUILTIN" }
             .filter { fn ->
-                // 租户过滤：非 ADMIN 用户只能看到 PLATFORM + 自己 appGroup 的 PRIVATE
                 accessibleGroups == null || fn.scope == "PLATFORM" || fn.scope == "MARKETPLACE" ||
                     (fn.scope == "PRIVATE" && fn.appGroup in accessibleGroups)
             }
@@ -89,7 +113,7 @@ class WfFunctionController(
                 matchKeyword && matchCategory
             }
 
-        // 3. 合并后分页（Registry BUILTIN + DB 非 BUILTIN）
+        // Manual pagination across the merged list
         val all = registryFunctions + dbFunctions
         val start = pageable.offset.toInt()
         val end = (start + pageable.pageSize).coerceAtMost(all.size)
@@ -102,58 +126,60 @@ class WfFunctionController(
         })
     }
 
+    /** Fetch one function DTO — Registry lookup first for BUILTIN, DB fallback otherwise. */
     override fun getFunction(functionName: String): ResponseEntity<FunctionDefinition> {
-        // BUILTIN 函数：以 FunctionRegistry（代码）为权威数据源
         val registryMeta = functionRegistry.getMeta(functionName)
         if (registryMeta != null) {
             return ResponseEntity.ok(functionMapper.registryMetaToDto(registryMeta))
         }
-        // 非 BUILTIN 函数：从 DB 查找
         val entity = functionRepository.findByFunctionName(functionName).orElse(null)
             ?: return ResponseEntity.notFound().build()
         return ResponseEntity.ok(functionMapper.toDto(entity))
     }
 
+    /**
+     * Create a new DB-backed function.
+     *
+     * Uniqueness is scope-aware:
+     *   - PRIVATE scoped: unique triple (scope, appGroup, functionName)
+     *   - PLATFORM / MARKETPLACE: unique pair (scope, functionName)
+     */
     override fun createFunction(functionDefinition: FunctionDefinition): ResponseEntity<FunctionDefinition> {
         val entity = functionMapper.toEntity(functionDefinition)
-        // PRIVATE scope 必须指定 appGroup
         if (entity.scope == "PRIVATE" && entity.appGroup.isNullOrBlank()) {
-            throw WorkflowAdminException.badRequest("SCOPE_APP_GROUP_REQUIRED", "PRIVATE 作用域的函数必须指定 appGroup")
+            throw WorkflowAdminException.badRequest("SCOPE_APP_GROUP_REQUIRED", "PRIVATE scope functions require appGroup")
         }
-        // 租户权限校验
         entity.appGroup?.let { securityContext.requireAppGroupAccess(it) }
-        // scope-aware 函数名唯一性校验
         val existingFn = if (entity.scope == "PRIVATE" && !entity.appGroup.isNullOrBlank()) {
             functionRepository.findByScopeAndAppGroupAndFunctionName("PRIVATE", entity.appGroup!!, entity.functionName).orElse(null)
         } else {
             functionRepository.findByScopeAndFunctionName(entity.scope, entity.functionName).orElse(null)
         }
         if (existingFn != null) {
-            throw WorkflowAdminException.badRequest("FUNCTION_NAME_CONFLICT", "函数名 [${entity.functionName}] 已在 scope=${entity.scope} 中被占用")
+            throw WorkflowAdminException.badRequest("FUNCTION_NAME_CONFLICT", "Function name [${entity.functionName}] already exists in scope=${entity.scope}")
         }
         val saved = functionService.save(entity)
         return ResponseEntity.ok(functionMapper.toDto(saved))
     }
 
+    /** Update a function's mutable fields + replace its function config blob. */
     override fun updateFunction(
         functionName: String,
         functionDefinition: FunctionDefinition
     ): ResponseEntity<FunctionDefinition> {
         val existing = functionRepository.findByFunctionName(functionName)
-            .orElseThrow { WorkflowAdminException.notFound("FUNCTION_NOT_FOUND", "函数不存在: $functionName") }
-        // 租户权限校验（校验原始 appGroup）
+            .orElseThrow { WorkflowAdminException.notFound("FUNCTION_NOT_FOUND", "Function not found: $functionName") }
         existing.appGroup?.let { securityContext.requireAppGroupAccess(it) }
         functionMapper.updateEntity(functionDefinition, existing)
-        // PRIVATE scope 必须指定 appGroup
         if (existing.scope == "PRIVATE" && existing.appGroup.isNullOrBlank()) {
-            throw WorkflowAdminException.badRequest("SCOPE_APP_GROUP_REQUIRED", "PRIVATE 作用域的函数必须指定 appGroup")
+            throw WorkflowAdminException.badRequest("SCOPE_APP_GROUP_REQUIRED", "PRIVATE scope functions require appGroup")
         }
-        // 若 appGroup 变更，还需校验新 appGroup 的权限
         existing.appGroup?.let { securityContext.requireAppGroupAccess(it) }
         val saved = functionService.save(existing)
         return ResponseEntity.ok(functionMapper.toDto(saved))
     }
 
+    /** Delete a function by name (tenant-gated by existing row appGroup). */
     override fun deleteFunction(functionName: String): ResponseEntity<Unit> {
         val existing = functionRepository.findByFunctionName(functionName).orElse(null)
         existing?.appGroup?.let { securityContext.requireAppGroupAccess(it) }
@@ -161,6 +187,16 @@ class WfFunctionController(
         return ResponseEntity.noContent().build()
     }
 
+    /**
+     * Ad-hoc function test runner. Executes the function with caller-supplied inputs,
+     * wraps the function with a test-only decorator that captures every log line, then
+     * validates the returned output against the function's declared outputSchema.
+     *
+     * Non-200 responses:
+     *   - 400 when the function cannot be resolved (missing type / missing script body)
+     *   - Returns a 200 with `success=false` for actual invocation exceptions (so the UI
+     *     can display the inline stack-trace summary instead of a generic 500).
+     */
     override fun testFunction(
         functionName: String,
         testFunctionRequest: TestFunctionRequest
@@ -183,8 +219,7 @@ class WfFunctionController(
         val fn = resolved.function
         val outputSchema = resolved.outputSchema
 
-        // 测试输入默认：nodeParams 来自 inputs；directInput 未显式指定时回退到 inputs，
-        // 保持简单场景下依赖直接入参的函数仍可正常测试。
+        // default fallbacks: test UI only fills nodeParams in simple cases
         val nodeInput = NodeInput(
             directInput = testFunctionRequest.directInput ?: inputs,
             nodeParams = inputs,
@@ -192,14 +227,12 @@ class WfFunctionController(
             declaredDeps = testFunctionRequest.declaredDeps ?: emptyMap()
         )
 
-        // 构造一个虚拟的 WorkflowNode 用于装饰器
         val virtualNode = WorkflowNode(
             id = "test",
             name = functionName,
             functionRef = functionName,
             workflowId = "test"
         )
-        // 使用测试专用装饰器，统一格式并收集日志
         val decoratedFn = CapturingTestDecorator(logs).decorate(fn, virtualNode)
 
         return try {
@@ -225,7 +258,7 @@ class WfFunctionController(
         }
     }
 
-    /** 截取异常堆栈前 8 帧，用于前端调试展示。 */
+    /** Compact 8-frame stack trace for the UI error panel (no need for full 100-line trace). */
     private fun summarizeStackTrace(e: Throwable, maxFrames: Int = 8): String {
         val frames = e.stackTrace?.take(maxFrames) ?: emptyList()
         val sb = StringBuilder("${e.javaClass.name}: ${e.message}\n")
@@ -239,11 +272,16 @@ class WfFunctionController(
     }
 
     /**
-     * 解析可用于测试的函数实例及其出参 schema。
+     * Resolve a function to an executable [WorkflowFunction] instance suitable for testing.
      *
-     * 1. 优先从 FunctionRegistry 读取（BUILTIN / 已发布到 Registry 的函数）；
-     * 2. 若 Registry 中不存在，尝试从 DB 的函数定义构造临时实例，支持 SCRIPT_GROOVY / EXTERNAL；
-     * 3. 均不存在时返回 null，由调用方返回 400。
+     * Resolution order (matches runtime semantics):
+     *   1. FunctionRegistry (BUILTIN + already-published DB functions)
+     *   2. DB row → instantiate a transient SCRIPT or EXTERNAL function for testing
+     *      (SCRIPT_GROOVY needs the Groovy engine; EXTERNAL uses its own transport SPI)
+     *   3. null = caller reports Function not found to the user
+     *
+     * For DB rows, tenant gating is re-applied so users cannot test PRIVATE functions
+     * belonging to another team.
      */
     private fun resolveTestFunction(functionName: String, logs: MutableList<String>): ResolvedTestFunction? {
         if (functionRegistry.contains(functionName)) {
@@ -256,7 +294,6 @@ class WfFunctionController(
         val entity = functionRepository.findByFunctionName(functionName).orElse(null)
             ?: return null
 
-        // 租户权限校验：非 ADMIN 用户只能测试本应用分组的 PRIVATE 函数
         entity.appGroup?.let { securityContext.requireAppGroupAccess(it) }
 
         val config = jsonMapperHelper.functionToConfig(entity) ?: emptyMap()
@@ -304,19 +341,19 @@ class WfFunctionController(
         return ResolvedTestFunction(fn, outputSchema)
     }
 
-    /**
-     * 测试函数解析结果包装。
-     */
+    /** Private holder for a resolved test function + its declared output schema. */
     private data class ResolvedTestFunction(
         val function: WorkflowFunction<Any>,
         val outputSchema: Any?
     )
 
     /**
-     * 校验函数输出是否符合出参 schema。
+     * Validate a function's test output against its declared outputSchema (if any).
      *
-     * 使用 fluxion-schema 的 [SchemaManager] 统一能力；解析异常会被捕获并转为校验失败结果，
-     * 与原有 [com.fluxion.core.schema.SchemaValidator] 兼容壳行为保持一致。
+     * Uses the fluxion-schema module's [SchemaManager] for validation. Parse errors
+     * are treated as a validation failure with a descriptive message rather than
+     * bubbling up as a 500. Empty schemas (`{}` / blank / null) skip validation with
+     * an automatic pass.
      */
     private fun validateOutput(outputSchema: Any?, output: Any?, logs: MutableList<String>): ValidationResult {
         if (outputSchema == null || isEmptySchema(outputSchema)) {
@@ -340,13 +377,17 @@ class WfFunctionController(
         }
     }
 
+    /** Catch-all "empty schema" check to skip validation for blank / placeholder values. */
     private fun isEmptySchema(schema: Any): Boolean {
         val str = if (schema is String) schema.trim() else JsonUtil.serialize(schema)
         return str.isBlank() || str == "{}" || str == "null"
     }
 
     /**
-     * 测试专用装饰器：统一记录函数执行日志并收集到列表中返回给前端。
+     * Decorator used exclusively by the `/functions/test` endpoint. Prepends a
+     * `[TEST] function=...` log line on entry + on exit (success with output,
+     * failure with error message). Long payloads are truncated to 2000 chars to
+     * avoid blowing up the UI debug panel.
      */
     private class CapturingTestDecorator(private val logs: MutableList<String>) : NodeDecorator {
 
@@ -376,6 +417,7 @@ class WfFunctionController(
                 }
             }
 
+        /** Safe JSON serializer for debug logs — falls back to toString() and truncates at 2000 chars. */
         private fun safeSerialize(value: Any?, maxLength: Int = 2000): String {
             val serialized = try {
                 JsonUtil.serialize(value)

@@ -8,10 +8,18 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 /**
- * 基于 Redisson 的分布式锁实现。
+ * Redisson-backed implementation of [DistributedLockProvider].
  *
- * 使用 Redisson 的 [org.redisson.api.RLock] 实现可重入、带看门狗（watch dog）的分布式锁。
- * 当指定 [leaseMillis] 时，锁会在租约到期后自动释放，避免死锁。
+ * Leverages Redisson's [org.redisson.api.RLock] which provides:
+ *  - Reentrant locking per thread
+ *  - Watchdog auto-renewal when no explicit `leaseMillis` is set
+ *  - Automatic release on expiry to avoid dead locks when a worker dies mid-hold
+ *
+ * The provider supports two acquisition modes selected via `sync`:
+ *  - **Blocking (sync=true)** — calls `lock()` and waits indefinitely until the lock
+ *    is acquired. Should be used with caution because it can stall the caller.
+ *  - **Polling (sync=false)** — uses `tryLock()` with `retry` attempts separated by
+ *    `retryIntervalMillis`; returns `null` when every attempt times out.
  */
 class RedissonDistributedLockProvider(
     private val client: RedissonClient
@@ -32,7 +40,7 @@ class RedissonDistributedLockProvider(
 
         return try {
             if (sync) {
-                // 同步阻塞模式：拿不到锁一直阻塞（慎用）
+                // Blocking mode: wait forever until the lock is available (use sparingly)
                 if (leaseMillis > 0) {
                     rLock.lock(leaseMillis, TimeUnit.MILLISECONDS)
                 } else {

@@ -10,14 +10,18 @@ import com.fluxion.core.value.RerunResult
 import org.springframework.stereotype.Component
 
 /**
- * Debug / 执行快照相关映射器
+ * Mapper layer for debug execution snapshots and engine result transformations.
  *
- * 当前采用手写 Spring Component：涉及 EngineResult / RerunResult 到 DTO 的复杂聚合转换，
- * 使用 setter 构建 Java POJO，转换逻辑仍集中在 Mapper 层。
+ * Converts between core engine artifacts (`EngineResult`, `RerunResult`, `NodeExecutionRecord`)
+ * and OpenAPI-generated Java DTOs. Complex field coercion (JSON, enums, time) delegates to
+ * `JsonMapperHelper` to keep this class focused on structural assembly.
  */
 @Component
 class DebugMapper(private val jsonMapperHelper: JsonMapperHelper) {
 
+    /**
+     * Convert a fresh engine execution result into the debug response DTO.
+     */
     fun toDebugResult(result: EngineResult): DebugResult = DebugResult().apply {
         status = jsonMapperHelper.booleanToDebugStatus(result.success)
         finalOutput = jsonMapperHelper.anyToStringMap(result.data)?.toMutableMap()
@@ -25,6 +29,9 @@ class DebugMapper(private val jsonMapperHelper: JsonMapperHelper) {
         totalDurationMs = jsonMapperHelper.traceToTotalDuration(result.trace)
     }
 
+    /**
+     * Convert a rerun engine result into the debug response DTO.
+     */
     fun toDebugResult(result: RerunResult): DebugResult = DebugResult().apply {
         status = jsonMapperHelper.traceToDebugStatus(result.trace)
         finalOutput = jsonMapperHelper.anyToStringMap(result.finalOutput)?.toMutableMap()
@@ -32,11 +39,16 @@ class DebugMapper(private val jsonMapperHelper: JsonMapperHelper) {
         totalDurationMs = jsonMapperHelper.traceToTotalDuration(result.trace)
     }
 
+    /**
+     * Convert a single node execution record into the per-node trace DTO.
+     *
+     * Note: inputs are re-keyed by `nodeId` to match the frontend contract where
+     * `trace.inputs[nodeId]` holds the input payload for each node.
+     */
     fun toNodeTrace(record: NodeExecutionRecord): NodeTrace = NodeTrace().apply {
         nodeId = record.nodeId
         nodeName = record.nodeName
         status = jsonMapperHelper.nodeStatusToTraceStatus(record.status)
-        // inputs 按 OpenAPI 契约以 nodeId 为 key 包装，与前端 trace.inputs[nodeId] 对齐
         val rawInput = jsonMapperHelper.anyToStringMap(record.input)
         inputs = if (rawInput != null) mutableMapOf(record.nodeId to rawInput) else mutableMapOf()
         output = jsonMapperHelper.anyToStringMap(record.output)?.toMutableMap() ?: mutableMapOf()
@@ -44,6 +56,9 @@ class DebugMapper(private val jsonMapperHelper: JsonMapperHelper) {
         durationMs = jsonMapperHelper.longToInt(record.durationMs)
     }
 
+    /**
+     * Convert a persisted execution snapshot entity into the debug history list item DTO.
+     */
     fun toDebugExecutionRecord(snapshot: WfExecutionSnapshot): DebugExecutionRecord = DebugExecutionRecord().apply {
         id = snapshot.executionId
         workflowId = snapshot.workflowId

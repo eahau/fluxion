@@ -1,8 +1,8 @@
 import io.spring.gradle.dependencymanagement.dsl.DependencyManagementExtension
 
-// 版本变量必须在 plugins 块之后、subprojects 之前声明，
-// plugins 块内部不支持引用外部 val，需保留字面量。
-// 如需统一管理插件版本，可迁移到 settings.gradle.kts 的 pluginManagement 块。
+// Root project plugin declarations. All plugins use `apply false` so versions are centrally managed
+// here while actual plugin application happens per-subproject (or below in subprojects {} block).
+// Plugin version literals must stay inline (plugins block does not support referencing external vals).
 plugins {
     kotlin("jvm") version "2.1.20" apply false
     kotlin("plugin.spring") version "2.1.20" apply false
@@ -15,6 +15,8 @@ plugins {
     java
 }
 
+// ===== Centralized Version Catalog =====
+// Shared version variables referenced by subprojects and dependency management BOM imports.
 val javaVersion                  = JavaVersion.VERSION_21
 val kotlinVersion                = "2.1.20"
 val kotlinCoroutinesVersion      = "1.9.0"
@@ -41,16 +43,22 @@ val protobufBomVersion           = "3.25.3"
 val avroVersion                  = "1.11.3"
 val graalVmBuildToolsVersion     = "0.10.4"
 
+// ===== Subproject Conventions =====
+// Global plugin application and build configuration applied to EVERY included module.
 subprojects {
+    // Core JVM plugins: Kotlin + Java + Java-Library (for library modules; admin app excluded below).
     apply(plugin = "org.jetbrains.kotlin.jvm")
     apply(plugin = "java")
     if (name != "fluxion-admin") {
         apply(plugin = "java-library")
     }
+    // Spring Dependency Management plugin enables Maven BOM imports and explicit version pinning.
     apply(plugin = "io.spring.dependency-management")
+    // Maven Publishing plugin - publication is skipped for non-library modules later in this block.
     apply(plugin = "maven-publish")
 
-    // 纯 Kotlin 模块没有 Java 源文件，禁用空的 compileJava 任务以节省构建时间。
+    // Optimization: skip JavaCompile tasks for pure-Kotlin modules that contain no .java source files.
+    // Detected per-build via afterEvaluate to allow generated sources (protobuf/openapi) to be evaluated.
     afterEvaluate {
         val hasJavaSources = sourceSets["main"].java.srcDirs.any { dir ->
             fileTree(dir).matching { include("**/*.java") }.files.isNotEmpty()
@@ -62,39 +70,45 @@ subprojects {
         }
     }
 
-    // 为嵌套子项目生成唯一 group，避免多个 "core"/"spring-boot" 模块
-    // 共享 com.fluxion:core:x.x.x 坐标导致 Gradle 冲突合并。
-    // 例如 :fluxion-adapter-http:core → group = com.fluxion.fluxion-adapter-http
+    // Unique Maven group computation for nested subprojects to prevent GAV coordinate collisions.
+    // Example: :fluxion-adapter-http:core  -> group = com.fluxion.fluxion-adapter-http
+    //          :fluxion-log               -> group = com.fluxion
     val pathSegments = path.split(":").filter { it.isNotEmpty() }
     group = if (pathSegments.size > 1) {
         "com.fluxion.${pathSegments.dropLast(1).joinToString(".")}"
     } else {
         "com.fluxion"
     }
+    // Version is overridable via RELEASE_VERSION env var (CI/CD releases); defaults to snapshot.
     version = System.getenv("RELEASE_VERSION") ?: "1.0.0-SNAPSHOT"
 
+    // JVM source/target level - locked to JDK 21 for all modules (Spring Boot 3.x minimum requirement).
     java {
         sourceCompatibility = javaVersion
         targetCompatibility = javaVersion
     }
 
+    // Fallback project-level repositories (settings-level PREFER_SETTINGS mirrors take priority).
     repositories {
         mavenCentral()
     }
 
-    // 全局排除 spring-boot-starter-logging（默认日志实现 logback），改用 Log4j2
+    // Global dependency exclusion: replace Spring Boot default Logback logging with Log4j2.
     configurations.all {
         exclude(group = "org.springframework.boot", module = "spring-boot-starter-logging")
     }
 
+    // ===== Dependency Management (Spring BOM + explicit versions) =====
     configure<DependencyManagementExtension> {
         imports {
+            // Spring Boot BOM manages Spring Framework, Jackson, Log4j2, Micrometer, etc.
             mavenBom("org.springframework.boot:spring-boot-dependencies:$springBootVersion")
+            // Protobuf BOM ensures consistent protobuf-java, protobuf-java-util versions.
             mavenBom("com.google.protobuf:protobuf-bom:$protobufBomVersion")
         }
 
         dependencies {
-            // Kotlin
+            // Kotlin standard library, reflection, and coroutines with centrally pinned versions.
             dependency("org.jetbrains:annotations:$jetbrainsAnnotationsVersion")
             dependency("org.jetbrains.kotlin:kotlin-stdlib:$kotlinVersion")
             dependency("org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlinVersion")
@@ -105,74 +119,79 @@ subprojects {
             dependency("org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:$kotlinCoroutinesVersion")
             dependency("org.jetbrains.kotlinx:kotlinx-coroutines-test:$kotlinCoroutinesVersion")
 
-            // Guava
+            // Google Guava - collection utilities, caching primitives, and immutable types.
             dependency("com.google.guava:guava:$guavaVersion")
-            // networknt json-schema-validator
+            // networknt JSON Schema Validator - JSON Schema draft-07/draft-2019-09 validation engine.
             dependency("com.networknt:json-schema-validator:$jsonSchemaValidatorVersion")
-            // Apache Avro
+            // Apache Avro - binary serialization schema framework for Avro format support.
             dependency("org.apache.avro:avro:$avroVersion")
-            // JsonPath
+            // Jayway JsonPath - JSON document query via path expressions (read-only navigation).
             dependency("com.jayway.jsonpath:json-path:$jsonPathVersion")
-            // Apache Commons JEXL3（ExpressionEvaluator，零 Spring 依赖）
+            // Apache Commons JEXL3 - embedded expression evaluator (zero Spring transitive deps).
             dependency("org.apache.commons:commons-jexl3:$jexl3Version")
-            // commons-logging：JEXL3 的传递依赖，仅在非 Spring 测试运行时显式提供
+            // Commons Logging bridge - JEXL3 transitive dep; explicit for non-Spring test classpath.
             dependency("commons-logging:commons-logging:1.2")
-            // OkHttp3
+            // OkHttp3 - HTTP client used by external HTTP function transport adapter.
             dependency("com.squareup.okhttp3:okhttp:$okhttpVersion")
-            // Groovy
+            // Apache Groovy - dynamic scripting engine for fluxion-script-engine module.
             dependency("org.apache.groovy:groovy:$groovyVersion")
-            // Redisson
+            // Redisson - advanced Redis client (distributed locks, collections, reactive API).
             dependency("org.redisson:redisson:$redissonVersion")
-            // Dubbo
+            // Apache Dubbo - RPC framework for external Dubbo function transport adapter.
             dependency("org.apache.dubbo:dubbo:$dubboVersion")
             dependency("org.apache.dubbo:dubbo-qos:$dubboVersion")
-            // gRPC
+            // gRPC Java - high-performance RPC framework (stub, protobuf, netty transport, services).
             dependency("io.grpc:grpc-stub:$grpcVersion")
             dependency("io.grpc:grpc-protobuf:$grpcVersion")
             dependency("io.grpc:grpc-netty-shaded:$grpcVersion")
             dependency("io.grpc:grpc-services:$grpcVersion")
+            // net.devh gRPC Spring Boot Starter - gRPC server auto-configuration and annotation support.
             dependency("net.devh:grpc-server-spring-boot-starter:$grpcSpringBootVersion")
-            // Nacos Config SDK
+            // Alibaba Nacos Config Client - config center + service discovery SDK (non-Spring Cloud).
             dependency("com.alibaba.nacos:nacos-client:$nacosClientVersion")
-            // Apollo Client
+            // Ctrip Apollo Client - configuration center SDK and OpenAPI admin client.
             dependency("com.ctrip.framework.apollo:apollo-client:$apolloClientVersion")
             dependency("com.ctrip.framework.apollo:apollo-openapi:$apolloClientVersion")
 
-            // JJWT
+            // JJWT (JSON Web Token) - JWT creation and validation (API + impl + Jackson serialization).
             dependency("io.jsonwebtoken:jjwt-api:$jjwtVersion")
             dependency("io.jsonwebtoken:jjwt-impl:$jjwtVersion")
             dependency("io.jsonwebtoken:jjwt-jackson:$jjwtVersion")
 
-            // JSR-305 / Java annotation API
+            // JSR-250 / JSR-305 annotation APIs - javax.annotation and nullability/strictness markers.
             dependency("javax.annotation:javax.annotation-api:$javaxAnnotationApiVersion")
             dependency("com.google.code.findbugs:jsr305:$jsr305Version")
         }
     }
 
+    // Force UTF-8 encoding for Java compilation across all platforms.
     tasks.withType<JavaCompile> {
         options.encoding = "UTF-8"
     }
 
-    // Kotlin 2.x 新 API：集中管理所有子模块的 Kotlin 编译选项，
-    // 替代各子模块里废弃的 kotlinOptions { } 块
+    // Kotlin JVM compilation conventions - Kotlin 2.x compilerOptions DSL (replaces deprecated kotlinOptions).
     tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile>().configureEach {
         compilerOptions {
+            // Target bytecode level aligned with JDK 21 source compatibility.
             jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
             freeCompilerArgs.addAll(
+                // Strict JSR-305 nullability interpretation (treats @Nullable/@NonNull as hard types).
                 "-Xjsr305=strict",
+                // Enable default methods in Kotlin interfaces (JVM 8+ DefaultMethods attribute).
                 "-Xjvm-default=all"
             )
         }
     }
 
+    // All tests use JUnit Platform (JUnit 5 Jupiter) engine exclusively.
     tasks.withType<Test> {
         useJUnitPlatform()
     }
 
-    // ============ Spring Boot AOT 输出重定向 ============
-    // processAot 是一个 JavaExec 任务，其工作目录默认为项目根目录。
-    // AOT 处理器在工作目录下生成 bin/main/ 结构存放字节码和源码镜像，
-    // 因此必须同时重定向 workingDir 和系统属性，将所有产物收敛到 build/aot/。
+    // ===== Spring Boot AOT Output Redirection =====
+    // The processAot JavaExec task defaults its working directory to the project root, causing it to
+    // generate bin/main/ bytecode/source mirrors at the project root level. Redirects both workingDir
+    // and Spring AOT system properties so all AOT artifacts are consolidated under build/aot/.
     tasks.matching { it.name == "processAot" }.configureEach {
         val aotDir = layout.buildDirectory.dir("aot")
         outputs.dir(aotDir)
@@ -186,9 +205,9 @@ subprojects {
         }
     }
 
-    // ============ Maven 发布配置 ============
-    // 仅库模块发布 JAR；应用模块（fluxion-admin / fluxion-runtime / fluxion-test-webflux）
-    // 及测试 fixtures 模块（fluxion-test）跳过发布
+    // ===== Maven Publishing Configuration =====
+    // Library modules publish to GitHub Packages (and optionally a private Nexus/Artifactory).
+    // Executable applications (fluxion-admin / fluxion-runtime) and test fixture modules skip publishing.
     val nonPublishableModules = setOf("fluxion-admin", "fluxion-runtime", "fluxion-test-webflux", "fluxion-test")
     if (name !in nonPublishableModules) {
         configure<PublishingExtension> {
@@ -209,7 +228,7 @@ subprojects {
                 }
             }
             repositories {
-                // GitHub Packages
+                // GitHub Packages publication target (credentials from GitHub Actions env vars).
                 maven {
                     name = "GitHubPackages"
                     url = uri("https://maven.pkg.github.com/your-org/fluxion-platform")
@@ -218,7 +237,7 @@ subprojects {
                         password = System.getenv("GITHUB_TOKEN") ?: ""
                     }
                 }
-                // 可选：私有 Nexus / Artifactory
+                // Optional: private on-prem Nexus / Artifactory publication (credentials via env vars).
                 // maven {
                 //     name = "Private"
                 //     url = uri(System.getenv("MAVEN_REPO_URL") ?: "")

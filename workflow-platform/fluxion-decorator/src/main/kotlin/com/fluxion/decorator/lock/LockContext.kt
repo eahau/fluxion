@@ -13,21 +13,34 @@ import org.slf4j.debug
 import org.slf4j.warn
 
 /**
- * 瑁呴グ鍣ㄦ墽琛屼笂涓嬫枃銆? *
- * 灏嗚妭鐐圭骇/宸ヤ綔娴佺骇瑁呴グ鍣ㄤ腑閲嶅鐨勫弬鏁般€侀攣閿瀯閫犱俊鎭€丼pEL 鍙橀噺缁熶竴鎵撳寘锛? * 浣挎牳蹇冨姞閿侀€昏緫鏃犻渶鍏冲績璋冪敤鏂规槸 [com.fluxion.core.function.WorkflowFunction] 杩樻槸 suspend 鍑芥暟銆? */
+ * Aggregated parameters required by both node-level and workflow-level lock
+ * decorators.
+ *
+ * Shared so the template resolution, key construction and parameter parsing
+ * logic lives in one place instead of being duplicated between
+ * [DistributedLockDecorator] and [WorkflowLockDecorator].
+ */
 data class LockContext(
+    /** Raw per-decorator params map (from `decoratorParams(...)`). */
     val params: Map<String, Any>?,
+    /** Application group (used for hash-tag scoping of Redis keys). */
     val appGroup: String?,
+    /** Workflow / domain id embedded in the Redis key prefix. */
     val domain: String,
+    /** Default prefix when params do not specify `prefix`. */
     val defaultPrefix: String,
+    /** Default business key when params specify neither `lockKey` nor expression. */
     val defaultBusinessKey: String,
+    /** Human-readable description used only for log messages. */
     val contextDescription: String,
+    /** Variables made available to `${path}` template expressions. */
     val variables: Map<String, Any?>
 )
 
 /**
- * 鍩轰簬 [LockContext] 鐨勯樆濉炲姞閿佹墽琛屻€? *
- * 鍐呴儴瀹屾垚鍙傛暟瑙ｆ瀽銆侀攣閿瀯閫犮€?{path} 妯℃澘姹傚€硷紝鐒跺悗濮旀墭缁?[DistributedLockProvider.lock]銆? */
+ * Blocking (non-suspend) entry point: parse params, resolve template key,
+ * acquire + release around `action` via [DistributedLockProvider.lock].
+ */
 fun <T> DistributedLockProvider.lockWithContext(
     context: LockContext,
     log: Logger,
@@ -40,8 +53,10 @@ fun <T> DistributedLockProvider.lockWithContext(
 }
 
 /**
- * 鍩轰簬 [LockContext] 鐨?suspend 鍔犻攣鎵ц銆? *
- * 閿佺殑鑾峰彇涓庨噴鏀惧湪 [Dispatchers.IO] 涓墽琛岋紱[action] 鍦ㄨ皟鐢ㄦ柟鍗忕▼璋冨害鍣ㄤ腑鎵ц銆? */
+ * Suspend entry point: same flow as [lockWithContext] but the lock acquire /
+ * release steps are offloaded to `Dispatchers.IO` internally so the calling
+ * coroutine never blocks.
+ */
 suspend fun <T> DistributedLockProvider.lockSuspendingWithContext(
     context: LockContext,
     log: Logger,
@@ -53,7 +68,10 @@ suspend fun <T> DistributedLockProvider.lockSuspendingWithContext(
     return lockSuspending(resolvedKey, lockParams, action)
 }
 
-/** 瀵归攣閿ā鏉夸腑鐨?${path} 鍗犱綅绗︽眰鍊硷紝骞舵寜瑙勮寖鍖呰涓洪泦缇?hash tag 鏍煎紡銆?*/
+/**
+ * Template resolver for `${path}` style placeholders inside lock keys.
+ * Wraps the resulting business key with the Redis hash-tag convention.
+ */
 private fun resolveLockKey(context: LockContext, log: Logger): String {
     val baseKey = buildBaseLockKey(
         params = context.params,
@@ -66,9 +84,14 @@ private fun resolveLockKey(context: LockContext, log: Logger): String {
     return RedisKey.wrapIfNeeded(context.appGroup, context.domain, resolved)
 }
 
-private const val PLACEHOLDER_START = "${'$'}{"
+private const val PLACEHOLDER_START = "\${"
 
-/** 灏?${path} 褰㈠紡鐨勫崰浣嶇鏇挎崲涓哄疄闄呭€硷紙path 鏀寔鐐瑰彿宓屽璺緞锛夛紱鏃犲崰浣嶇鏃跺師鏍疯繑鍥炪€?*/
+/**
+ * Replace every `${path}` occurrence in `template` with the dot-path lookup of
+ * `path` inside `variables`. Unknown paths produce an empty string and a
+ * warning log (not a hard failure, because operators often add optional keys
+ * incrementally).
+ */
 private fun resolveTemplate(template: String, variables: Map<String, Any?>, log: Logger): String {
     if (!template.contains(PLACEHOLDER_START)) return template
     val sb = StringBuilder()
@@ -97,7 +120,9 @@ private fun resolveTemplate(template: String, variables: Map<String, Any?>, log:
 }
 
 /**
- * 鎸夌偣鍙疯矾寰勪粠 Map 涓В鏋愬祵濂楀€笺€? * 渚嬪 path="user.address.city" 浠?{user: {address: {city: "Beijing"}}} 涓彇鍑?"Beijing"銆? */
+ * Walk a dot-separated `path` through nested [Map]s. Non-map leafs match the
+ * special `output` path only (matching the convention used in node inputs).
+ */
 private fun resolveFieldValue(field: String, nodeOutput: Any?): Any? {
     if (field.isBlank()) return nodeOutput
     if (nodeOutput !is Map<*, *>) return if (field == "output") nodeOutput else null
@@ -112,7 +137,10 @@ private fun resolveFieldValue(field: String, nodeOutput: Any?): Any? {
     return current
 }
 
-/** 鏋勯€犲熀纭€閿侀敭锛岀粨鏋滅鍚?{appGroup:domain}:businessKey 瑙勮寖銆?*/
+/**
+ * Build the non-templated base key. Priority exactly matches the admin console
+ * docs: explicit `lockKey` > `lockKeyExpression` template > generated prefix+id.
+ */
 private fun buildBaseLockKey(
     params: Map<String, Any>?,
     appGroup: String?,
@@ -129,7 +157,7 @@ private fun buildBaseLockKey(
     return RedisKey.format(appGroup, domain, "$prefix$defaultBusinessKey")
 }
 
-/** 瑙ｆ瀽閿佽楗板櫒鍙傛暟銆?*/
+/** Parse decorator params into a typed [LockParams], with documented defaults. */
 private fun resolveLockParams(params: Map<String, Any>?): LockParams = LockParams(
     waitMillis = params.longParam("waitMillis", 0L),
     leaseMillis = params.longParam("leaseMillis", 30_000L),

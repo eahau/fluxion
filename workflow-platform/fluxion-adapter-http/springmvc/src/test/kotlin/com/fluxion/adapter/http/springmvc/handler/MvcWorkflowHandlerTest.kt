@@ -18,13 +18,17 @@ import java.util.Collections
 import kotlinx.coroutines.runBlocking
 
 /**
- * MvcWorkflowHandler 单元测试
+ * Unit tests for [MvcWorkflowHandler].
  *
- * 验证动态路由统一入口能否正确：
- *   1. 从 request attribute 读取 workflowId
- *   2. 拼装路径变量、查询参数、请求体为 params
- *   3. 透传 headers
- *   4. 调用 WorkflowRouter 并回写 X-Execution-Id header
+ * Verifies the full dynamic-route pipeline end-to-end without spinning up a
+ * Spring context:
+ * 1. Reading `workflowId` from request attributes (attribute set by interceptor).
+ * 2. Merging path vars, query params, JSON body into the `params` map.
+ * 3. Passing request headers through untouched to the unified request.
+ * 4. Emitting the `X-Execution-Id` response header on success.
+ *
+ * Uses a fake [WorkflowRouter] implementation to spy on the exact
+ * [UnifiedRequest] that would have been sent to the DAG engine.
  */
 class MvcWorkflowHandlerTest {
 
@@ -85,11 +89,11 @@ class MvcWorkflowHandlerTest {
 
         val params = fakeRouter.lastRequest?.params ?: emptyMap()
 
-        // 路径变量优先级最高
+        // Path variable wins (highest precedence)
         assertEquals("demoFn", params["functionName"])
-        // 查询参数
+        // Query param (medium precedence)
         assertEquals("true", params["force"])
-        // 请求体 JSON
+        // Body JSON parsed into nested maps
         val publishTarget = params["publishTarget"].uncheckedCast<Map<String, String>>()
         assertEquals("ALL", publishTarget?.get("type"))
     }
@@ -153,7 +157,7 @@ class MvcWorkflowHandlerTest {
         }
     }
 
-    // ─── helpers ─────────────────────────────────────────────────
+    // ----- helpers -----------------------------------------------------------
 
     private fun buildRequest(
         workflowId: String,
@@ -169,6 +173,10 @@ class MvcWorkflowHandlerTest {
         return request
     }
 
+    /**
+     * Test-stub WorkflowRouter that records the last inbound request and
+     * returns a preconfigured result or exception.
+     */
     private class FakeWorkflowRouter : WorkflowRouter {
         var nextResult: UnifiedResponse = UnifiedResponse(success = true)
         var nextError: WorkflowException? = null

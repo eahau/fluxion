@@ -4,17 +4,23 @@ import com.fluxion.schema.model.Schema
 import com.fluxion.schema.model.SchemaField
 
 /**
- * Schema 字段提取器，将不同格式的 Schema 转换为统一的 [SchemaField] 树。
+ * Schema field-extractor SPI — flattens a format-specific compiled [Schema]
+ * into the unified [SchemaField] tree consumed by the admin UI, the rule
+ * engine, and parameter forms.
  *
- * 格式路由由 [ExtractorBinding] 在 Spring 装配层声明，SPI 本身不感知格式。
+ * Extractors MUST recursively expand nested compound types (JSON Schema
+ * `properties`, Protobuf nested MESSAGE fields, Avro RECORD fields) into
+ * [SchemaField.nestedFields]; primitive leaf nodes carry an empty list.
+ *
+ * One implementation per schema format; bound via [SchemaFormatBundle].
  */
 interface SchemaFieldExtractor {
 
     /**
-     * 提取字段列表。
+     * Extracts the top-level fields of [schema].
      *
-     * @param schema 已编译的 Schema
-     * @return 字段树（仅包含顶层字段，嵌套字段在 [SchemaField.nestedFields] 中）
+     * @return list of top-level [SchemaField] entries. Nested fields live
+     *         inside each entry's `nestedFields` — there is NO flat list.
      */
     fun extractFields(schema: Schema): List<SchemaField>
 }

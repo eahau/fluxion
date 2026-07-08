@@ -7,9 +7,6 @@ import com.fluxion.adapter.spi.registry.PublishTarget
 import com.fluxion.core.util.JsonUtil
 import org.slf4j.*
 
-/**
- * Apollo 实现 — Schema 配置发布器（Admin 侧）
- */
 class ApolloSchemaConfigPublisher(
     private val openApiClient: ApolloOpenApiClient,
     private val appId: String,
@@ -37,16 +34,16 @@ class ApolloSchemaConfigPublisher(
 
         try {
             publishItemToApollo(
-                client       = openApiClient,
-                appId        = appId,
-                env          = env,
-                cluster      = clusterName,
-                namespace    = NAMESPACE,
-                key          = snapshot.schemaName,
-                value        = json,
-                comment      = "schema-config format=${snapshot.schemaFormat} enabled=${snapshot.enabled}",
+                client = openApiClient,
+                appId = appId,
+                env = env,
+                cluster = clusterName,
+                namespace = NAMESPACE,
+                key = snapshot.schemaName,
+                value = json,
+                comment = "schema-config format=${snapshot.schemaFormat} enabled=${snapshot.enabled}",
                 releaseTitle = "Publish schema: ${snapshot.schemaName}",
-                operator     = operator
+                operator = operator
             )
             log.info { "Published schema config to Apollo: key=${snapshot.schemaName}" }
         } catch (e: Exception) {
@@ -57,14 +54,14 @@ class ApolloSchemaConfigPublisher(
     override fun unpublish(schemaName: String) {
         try {
             unpublishItemFromApollo(
-                client       = openApiClient,
-                appId        = appId,
-                env          = env,
-                cluster      = clusterName,
-                namespace    = NAMESPACE,
-                key          = schemaName,
+                client = openApiClient,
+                appId = appId,
+                env = env,
+                cluster = clusterName,
+                namespace = NAMESPACE,
+                key = schemaName,
                 releaseTitle = "Unpublish schema: $schemaName",
-                operator     = operator
+                operator = operator
             )
             log.info { "Removed schema config from Apollo: key=$schemaName" }
         } catch (e: Exception) {

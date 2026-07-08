@@ -4,13 +4,19 @@ import com.fluxion.core.mock.MockConfig
 import com.fluxion.core.util.JsonUtil
 
 /**
- * OpenAPI 生成的 MockConfig DTO → workflow-core MockConfig 转换器。
+ * Converts between the admin OpenAPI-generated `MockConfig` DTO and the workflow-core
+ * `MockConfig` data class.
  *
- * 由于生成的 Java Bean 与 core 层的 Kotlin data class 位于不同模块/包，
- * 利用 JSON 结构一致的特点做无样板转换。
+ * Because the two types live in separate modules/packages but share an identical JSON
+ * shape, the conversion is performed via schema-free Jackson round-tripping rather than
+ * field-by-field manual assignment.
  */
 object MockConfigMapper {
 
+    /**
+     * Convert an admin mock DTO into its core-engine counterpart.
+     * Returns `MockConfig.EMPTY` if the input is null so callers avoid null checks.
+     */
     fun toCoreMockConfig(dto: com.fluxion.admin.generated.model.MockConfig?): MockConfig {
         if (dto == null) return MockConfig.EMPTY
         return JsonUtil.convertValue(dto, MockConfig::class.java)

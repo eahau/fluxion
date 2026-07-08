@@ -5,9 +5,15 @@ import org.slf4j.*
 import org.springframework.context.ApplicationContext
 
 /**
- * Spring 依赖解析器
+ * Spring-backed [DependencyResolver] used by Groovy / JS scripting functions.
  *
- * 脚本函数通过此解析器按名称或类型从 Spring [ApplicationContext] 获取 Bean。
+ * Both lookup strategies:
+ *  - By name → `applicationContext.getBean(name)`.
+ *  - By type → `applicationContext.getBeansOfType(type)`.
+ *
+ * In both cases an unambiguous matches are logged at DEBUG level (not failed; ambiguous
+ * and ambiguous matches resolve to the first one with a WARN so scripting code
+ * doesn't break at runtime.
  */
 class SpringDependencyResolver(
     private val applicationContext: ApplicationContext

@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 
 /**
- * HTTP 函数推送接收端点 — Worker 侧
+ * HTTP 鍑芥暟鎺ㄩ€佹帴鏀剁鐐?鈥?Worker 渚?
  */
 @RestController
 @RequestMapping("/internal/workflow/function")

@@ -21,9 +21,12 @@ import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.RestController
 
 /**
- * 工作流调试 REST API
+ * REST API for the workflow designer's in-browser debugger.
  *
- * 实现 OpenAPI 生成的 DebugApi 接口。
+ * Implements the generated OpenAPI `DebugApi` surface. Endpoints run against a
+ * transient in-memory engine instance so nothing is published to workers and no
+ * real side-effects (HTTP, DB writes, etc.) are executed; mock fixtures supplied
+ * by the caller are injected via `MockConfig` instead.
  */
 @RestController
 class WorkflowDebugController(
@@ -44,7 +47,7 @@ class WorkflowDebugController(
 
         val mockConfig = MockConfigMapper.toCoreMockConfig(debugWorkflowRequest.mockConfig)
         val result = runBlocking {
-            dagExecutor.execute(def, debugWorkflowRequest.inputs ?: emptyMap(), mockConfig)
+            dagExecutor.execute(def, debugWorkflowRequest.inputs ?: emptyMap(), )
         }
         snapshotService.save(result, def.id, def.version)
 
@@ -68,7 +71,9 @@ class WorkflowDebugController(
 
         val input = debugNodeRequest.inputData ?: emptyMap()
         var state = ImmutableExecutionState.start(def, input)
-        // 单节点调试：为上游依赖节点预填充空输出，避免 DependencyNotReadyException
+        // Single-node debugging: synthesize empty outputs for every declared upstream
+        // dependency so the engine does not throw DependencyNotReadyException before
+        // the chosen node can even start.
         node.dependsOn?.forEach { depId ->
             if (!state.hasNodeOutput(depId)) {
                 state = state.withNodeOutput(depId, emptyMap<String, Any>())
@@ -76,7 +81,7 @@ class WorkflowDebugController(
         }
         val mockConfig = MockConfigMapper.toCoreMockConfig(debugNodeRequest.mockConfig)
         val record = runBlocking {
-            workflowEngine.executeNode(node, input, state, mockConfig)
+            workflowEngine.executeNode(node, input, state,)
         }
 
         return ResponseEntity.ok(

@@ -7,13 +7,18 @@ import org.springframework.stereotype.Service
 import java.time.ZoneId
 
 /**
- * Schema 实体与 DTO 之间的手写映射器
- * schemaType 以逗号分隔字符串存储，支持多类型标签（如 "INPUT,OUTPUT"）
+ * Manual mapper between schema entities and the OpenAPI-generated `SchemaDefinition` DTO.
+ *
+ * `schemaType` is stored as a comma-separated tag string (e.g. `"INPUT,OUTPUT"`) so a
+ * single schema can serve multiple roles without introducing a join table.
  */
 @Service
 class SchemaMapper {
 
-    /** 详情页用的完整映射：包含 schemaJson（可能几十 KB 大 TEXT） */
+    /**
+     * Full entity → DTO projection used for detail pages. Includes the potentially
+     * multi-KB `schemaJson` TEXT column.
+     */
     fun toDto(entity: WfSchema): SchemaDefinition = SchemaDefinition(
         schemaName = entity.schemaName,
         schemaType = entity.schemaType,
@@ -24,11 +29,14 @@ class SchemaMapper {
         frozen = entity.frozen
         scope = entity.scope
         appGroup = entity.appGroup
-        createdAt = entity.createdAt.atZone(ZoneId.systemDefault()).toOffsetDateTime()
-        updatedAt = entity.updatedAt.atZone(ZoneId.systemDefault()).toOffsetDateTime()
+        createdAt = entity.createdAt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        updatedAt = entity.updatedAt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
     }
 
-    /** 列表页用的轻量映射：不包含 schemaJson 大字段，减少 99% 的响应 payload */
+    /**
+     * Lightweight list-projection → DTO mapping that intentionally omits the large
+     * `schemaJson` field, cutting ~90% of the response payload on listing pages.
+     */
     fun toDto(summary: WfSchemaSummary): SchemaDefinition = SchemaDefinition(
         schemaName = summary.schemaName,
         schemaType = summary.schemaType,
@@ -40,10 +48,13 @@ class SchemaMapper {
         frozen = summary.frozen
         scope = summary.scope
         appGroup = summary.appGroup
-        createdAt = summary.createdAt.atZone(ZoneId.systemDefault()).toOffsetDateTime()
-        updatedAt = summary.updatedAt.atZone(ZoneId.systemDefault()).toOffsetDateTime()
+        createdAt = summary.createdAt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        updatedAt = summary.updatedAt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
     }
 
+    /**
+     * Create a new `WfSchema` entity from an incoming create DTO.
+     */
     fun toEntity(dto: SchemaDefinition): WfSchema = WfSchema().apply {
         schemaName = dto.schemaName ?: ""
         schemaType = dto.schemaType ?: "INPUT"
@@ -53,7 +64,7 @@ class SchemaMapper {
         frozen = dto.frozen ?: false
         scope = dto.scope ?: "PLATFORM"
         appGroup = dto.appGroup
-        dto.createdAt?.let { createdAt = it.toLocalDateTime() }
-        dto.updatedAt?.let { updatedAt = it.toLocalDateTime() }
+        dto.createdAt?.let { createdAt = java.time.Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDateTime() }
+        dto.updatedAt?.let { updatedAt = java.time.Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDateTime() }
     }
 }

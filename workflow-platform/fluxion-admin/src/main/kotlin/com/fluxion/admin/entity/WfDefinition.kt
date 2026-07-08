@@ -5,113 +5,122 @@ import jakarta.persistence.Entity
 import jakarta.persistence.Table
 
 /**
- * 工作流定义实体。
+ * Workflow definition entity — the canonical store for a published DAG.
  *
- * 源表：`wf_definition`
+ * Captures the full workflow lifecycle: DAG structure (`dagJson`), input/output schemas,
+ * protocol bindings (HTTP/DUBBO/GRPC/KAFKA), transaction mode, decorators, and status
+ * (DRAFT / ACTIVE / DEPRECATED). WorkflowEngine reads the DAG at execution time; Admin
+ * controllers provide CRUD + publish/deprecate operations.
+ *
+ * Source table: `wf_definition`.
+ *
+ * Collaborates with: WfDefinitionRepository, WfDefinitionService, WorkflowEngine (runtime
+ * executor), AdminRouteConfigStore (protocol binding refresh), SchemaCompatibilityValidator
+ * (input/output schema evolution checks).
  */
 @Entity
 @Table(name = "wf_definition")
 class WfDefinition : BaseEntity() {
 
-    /** 工作流业务唯一标识（列：`workflow_id`） */
+    /** Business-unique workflow identifier, maps to column `workflow_id`. */
     @Column(name = "workflow_id", nullable = false, unique = true, length = 64)
     var workflowId: String = ""
 
-    /** 工作流显示名称（列：`workflow_name`） */
+    /** Human-readable display name, maps to column `workflow_name`. */
     @Column(name = "workflow_name", nullable = false, length = 128)
     var workflowName: String = ""
 
-    /** DAG 节点定义（JSON 格式）（列：`dag_json`） */
+    /** DAG node+edge definition JSON, maps to column `dag_json`. */
     @Column(name = "dag_json", nullable = false, columnDefinition = "TEXT")
     var dagJson: String = ""
 
-    /** 入参 JSON Schema（可选）（列：`input_schema`） */
+    /** Input-parameter JSON Schema reference (optional), maps to column `input_schema`. */
     @Column(name = "input_schema", columnDefinition = "TEXT")
     var inputSchema: String? = null
 
-    /** 入参 Schema 格式标识（列：`input_schema_format`） */
+    /** Input schema format identifier, maps to column `input_schema_format`. */
     @Column(name = "input_schema_format", nullable = false, length = 32)
     var inputSchemaFormat: String = "json-schema"
 
-    /** 出参 JSON Schema（可选）（列：`output_schema`） */
+    /** Output-parameter JSON Schema reference (optional), maps to column `output_schema`. */
     @Column(name = "output_schema", columnDefinition = "TEXT")
     var outputSchema: String? = null
 
-    /** 出参 Schema 格式标识（列：`output_schema_format`） */
+    /** Output schema format identifier, maps to column `output_schema_format`. */
     @Column(name = "output_schema_format", nullable = false, length = 32)
     var outputSchemaFormat: String = "json-schema"
 
-    /** 错误处理函数引用（可选）（列：`error_handler_ref`） */
+    /** Optional compensation/error-handler function reference, maps to column `error_handler_ref`. */
     @Column(name = "error_handler_ref", length = 128)
     var errorHandlerRef: String? = null
 
-    /** 工作流分类：BUSINESS/META（列：`category`） */
+    /** Classification: BUSINESS (user workflow) / META (admin/orchestration), maps to column `category`. */
     @Column(name = "category", nullable = false, length = 32)
     var category: String = "BUSINESS"
 
-    /** 作用域：PLATFORM/PRIVATE/MARKETPLACE（列：`scope`） */
+    /** Visibility: PLATFORM / PRIVATE / MARKETPLACE, maps to column `scope`. */
     @Column(name = "scope", nullable = false, length = 16)
     var scope: String = "PRIVATE"
 
-    /** 所属应用分组（scope=PRIVATE 时必填）（列：`app_group`） */
+    /** Owning app group when scope=PRIVATE, maps to column `app_group`. */
     @Column(name = "app_group", length = 128)
     var appGroup: String? = null
 
-    /** 来源引用（安装市场工作流时指向原始 workflowId）（列：`source_ref`） */
+    /** Original workflowId when installed from Marketplace, maps to column `source_ref`. */
     @Column(name = "source_ref", length = 128)
     var sourceRef: String? = null
 
-    /** 协议：HTTP/DUBBO/GRPC/KAFKA/ALL（列：`protocol`） */
+    /** Binding protocol: HTTP / DUBBO / GRPC / KAFKA / ALL, maps to column `protocol`. */
     @Column(name = "protocol", nullable = false, length = 32)
     var protocol: String = "HTTP"
 
-    /** 协议方法（列：`method`） */
+    /** Protocol method (GET/POST for HTTP, etc.), maps to column `method`. */
     @Column(name = "method", length = 20)
     var method: String? = null
 
-    /** 协议绑定键（列：`bind_key`） */
+    /** Protocol binding key (path/topic/service-name), maps to column `bind_key`. */
     @Column(name = "bind_key", length = 256)
     var bindKey: String? = null
 
-    /** 发布目标应用群组（JSON 数组）（列：`target_groups`） */
+    /** JSON array of target deployment app groups, maps to column `target_groups`. */
     @Column(name = "target_groups", length = 1024)
     var targetGroups: String? = null
 
-    /** 发布目标（JSON 对象）（列：`publish_target`） */
+    /** JSON object describing publish target details, maps to column `publish_target`. */
     @Column(name = "publish_target", length = 1024)
     var publishTarget: String? = null
 
-    /** 触发器配置（JSON 数组）（列：`triggers_config`） */
+    /** Trigger configuration JSON array (cron/http/mq), maps to column `triggers_config`. */
     @Column(name = "triggers_config", columnDefinition = "TEXT")
     var triggersConfig: String? = null
 
-    /** 版本号（列：`version`） */
+    /** Monotonic version incremented on each publish, maps to column `version`. */
     @Column(name = "version", nullable = false)
     var version: Int = 1
 
-    /** 是否受保护，禁止删除（列：`is_protected`） */
+    /** Protected workflows cannot be deleted via UI/API, maps to column `is_protected`. */
     @get:JvmName("getIsProtected")
     @set:JvmName("setIsProtected")
     @Column(name = "is_protected", nullable = false)
     var isProtected: Boolean = false
 
-    /** 状态：DRAFT/ACTIVE/DEPRECATED（列：`status`） */
+    /** Lifecycle state: DRAFT / ACTIVE / DEPRECATED, maps to column `status`. */
     @Column(name = "status", nullable = false, length = 16)
     var status: String = "DRAFT"
 
-    /** 事务模式：NONE/SAGA（列：`transaction_mode`） */
+    /** Transaction semantics: NONE (default) / SAGA, maps to column `transaction_mode`. */
     @Column(name = "transaction_mode", length = 16)
     var transactionMode: String = "NONE"
 
-    /** 工作流级装饰器列表（JSON 字符串数组）（列：`workflow_decorators`） */
+    /** JSON string array of workflow-level decorator names, maps to column `workflow_decorators`. */
     @Column(name = "workflow_decorators", columnDefinition = "TEXT")
     var workflowDecorators: String? = null
 
-    /** 工作流级装饰器参数（JSON）（列：`workflow_decorator_params`） */
+    /** JSON object of workflow-level decorator parameters, maps to column `workflow_decorator_params`. */
     @Column(name = "workflow_decorator_params", columnDefinition = "JSON")
     var workflowDecoratorParams: String? = null
 
-    /** 创建人（列：`created_by`） */
+    /** Username who created this definition, maps to column `created_by`. */
     @Column(name = "created_by", length = 64)
     var createdBy: String? = null
 }

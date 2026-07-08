@@ -12,15 +12,23 @@ import org.springframework.stereotype.Service
 import java.time.ZoneId
 
 /**
- * Function 实体与 DTO 之间的手写映射器
+ * Manual mapper between `WfFunction` entity and OpenAPI-generated `FunctionDefinition` DTO.
  *
- * 复杂转换（JSON、枚举、时间）通过 JsonMapperHelper 完成。
+ * JSON parsing, enum coercion and time conversions are delegated to `JsonMapperHelper`.
+ * Also handles projection of runtime `FunctionMeta` registry entries into read-only DTOs
+ * for listing endpoints.
  */
 @Service
 class FunctionMapper(
     private val jsonMapperHelper: JsonMapperHelper
 ) {
 
+    /**
+     * Full entity → DTO projection used for detail and list pages.
+     *
+     * Pulls denormalized fields (scriptBody, publishTarget, schemas) out of the unified
+     * `config` JSON blob so the frontend can edit them as dedicated form controls.
+     */
     fun toDto(entity: WfFunction): FunctionDefinition {
         val category = jsonMapperHelper.functionTypeToCategory(entity.functionType)
         val nodeType = resolveBuiltinNodeType(entity.functionName, category)
@@ -41,18 +49,23 @@ class FunctionMapper(
             publishTarget = jsonMapperHelper.stringToPublishTarget(
                 jsonMapperHelper.functionConfigToPublishTargetJson(config)
             )
-            createdAt = entity.createdAt.atZone(ZoneId.systemDefault()).toOffsetDateTime()
-            updatedAt = entity.updatedAt.atZone(ZoneId.systemDefault()).toOffsetDateTime()
+            createdAt = entity.createdAt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+            updatedAt = entity.updatedAt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
         }
     }
 
     /**
-     * 将 FunctionRegistry 中的 FunctionMeta 转换为 FunctionDefinition。
-     * 仅用于列表/详情展示，因此 script、publishTarget、时间戳等字段留空。
-     * Schema 可能是 JSON 字符串（内置函数）或已解析对象，统一解析为对象返回。
+     * Convert a live `FunctionMeta` entry from the runtime registry into a list DTO.
+     *
+     * Used by the function browser for built-in/script/external registrations that are
+     * not persisted as admin entities. Script, publishTarget and timestamp fields are
+     * intentionally omitted because registry entries carry no editable state.
+     *
+     * The `inputSchema`/`outputSchema` fields may arrive either as raw JSON strings or
+     * already-parsed Maps; both branches are normalized to object form for the UI.
      */
     fun registryMetaToDto(meta: FunctionMeta): FunctionDefinition {
-        val name = meta.name
+        val name = meta.functionName
         val category = when {
             name.startsWith("builtin:") -> FunctionCategory.BUILTIN
             name.startsWith("script:") -> FunctionCategory.SCRIPT
@@ -78,6 +91,9 @@ class FunctionMapper(
         }
     }
 
+    /**
+     * Create a new `WfFunction` entity from an incoming create DTO.
+     */
     fun toEntity(dto: FunctionDefinition): WfFunction = WfFunction().apply {
         functionName = dto.name ?: ""
         functionType = resolveFunctionType(dto)
@@ -87,6 +103,9 @@ class FunctionMapper(
         config = jsonMapperHelper.functionConfigToJsonString(jsonMapperHelper.buildFunctionConfig(dto))
     }
 
+    /**
+     * Apply update DTO fields onto an existing managed entity.
+     */
     fun updateEntity(dto: FunctionDefinition, entity: WfFunction) {
         entity.functionName = dto.name ?: entity.functionName
         entity.functionType = resolveFunctionType(dto)
@@ -96,6 +115,9 @@ class FunctionMapper(
         entity.config = jsonMapperHelper.functionConfigToJsonString(jsonMapperHelper.buildFunctionConfig(dto))
     }
 
+    /**
+     * Derive the persisted `functionType` code from DTO category + engine hint.
+     */
     private fun resolveFunctionType(dto: FunctionDefinition): String {
         return when (dto.category) {
             FunctionCategory.SCRIPT -> {
@@ -113,7 +135,10 @@ class FunctionMapper(
     }
 
     /**
-     * 内置函数名 → 节点类型映射（与前端 BUILTIN_NODE_TYPE_MAP 保持一致）
+     * Map built-in function prefix → DTO node type.
+     *
+     * Mirrors the frontend `BUILTIN_NODE_TYPE_MAP` so the visual editor renders the
+     * correct node icon/decorations regardless of which side assigns the type first.
      */
     private fun resolveBuiltinNodeType(name: String?, category: FunctionCategory?): FunctionNodeType {
         if (category != FunctionCategory.BUILTIN) {

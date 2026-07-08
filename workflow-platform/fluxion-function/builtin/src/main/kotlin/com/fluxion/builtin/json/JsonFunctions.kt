@@ -10,8 +10,7 @@ import com.fluxion.core.model.NodeInput
 import com.fluxion.core.util.JsonUtil
 import com.fluxion.core.util.uncheckedCast
 import com.fluxion.core.value.FunctionResult
-import org.slf4j.LoggerFactory
-
+import org.slf4j.*
 /**
  * Built-in JSON serializer (`builtin:toJson`).
  *

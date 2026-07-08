@@ -10,12 +10,13 @@ import org.junit.jupiter.api.DynamicTest
 import org.junit.jupiter.api.TestFactory
 
 /**
- * 鍐呯疆鍑芥暟鍏冧俊鎭绾︽祴璇曘€?
+ * Contract tests for built-in function metadata.
  *
- * 楠岃瘉姣忎釜 builtin 鍑芥暟鐨勫厓淇℃伅甯搁噺锛?
- * 1. 鍚嶇О銆佹弿杩伴潪绌猴紱
- * 2. input/output schema 鏄悎娉?JSON锛堣嫢鏈夛級锛?
- * 3. input schema 鑷冲皯瑕嗙洊瀹炵幇浠ｇ爜涓疄闄呰鍙栫殑 nodeParams 瀛楁銆?
+ * Validates the following invariants for every built-in function:
+ * 1. Name and description are non-blank.
+ * 2. input/output schema documents (if present) are valid JSON Schema.
+ * 3. input schema declares at least the nodeParams fields actually read
+ *    by the implementation code.
  */
 class BuiltinFunctionMetaContractTest {
 
@@ -88,11 +89,12 @@ class BuiltinFunctionMetaContractTest {
         val properties = schemaMap["properties"].uncheckedCast<Map<String, Any>>()
         val requiredList = (schemaMap["required"] as? List<*>)?.map { it.toString() } ?: emptyList()
 
-        // 瀹氫箟浜?properties 鐨?schema 蹇呴』澹版槑 type=object锛屼繚璇佸墠绔〃鍗曚笌鏍￠獙鍣ㄨ涓轰竴鑷?
+        // Schemas that declare properties must also declare type=object so UI
+        // forms and the runtime validator behave consistently.
         if (properties != null && properties.isNotEmpty()) {
             assertEquals("object", schemaMap["type"], "$label with properties must declare type=object")
         }
-        // required 涓殑瀛楁蹇呴』鍑虹幇鍦?properties 涓?
+        // Every field listed in the required array must also appear in properties.
         for (param in requiredList) {
             assertTrue(properties?.containsKey(param) == true, "$label required field '$param' must be defined in properties")
         }

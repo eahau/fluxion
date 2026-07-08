@@ -6,19 +6,19 @@ import com.fluxion.core.function.WorkflowFunction
 import com.fluxion.core.model.NodeInput
 import com.fluxion.core.value.FunctionMeta
 import com.fluxion.core.value.FunctionResult
-import org.slf4j.LoggerFactory
-import org.slf4j.info
+import org.slf4j.*
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.stereotype.Component
 
 /**
- * Admin 自举工作流节点函数：下线工作流定义。
+ * Admin self-hosted workflow node: deprecate (deactivate) a workflow definition.
  *
- * 由内置工作流 [ADMIN_WORKFLOW_DEPRECATE_WORKFLOW_ID] 调用，
- * 将工作流下线逻辑从 Controller 下沉到工作流引擎执行。
+ * Invoked by the built-in meta-workflow referenced by `ADMIN_WORKFLOW_DEPRECATE_WORKFLOW_ID`,
+ * pushing the deprecation flow down from the REST controller into the workflow engine so
+ * audits, retries and side-effects share a single execution path.
  *
- * 作为 Spring Bean 注册，由 [com.fluxion.di.spring.SpringFunctionInstanceProvider]
- * 从应用上下文中直接获取实例。
+ * Exposed as a Spring bean so `com.fluxion.di.spring.SpringFunctionInstanceProvider` can pull
+ * it directly from the application context when instantiating the admin function component.
  */
 @Component
 class AdminDeprecateWorkflowFunction @Autowired constructor(
@@ -39,7 +39,7 @@ class AdminDeprecateWorkflowFunction @Autowired constructor(
         return FunctionResult.success(dto)
     }
 
-    override fun meta(): FunctionMeta = FunctionMeta.builder(FUNCTION_REF)
+    fun meta() = FunctionMeta.builder(FUNCTION_REF)
         .description("Admin self-hosted workflow: deprecate a workflow definition")
         .build()
 

@@ -34,6 +34,11 @@ data class FilterRule(
      */
     val rules: List<FilterRule>? = null,
     /**
+     * Combining logic for child rules when this is a compound node —
+     * `"and"` or `"or"`.  Falls back to the parent's default when `null`.
+     */
+    val logic: String? = null,
+    /**
      * When true, `globalLogicOperator` overrides the per-child `logic`
      * field and all children are combined uniformly.  Defaults to `false`
      * for backwards compatibility with admin console V1 payloads.

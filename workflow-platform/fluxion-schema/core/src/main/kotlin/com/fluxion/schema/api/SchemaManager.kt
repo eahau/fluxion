@@ -6,44 +6,43 @@ import com.fluxion.schema.model.SchemaFormat
 import com.fluxion.schema.model.ValidationResult
 
 /**
- * Schema 管理门面，提供统一的 Schema 解析、校验、字段提取、引用解析、编解码能力。
+ * Unified facade over every schema capability — parsing, validation,
+ * field extraction, reference resolution, and codec lookup.
+ *
+ * `SchemaManager` is what application-level code (workflow nodes, API
+ * controllers, admin-UI services) talks to. The individual SPIs (parser,
+ * validator, extractor, codec, registry, resolver) are deliberately
+ * package-private implementation details; callers go through the manager.
+ *
+ * The default implementation ([DefaultSchemaManager]) is constructed from
+ * a list of [SchemaFormatBundle] entries, one per format. Spring Boot
+ * auto-config collects all bundle beans from the application context and
+ * wires them.
  */
 interface SchemaManager {
 
-    /**
-     * 按格式解析 Schema。
-     */
+    /** Parses [raw] according to [format] and returns the compiled schema. */
     fun parse(format: SchemaFormat, raw: String): Schema
 
-    /**
-     * 解析 JSON Schema。
-     */
+    /** Convenience shortcut for `parse(JSON_SCHEMA, raw)`. */
     fun parseJson(raw: String): Schema
 
-    /**
-     * 校验数据是否符合 Schema。
-     */
+    /** Validates [data] against [schema] and returns the result. */
     fun validate(schema: Schema, data: Any?): ValidationResult
 
-    /**
-     * 按注册名校验数据。
-     */
+    /** Looks up [schemaName] in the configured [SchemaRegistry] and validates. */
     fun validateByName(schemaName: String, data: Any?): ValidationResult
 
-    /**
-     * 提取 Schema 字段树。
-     */
+    /** Extracts the unified field tree for [schema]. */
     fun extractFields(schema: Schema): List<SchemaField>
 
-    /**
-     * 解析引用字符串。
-     */
+    /** Resolves a `format:name` reference string via the configured [SchemaResolver]. */
     fun resolveRef(ref: String): Schema?
 
     /**
-     * 获取指定格式的编解码器。
+     * Returns the codec registered for [format].
      *
-     * @throws IllegalArgumentException 若没有可用的 codec
+     * @throws IllegalArgumentException if no codec is bound for the format.
      */
     fun codec(format: SchemaFormat): SchemaCodec
 }

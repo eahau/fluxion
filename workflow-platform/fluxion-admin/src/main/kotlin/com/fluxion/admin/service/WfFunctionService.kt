@@ -11,15 +11,25 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import org.slf4j.*
+import org.slf4j.error
+import org.slf4j.info
 import org.springframework.stereotype.Service
 
 /**
- * 函数定义管理 Service
+ * Management service for registered workflow-function metadata.
  *
- * 职责：
- *   1. CRUD 函数定义（wf_function 表）
- *   2. 发布/下线函数（更新 status 状态与 publishTarget）
- *   3. 通过 FunctionConfigPublisher 将函数配置推送到 Worker 实例
+ * Responsibilities:
+ *   1. CRUD on `wf_function` rows via [WfFunctionRepository]
+ *   2. Publish / deprecate state transitions (flip [FunctionStatus] + push to workers)
+ *   3. Asynchronously push function-config snapshots to Worker instances via the optional
+ *      [FunctionConfigPublisher] SPI (falls back gracefully if no publisher is bound)
+ *
+ * Snapshot loading intentionally filters out BUILTIN functions — those are registered
+ * in-code on the Worker side and do not need to travel over the config distribution
+ * channel.
+ *
+ * Collaborates with: WfFunctionRepository, JsonMapperHelper (JSON ↔ typed map transforms
+ * for the unified `config` column), FunctionConfigPublisher (optional worker push).
  */
 @Service
 class WfFunctionService(
@@ -31,14 +41,18 @@ class WfFunctionService(
     private val asyncScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /**
-     * 发布函数（status = ACTIVE）并推送到 Worker
+     * Transition a function from INACTIVE → ACTIVE and push the snapshot to workers.
+     *
+     * When an explicit [publishTarget] is supplied it is merged into the persisted config
+     * JSON before the publish step so downstream deploy directives are kept alongside the
+     * function definition.
      */
     fun publish(
         functionName: String,
         publishTarget: com.fluxion.admin.generated.model.PublishTarget? = null
     ): WfFunction {
         val entity = repository.findByFunctionName(functionName)
-            .orElseThrow { IllegalArgumentException("Function not found: $functionName") }
+            .orElseThrow { IllegalArgumentException("Function not found: `$functionName") }
         entity.status = FunctionStatus.ACTIVE
         publishTarget?.let {
             val config = (jsonMapperHelper.functionToConfig(entity) ?: emptyMap()).toMutableMap()
@@ -52,11 +66,11 @@ class WfFunctionService(
     }
 
     /**
-     * 下线函数（status = INACTIVE）并从 Worker 移除
+     * Transition a function from ACTIVE → INACTIVE and remove it from every worker.
      */
     fun deprecate(functionName: String): WfFunction {
         val entity = repository.findByFunctionName(functionName)
-            .orElseThrow { IllegalArgumentException("Function not found: $functionName") }
+            .orElseThrow { IllegalArgumentException("Function not found: `$functionName") }
         entity.status = FunctionStatus.INACTIVE
         val saved = repository.save(entity)
         unpublishFromWorkers(functionName)
@@ -65,7 +79,8 @@ class WfFunctionService(
     }
 
     /**
-     * 保存并推送函数配置
+     * Persist a function entity and, if the saved row is ACTIVE, immediately push a
+     * snapshot to every attached worker.
      */
     fun save(entity: WfFunction): WfFunction {
         val saved = repository.save(entity)
@@ -76,19 +91,21 @@ class WfFunctionService(
     }
 
     /**
-     * 删除函数并从 Worker 移除
+     * Delete a function by reference name and synchronously notify every worker.
+     * BUILTIN-prefixed names are never pushed via this publisher (they are code-registered),
+     * but the DB row is still removed.
      */
     fun delete(functionName: String) {
         val entity = repository.findByFunctionName(functionName)
-            .orElseThrow { IllegalArgumentException("Function not found: $functionName") }
+            .orElseThrow { IllegalArgumentException("Function not found: `$functionName") }
         repository.delete(entity)
         unpublishFromWorkers(functionName)
         log.info { "Deleted function [$functionName]" }
     }
 
     /**
-     * 全量拉取所有已启用函数快照（供 Worker HTTP 拉取）
-     * 默认返回 PLATFORM + 所有 PRIVATE（本地开发场景）
+     * Worker HTTP pull endpoint — returns every enabled non-BUILTIN function snapshot.
+     * Used during local development / no-tenant cold-start scenarios.
      */
     fun loadAllEnabledSnapshots(): List<FunctionConfigSnapshot> {
         return repository.findAll()
@@ -98,8 +115,8 @@ class WfFunctionService(
     }
 
     /**
-     * 拉取指定 appGroup 可见的函数快照（PLATFORM + 该 appGroup 的 PRIVATE）
-     * 供配置下发时使用
+     * Worker HTTP pull endpoint — returns only PLATFORM + PRIVATE[appGroup] snapshots.
+     * Used by per-tenant config distribution.
      */
     fun loadEnabledSnapshots(appGroup: String): List<FunctionConfigSnapshot> {
         val platformFns = repository.findByScope("PLATFORM")
@@ -109,14 +126,13 @@ class WfFunctionService(
         return (platformFns + privateFns).map { toSnapshot(it) }
     }
 
-    /**
-     * 获取单个函数快照
-     */
+    /** Single-snapshot lookup used for incremental refresh. */
     fun getSnapshot(functionName: String): FunctionConfigSnapshot? {
         val entity = repository.findByFunctionName(functionName).orElse(null) ?: return null
         return toSnapshot(entity)
     }
 
+    /** Fire-and-forget worker push. BUILTIN functions are skipped (code-registered elsewhere). */
     private fun publishToWorkers(entity: WfFunction) {
         if (entity.functionType.equals("BUILTIN", ignoreCase = true)) return
         val publisher = functionConfigPublisher ?: return
@@ -134,6 +150,7 @@ class WfFunctionService(
         }
     }
 
+    /** Fire-and-forget worker removal. Skips `builtin:` prefix names (code-registered). */
     private fun unpublishFromWorkers(functionName: String) {
         if (functionName.startsWith("builtin:")) return
         val publisher = functionConfigPublisher ?: return
@@ -146,6 +163,7 @@ class WfFunctionService(
         }
     }
 
+    /** Convert a DB entity into the wire-format snapshot expected by the config SPI. */
     private fun toSnapshot(entity: WfFunction): FunctionConfigSnapshot {
         val config = jsonMapperHelper.functionToConfig(entity) ?: emptyMap()
         val targetGroups = jsonMapperHelper.functionConfigToPublishTargetJson(config)
@@ -156,7 +174,7 @@ class WfFunctionService(
             scriptBody = jsonMapperHelper.functionConfigToScriptBody(config),
             className = jsonMapperHelper.functionConfigToClassName(config),
             endpoint = null,
-            paramSchema = jsonMapperHelper.functionConfigToParamSchema(config),
+            inputSchema = jsonMapperHelper.functionConfigToParamSchema(config),
             outputSchema = jsonMapperHelper.functionConfigToOutputSchema(config),
             description = jsonMapperHelper.functionConfigToDescription(config),
             config = config,

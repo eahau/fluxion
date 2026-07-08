@@ -1,6 +1,6 @@
 import { RuntimeConfig, history } from '@umijs/max';
 import { message } from 'antd';
-import { apiGet } from '@/services/request';
+import { client, unwrap } from '@/sdk';
 import type { CurrentUser } from '@/types/api';
 
 const IS_DEV = process.env.NODE_ENV === 'development';
@@ -22,7 +22,9 @@ export const getInitialState = async (): Promise<{
     return { settings: {} };
   }
   try {
-    const currentUser = await apiGet<CurrentUser>('/api/admin/current-user');
+    const currentUser = unwrap(
+      await client.GET('/api/admin/current-user'),
+    ) as CurrentUser;
     return { currentUser, settings: {} };
   } catch (err) {
     if (IS_DEV) {

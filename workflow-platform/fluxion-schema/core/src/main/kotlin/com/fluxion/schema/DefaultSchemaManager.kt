@@ -1,3 +1,21 @@
+/**
+ * Default [SchemaManager] implementation that composes format-specific SPIs
+ * loaded via [SchemaFormatBundle] entries.
+ *
+ * The manager builds O(1) lookup maps keyed by [SchemaFormat] for each SPI
+ * (parser/validator/extractor/codec) so callers never iterate the bundle
+ * list on hot paths. Spring Boot auto-config assembles the bundle list from
+ * the application context; plain-JVM callers pass bundles directly to the
+ * constructor.
+ *
+ * ### Parse caching
+ *
+ * Schema compilation (especially JSON Schema and Protobuf descriptor
+ * resolution) is expensive. The manager caches compiled `parsed` objects
+ * keyed by `format.code + raw` so repeated `parse()` calls for the same
+ * source text return in O(1). The cache is unbounded — appropriate for the
+ * typical workload of a few hundred to a few thousand registered schemas.
+ */
 package com.fluxion.schema
 
 import com.fluxion.schema.api.SchemaCodec
@@ -15,18 +33,14 @@ import com.fluxion.schema.model.ValidationResult
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * [SchemaManager] 默认实现。
+ * Default [SchemaManager] backed by pluggable [SchemaFormatBundle] entries
+ * and an optional [SchemaResolver] / [SchemaRegistry] for reference
+ * resolution and name-based validation.
  *
- * 接受 [SchemaFormatBundle] 列表，按格式自动拆分构建 O(1) 路由 Map，
- * 支持 JSON Schema、Protobuf、Avro 等多格式。
- *
- * 格式路由由 Spring 装配层通过 Bundle 注入，SPI 实现类无需感知格式。
- *
- * ### 编译缓存
- *
- * Schema 编译（尤其是 JSON Schema / Protobuf）开销较大，
- * 内部维护 `format + raw` → 编译后对象的缓存，避免重复解析。
- * 缓存无上限，适用于 Schema 数量可控的场景（通常几百到几千个）。
+ * @property bundles format-specific SPI implementations, normally collected
+ *   by Spring from the application context
+ * @property resolver optional reference resolver used by [resolveRef]
+ * @property registry optional named-schema store used by [validateByName]
  */
 class DefaultSchemaManager(
     bundles: List<SchemaFormatBundle> = emptyList(),
@@ -47,10 +61,12 @@ class DefaultSchemaManager(
         bundles.mapNotNull { b -> b.codec?.let { b.format to it } }.toMap()
 
     /**
-     * 编译缓存：`format.code + raw` → 编译后对象（Schema.parsed）。
+     * Compiled-artifact cache keyed by `format.code + raw` text.
      *
-     * 只缓存编译产物，不缓存 Schema 整体（因为 name 可能不同）。
-     * 线程安全，无上限。
+     * Only caches the `parsed` payload rather than the full [Schema] wrapper
+     * because callers may supply different names for the same raw text
+     * (e.g. anonymous inline schemas vs registered named ones).
+     * Thread-safe via ConcurrentHashMap; entries are never evicted.
      */
     private val parseCache = ConcurrentHashMap<Pair<String, String>, Any>()
 
@@ -80,7 +96,7 @@ class DefaultSchemaManager(
     override fun validateByName(schemaName: String, data: Any?): ValidationResult {
         val registry = registry ?: throw IllegalStateException("SchemaRegistry is not configured")
         val schema = registry.get(schemaName)
-            ?: throw IllegalArgumentException("Schema not found: $schemaName")
+            ?: throw IllegalArgumentException("Schema not found: `$schemaName")
         return validate(schema, data)
     }
 
@@ -100,14 +116,16 @@ class DefaultSchemaManager(
     }
 
     /**
-     * 清空编译缓存（测试或热更新时使用）。
+     * Clears the internal parsed-artifact cache.
+     *
+     * Used by tests to reset state between runs and by admin-side
+     * hot-reload paths after a bulk schema-format upgrade invalidates
+     * previously compiled representations.
      */
     fun clearParseCache() {
         parseCache.clear()
     }
 
-    /**
-     * 当前缓存的编译产物数量。
-     */
+    /** Number of compiled artifacts currently held in the parse cache. */
     fun parseCacheSize(): Int = parseCache.size
 }

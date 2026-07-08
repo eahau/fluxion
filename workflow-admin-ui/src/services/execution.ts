@@ -1,4 +1,5 @@
-import { apiGet, apiPost } from './request';
+import { client, unwrap } from '@/sdk';
+import { apiGet } from './request';
 import type { ExecutionRecord, TraceDetail } from '@/types/api';
 
 export async function listExecutions(params?: {
@@ -8,30 +9,41 @@ export async function listExecutions(params?: {
   page?: number;
   pageSize?: number;
 }) {
-  return apiGet<API.PageResponse<ExecutionRecord>>('/api/admin/executions', params);
+  return unwrap(
+    await client.GET('/api/admin/executions', { params: { query: params ?? {} } }),
+  ) as unknown as API.PageResponse<ExecutionRecord>;
 }
 
 export async function getExecution(executionId: string) {
-  return apiGet<TraceDetail>(`/api/admin/executions/${executionId}`);
+  return unwrap(
+    await client.GET('/api/admin/executions/{executionId}', {
+      params: { path: { executionId } },
+    }),
+  ) as TraceDetail;
 }
 
 export async function rerunExecution(executionId: string, nodeId?: string) {
-  return apiPost<TraceDetail>(`/api/admin/executions/${executionId}/rerun`, { nodeId });
+  return unwrap(
+    await client.POST('/api/admin/executions/{executionId}/rerun', {
+      params: { path: { executionId } },
+      body: { nodeId } as any,
+    }),
+  ) as TraceDetail;
 }
 
-// ─── Signal/Query API ─────────────────────────────────────────────
-
-/** 发送信号到运行中的工作流执行 */
 export async function sendSignal(executionId: string, signalName: string, payload?: any) {
-  return apiPost(`/api/admin/executions/${executionId}/signals`, { signalName, payload });
+  return unwrap(
+    await client.POST('/api/admin/executions/{executionId}/signal', {
+      params: { path: { executionId } },
+      body: { signalName, payload } as any,
+    }),
+  );
 }
 
-/** 查询工作流执行状态（运行中/已完成） */
 export async function queryExecution(executionId: string) {
-  return apiGet<any>(`/api/admin/executions/${executionId}/query`);
+  return apiGet<any>(`/api/admin/executions/${encodeURIComponent(executionId)}/query`);
 }
 
-/** 列出所有运行中的执行 */
 export async function listRunningExecutions() {
   return apiGet<any[]>('/api/admin/executions/running');
 }

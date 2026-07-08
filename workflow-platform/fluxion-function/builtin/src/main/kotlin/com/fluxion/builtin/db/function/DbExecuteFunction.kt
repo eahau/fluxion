@@ -12,8 +12,7 @@ import com.fluxion.core.util.JsonUtil
 import com.fluxion.core.util.uncheckedCast
 import com.fluxion.core.value.FunctionResult
 import com.fluxion.core.value.SideEffect
-import org.slf4j.LoggerFactory
-
+import org.slf4j.*
 /** Node-param key under which publish-time compiled SQL is stored. */
 const val COMPILED_SQL_KEY = "compiledSql"
 

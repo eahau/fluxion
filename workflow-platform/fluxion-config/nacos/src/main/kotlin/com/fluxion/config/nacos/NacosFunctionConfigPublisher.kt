@@ -8,7 +8,7 @@ import com.fluxion.adapter.spi.registry.PublishTarget
 import org.slf4j.*
 
 /**
- * Nacos 实现 — 函数配置发布器（Admin 侧）
+ * Nacos 瀹炵幇 鈥?鍑芥暟閰嶇疆鍙戝竷鍣紙Admin 渚э級
  */
 class NacosFunctionConfigPublisher(
     private val configService: ConfigService
@@ -23,10 +23,10 @@ class NacosFunctionConfigPublisher(
     }
 
     /**
-     * 索引更新锁 — 防止并发 publish/unpublish 导致 read-modify-write 竞态。
+     * 绱㈠紩鏇存柊閿?鈥?闃叉骞跺彂 publish/unpublish 瀵艰嚧 read-modify-write 绔炴€併€?
      *
-     * 典型场景：两个线程同时读取索引 → 各自添加不同函数 → 后写者覆盖前者，
-     * 导致某个函数从索引中丢失。
+     * 鍏稿瀷鍦烘櫙锛氫袱涓嚎绋嬪悓鏃惰鍙栫储寮?鈫?鍚勮嚜娣诲姞涓嶅悓鍑芥暟 鈫?鍚庡啓鑰呰鐩栧墠鑰咃紝
+     * 瀵艰嚧鏌愪釜鍑芥暟浠庣储寮曚腑涓㈠け銆?
      */
     private val indexLock = Any()
 

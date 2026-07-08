@@ -7,20 +7,34 @@ import com.fluxion.core.exception.LockAcquisitionException
 import com.fluxion.core.lock.DistributedLockProvider
 import kotlinx.coroutines.runBlocking
 import org.slf4j.*
-
 /**
- * 工作流级分布式锁路由器 — WorkflowRouter 装饰器。
+ * Distributed-lock guarding [WorkflowRouter] decorator.
  *
- * 在整段工作流执行前后加锁，确保同一锁键的工作流请求串行执行。
- * 适用于需要跨节点、跨调用保持一致性的场景（如库存扣减、订单状态机）。
+ * Serializes concurrent requests that share the same lock key, guaranteeing
+ * at most one in-flight workflow execution per key across the entire cluster.
+ * Required for scenarios like inventory decrement or order state machines
+ * where interleaved DAGs would break correctness invariants.
  *
- * 锁键来源（按优先级）：
- * 1. 请求头 `X-Lock-Key`
- * 2. 请求参数 `_lockKey`
- * 3. 默认 `fluxion:lock:workflow:{workflowId}`
+ * Lock key resolution order (first match wins):
+ * 1. HTTP header `X-Lock-Key`
+ * 2. Request param `_lockKey`
+ * 3. Fallback: `fluxion:lock:workflow:{workflowId}`
  *
- * 等待时间与租约可通过构造参数配置，默认不等待、租约 30 秒。
- * 如需更细粒度控制，建议使用函数级 [com.fluxion.decorator.impl.lock.DistributedLockDecorator]。
+ * Acquire/release timings are configurable via constructor — defaults are
+ * chosen for short-lived synchronous workflows (30s lease, zero wait).
+ * If the lock cannot be obtained in time, [LockAcquisitionException] is
+ * thrown so adapters can translate it to the appropriate HTTP/gRPC status.
+ *
+ * **Decorator ordering note**: stack this OUTSIDE [IdempotencyRouter] so a
+ * MISS on idempotency-cache still gets serialized before hitting the DAG.
+ *
+ * @param delegate             Inner router to wrap
+ * @param lockProvider         Cluster-wide lock backend (Redis, ZK, etc.)
+ * @param waitMillis           Max millis to block waiting for lock acquisition
+ * @param leaseMillis          Automatic lease expiry millis on the lock
+ * @param retry                Number of re-acquire attempts on transient failure
+ * @param retryIntervalMillis  Pause between retries
+ * @param sync                 If true, use sync (fair) acquire variant where supported
  */
 class DistributedLockRouter(
     private val delegate: WorkflowRouter,
@@ -35,13 +49,13 @@ class DistributedLockRouter(
     private val log = LoggerFactory.getLogger(javaClass)
 
     companion object {
-        /** 请求头中携带的锁键名称 */
+        /** HTTP header that supplies an explicit lock key. */
         const val HEADER_LOCK_KEY = "X-Lock-Key"
 
-        /** 请求参数中携带的锁键名称 */
+        /** Request-params key that supplies an explicit lock key. */
         const val PARAM_LOCK_KEY = "_lockKey"
 
-        /** 默认锁键前缀 */
+        /** Prefix for the per-workflow default lock key. */
         const val DEFAULT_PREFIX = "fluxion:lock:workflow:"
     }
 
@@ -56,19 +70,26 @@ class DistributedLockRouter(
                 "Failed to acquire distributed lock for workflow [${request.workflowId}] key=$lockKey"
             )
 
-        log.debug("Acquired distributed lock for workflow [${request.workflowId}] key=$lockKey")
+        log.debug { "Acquired distributed lock for workflow [${request.workflowId}] key=$lockKey" }
         try {
             return delegate.executeSuspend(request)
         } finally {
             try {
                 lockProvider.release(lock)
-                log.debug("Released distributed lock for workflow [${request.workflowId}] key=$lockKey")
+                log.debug { "Released distributed lock for workflow [${request.workflowId}] key=$lockKey" }
             } catch (ex: Exception) {
-                log.warn("Failed to release distributed lock for workflow [${request.workflowId}] key=$lockKey", ex)
+                log.warn(ex) { "Failed to release distributed lock for workflow [${request.workflowId}] key=$lockKey" }
             }
         }
     }
 
+    /**
+     * Determine the lock key for a request by checking, in priority order:
+     * explicit header → explicit param → per-workflow default.
+     *
+     * @param request Incoming unified request
+     * @return Resolved lock key (never blank)
+     */
     private fun resolveLockKey(request: UnifiedRequest): String {
         val header = request.headers[HEADER_LOCK_KEY]
         if (!header.isNullOrBlank()) return header

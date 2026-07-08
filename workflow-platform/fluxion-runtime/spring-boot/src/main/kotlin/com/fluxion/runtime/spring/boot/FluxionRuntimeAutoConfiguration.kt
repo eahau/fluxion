@@ -25,15 +25,17 @@ import org.springframework.context.annotation.Bean
 import org.springframework.core.env.Environment
 
 /**
- * Fluxion Runtime Spring Boot 自动装配。
+ * Spring Boot auto-configuration for the Fluxion Worker (data plane).
  *
- * 当应用角色为 worker 时生效，提供：
- * - 基于配置中心的 [DefinitionProvider]
- * - 面向执行引擎的 [WorkflowRouter] 实现
- * - 默认日志型 [ExecutionSnapshotStore]
+ * Activated ONLY when:
+ * - The core `DagExecutor` class is on the classpath (i.e. `fluxion-core` pulled in).
+ * - `workflow.instance.role=worker` is set in the application environment.
  *
- * 必须在配置中心 AutoConfiguration 之后加载，
- * 否则 @ConditionalOnBean(DefinitionConfigSubscriber) 会因目标 Bean 尚未注册而评估为 false。
+ * Bean ordering via `afterName` is deliberate: the three config-center
+ * auto-configurations (HTTP polling, Nacos, Apollo) MUST register their
+ * `DefinitionConfigSubscriber` beans first, otherwise the
+ * `@ConditionalOnBean(DefinitionConfigSubscriber)` guard here evaluates to
+ * false and the Worker has no runtime definitions.
  */
 @AutoConfiguration(afterName = [
     "com.fluxion.config.http.HttpConfigAutoConfiguration",
@@ -47,10 +49,16 @@ class FluxionRuntimeAutoConfiguration {
     private val log = LoggerFactory.getLogger(javaClass)
 
     /**
-     * 基于配置中心的工作流定义提供者。
+     * Build the Worker-side [DefinitionProvider] backed by the live config
+     * center subscriber.
      *
-     * 优先使用用户自定义的 [DefinitionProvider]；
-     * 若不存在且存在 [DefinitionConfigSubscriber]，则使用配置中心缓存实现。
+     * Falls back to user-supplied beans via `@ConditionalOnMissingBean`. If no
+     * custom provider exists but a subscriber is present, we instantiate the
+     * config-center-backed version and eagerly call `init()` so the cache is
+     * hot before the first inbound request hits a transport adapter.
+     *
+     * @param subscriber Config-center watcher (Nacos / Apollo / Admin-HTTP)
+     * @return Initialized definition provider ready for lookups
      */
     @Bean
     @ConditionalOnMissingBean(DefinitionProvider::class)
@@ -65,11 +73,16 @@ class FluxionRuntimeAutoConfiguration {
     }
 
     /**
-     * Runtime 侧工作流路由器，供 HTTP / RPC / MQ 适配器统一注入。
+     * Assemble the canonical [WorkflowRouter] bean consumed by every
+     * transport adapter (HTTP, Dubbo, gRPC, Kafka).
      *
-     * 装饰顺序（由内到外）：RuntimeWorkflowRouter → IdempotencyRouter → DistributedLockRouter。
-     * - 幂等在内层：命中缓存时直接返回，避免无意义加锁。
-     * - 分布式锁在外层：为未命中缓存的并发请求提供严格互斥。
+     * Decorator stacking order is INNER → OUTER:
+     * 1. `RuntimeWorkflowRouter` (DAG engine — innermost, always present).
+     * 2. `IdempotencyRouter` (if store is wired, result cache BEFORE locking).
+     * 3. `DistributedLockRouter` (if provider wired, cluster serialization — outermost).
+     *
+     * Idempotency goes INSIDE the lock so that cache hits don't waste a
+     * cluster lock; the lock protects only cache-miss executions.
      */
     @Bean
     @ConditionalOnMissingBean(WorkflowRouter::class)
@@ -96,7 +109,11 @@ class FluxionRuntimeAutoConfiguration {
     }
 
     /**
-     * 默认快照存储：仅记录日志，不引入 DB 依赖。
+     * Default snapshot store implementation — pure structured logging.
+     *
+     * Intentionally dependency-free so a bare Worker deployment still emits
+     * useful audit logs without a DB. Replace via `@ConditionalOnMissingBean`
+     * override if durable snapshots are required.
      */
     @Bean
     @ConditionalOnMissingBean(ExecutionSnapshotStore::class)
@@ -104,7 +121,11 @@ class FluxionRuntimeAutoConfiguration {
         LoggingExecutionSnapshotStore()
 
     /**
-     * Runtime 实例注册器：启动时向 Admin 注册并开启心跳，关闭时注销。
+     * Wire the Worker instance lifecycle registrar if an `InstanceRegistry`
+     * (Admin-side discovery bridge) is present on the classpath.
+     *
+     * Triggers on `ApplicationRunner#run` for initial register/heartbeat
+     * start, and on `DisposableBean#destroy` for graceful deregister.
      */
     @Bean
     @ConditionalOnBean(InstanceRegistry::class)

@@ -10,30 +10,34 @@ import org.slf4j.*
 import java.util.concurrent.Executor
 
 /**
- * Nacos 路由配置存储实现
+ * Nacos-backed HTTP route configuration store.
  *
- * admin 后台发布 HTTP 接口后，将路由配置写入 Nacos：
- *   - dataId: workflow.http.routes（可配置）
- *   - group:  WORKFLOW（可配置）
- *   - 格式:   JSON（见 HttpRouteDefinition 注释中的格式说明）
+ * After the Admin console publishes HTTP routes, it writes a JSON snapshot
+ * to Nacos under:
+ * - dataId:  `workflow.http.routes` (configurable via constructor)
+ * - group:   `WORKFLOW` (configurable)
+ * - format:  see [HttpRouteDefinition] KDoc for JSON schema
  *
- * 本类监听 Nacos 配置变更，收到推送后调用 RouteChangeListener.onRoutesChanged()，
- * 由 RouteRegistry 实现执行 diff + registerMapping/unregisterMapping。
+ * This class:
+ * 1. **Initial load** does a synchronous `getConfig()` fetch on Worker startup.
+ * 2. **Incremental watch** attaches a Nacos `Listener`; every push is parsed
+ *    then delivered to the `RouteChangeListener` (the route registry) which
+ *    runs the diff and actually registers/unregisters Spring MVC mappings.
  *
- * Nacos 配置示例：
+ * Example Nacos JSON payload:
  * ```json
  * {
  *   "routes": [
- *     { "routeKey": "POST:/api/user/login",  "path": "/api/user/login",  "method": "POST", "workflowId": "user-login-workflow",  "enabled": true },
- *     { "routeKey": "POST:/api/order/create","path": "/api/order/create","method": "POST", "workflowId": "create-order-workflow", "enabled": true },
- *     { "routeKey": "GET:/api/user/{id}",    "path": "/api/user/{id}",   "method": "GET",  "workflowId": "get-user-workflow",     "enabled": true }
+ *     { "routeKey":"POST:/api/user/login",  "path":"/api/user/login",  "method":"POST","workflowId":"user-login-workflow",  "enabled":true },
+ *     { "routeKey":"POST:/api/order/create","path":"/api/order/create","method":"POST","workflowId":"create-order-workflow","enabled":true },
+ *     { "routeKey":"GET:/api/user/{id}",    "path":"/api/user/{id}",   "method":"GET", "workflowId":"get-user-workflow",    "enabled":true }
  *   ]
  * }
  * ```
  *
- * @param configService Nacos ConfigService（由 spring-cloud-starter-alibaba-nacos-config 自动配置）
- * @param dataId        Nacos DataId（默认 workflow.http.routes）
- * @param group         Nacos Group（默认 WORKFLOW）
+ * @param configService Nacos client (provided by `spring-cloud-starter-alibaba-nacos-config`)
+ * @param dataId        Nacos DataId of the routes snapshot (default: `workflow.http.routes`)
+ * @param group         Nacos group (default: `WORKFLOW`)
  */
 class NacosRouteConfigStore(
     private val configService: ConfigService,
@@ -43,10 +47,9 @@ class NacosRouteConfigStore(
 
     private val log = LoggerFactory.getLogger(javaClass)
 
-    /** 路由配置 JSON 顶层容器 */
     private data class RoutesConfig(val routes: List<HttpRouteDefinition> = emptyList())
 
-    // ─── RouteConfigStore ─────────────────────────────────────────────
+    // ----- RouteConfigStore ---------------------------------------------------
 
     override fun loadAll(): List<HttpRouteDefinition> {
         return try {
@@ -60,7 +63,7 @@ class NacosRouteConfigStore(
                 }
             }
         } catch (ex: Exception) {
-            log.error(ex) { "Failed to load routes from Nacos [$group/$dataId]: ${ex.message}" }
+            log.error(ex) { "Failed to load routes from Nacos [$group/$dataId]" }
             emptyList()
         }
     }
@@ -79,18 +82,20 @@ class NacosRouteConfigStore(
                     log.info { "Nacos config change [$group/$dataId]: ${routes.size} routes received." }
                     listener.onRoutesChanged(routes)
                 } catch (ex: Exception) {
-                    log.error(ex) { "Failed to parse Nacos config change [$group/$dataId]: ${ex.message}" }
+                    log.error(ex) { "Failed to parse Nacos config change [$group/$dataId]" }
                 }
             }
 
-            /** Nacos 回调线程：null 使用 Nacos 内置线程池 */
+            // Nacos callback executor: null means use the SDK's internal thread pool —
+            // we let Nacos pick; parsing + diff is cheap and the registry serializes
+            // mutations with a ReentrantLock anyway, so no extra isolation is needed.
             override fun getExecutor(): Executor? = null
         })
 
         log.info { "Started watching Nacos config [$group/$dataId] for HTTP route changes." }
     }
 
-    // ─── 解析 ─────────────────────────────────────────────────────────
+    // ----- Parsing -------------------------------------------------------------
 
     private fun parseRoutes(content: String): List<HttpRouteDefinition> {
         val config = JsonUtil.deserialize(content, RoutesConfig::class.java)
@@ -98,6 +103,12 @@ class NacosRouteConfigStore(
     }
 
     companion object {
+        /**
+         * Max wait millis for the initial synchronous Nacos `getConfig()` call.
+         * Kept short (5s) so Worker startup doesn't hang indefinitely when Nacos
+         * is unreachable (partial-availability behaviour: boot with empty routes
+         * and wait for the watch stream to recover).
+         */
         private const val TIMEOUT_MS = 5_000L
     }
 }

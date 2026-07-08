@@ -1,23 +1,30 @@
+// fluxion-redis:spring-boot - Spring Boot auto-configuration for Redis capability domain.
+// Auto-registers RedisClientAdapter-based RedisCommandFunction bean conditionally on classpath,
+// delegating actual client connections to Lettuce/Redisson/Spring-Data adapters (compileOnly).
+plugins {
+    kotlin("jvm")
+    kotlin("plugin.spring")
+}
+
 dependencies {
-    // workflow-redis-core（SPI + RedisCommandFunction）
-    // api: workflow-admin 等模块需要访问 RedisClientAdapter SPI
+    // Redis core SPI: RedisClientAdapter + RedisCommandFunction types (api - downstream consumers
+    // get transitive compile access to adapter SPI for customization).
     api(project(":fluxion-redis:core"))
 
-    // workflow-core（FunctionRegistry）
+    // Core module (FunctionRegistry registration + lazy logger extension function access).
     implementation(project(":fluxion-core"))
 
-    // 客户端适配器实现（compileOnly：由最终应用按需选择 Lettuce / Redisson）
+    // Redis client adapter implementations (compileOnly): final applications select exactly one.
     compileOnly(project(":fluxion-redis:lettuce"))
     compileOnly(project(":fluxion-redis:redisson"))
 
-    // 客户端库（compileOnly：由最终应用按需选择）
+    // Redis client libraries (compileOnly): provided by the end-application classpath.
     compileOnly("io.lettuce:lettuce-core")
     compileOnly("org.redisson:redisson")
 
-    // Spring Boot AutoConfigure（@AutoConfiguration / @ConditionalOnBean）
+    // Spring Boot AutoConfigure mechanism (@AutoConfiguration + @ConditionalOnBean + @ConditionalOnClass).
     implementation("org.springframework.boot:spring-boot-autoconfigure")
-
-    // SLF4J
+    // SLF4J logging.
     implementation("org.slf4j:slf4j-api")
 }
 

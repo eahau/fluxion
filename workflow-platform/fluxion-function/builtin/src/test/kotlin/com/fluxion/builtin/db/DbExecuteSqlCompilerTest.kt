@@ -16,7 +16,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 
 /**
- * DbExecute SQL 棰勭紪璇戝櫒鍗曞厓娴嬭瘯銆?
+ * Unit tests for [DbExecuteSqlCompiler].
  */
 class DbExecuteSqlCompilerTest {
 

@@ -16,7 +16,7 @@
  */
 package com.fluxion.core.function.external
 
-import org.slf4j.LoggerFactory
+import org.slf4j.*
 import java.util.ServiceLoader
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean

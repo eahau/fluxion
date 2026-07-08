@@ -5,6 +5,14 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.node.ObjectNode
 import org.slf4j.LoggerFactory
 
+/**
+ * Aggregate result returned by `SchemaCompatibilityValidator`.
+ *
+ * @property violations machine-readable list of incompatibility messages; empty means both
+ *                       schemas are forward/backward compatible.
+ * @property fieldChanges human-readable per-field diff (add/delete/modify/rename) that the
+ *                        UI can surface before an admin saves a schema edit.
+ */
 data class SchemaCompatibilityResult(
     val violations: List<String> = emptyList(),
     val fieldChanges: List<SchemaFieldChange> = emptyList()
@@ -12,6 +20,9 @@ data class SchemaCompatibilityResult(
     val compatible: Boolean get() = violations.isEmpty()
 }
 
+/**
+ * Single field-level change entry reported by the compatibility validator.
+ */
 data class SchemaFieldChange(
     val fieldPath: String,
     val changeType: String,
@@ -32,6 +43,19 @@ data class SchemaFieldChange(
     }
 }
 
+/**
+ * Validates forward/backward compatibility between two JSON Schema documents.
+ *
+ * Detects:
+ *   1. Deleted required fields (breaking).
+ *   2. Newly required fields added without defaults (breaking).
+ *   3. Incompatible type changes (e.g. `string` → `integer`) without a converter.
+ *   4. Removed `enum` values (consumers may fail validation).
+ *   5. Tightened constraints (minimum/maximum/minLength/maxLength/new pattern).
+ *
+ * Used by the schema editor UI to warn administrators before they save a schema revision
+ * that could break existing callers.
+ */
 class SchemaCompatibilityValidator {
     private val log = LoggerFactory.getLogger(javaClass)
     private val mapper = ObjectMapper()
@@ -47,6 +71,13 @@ class SchemaCompatibilityValidator {
         private const val REASON_REQUIRED_ADDED = "Newly required field - consumers without it will fail"
     }
 
+    /**
+     * Compare two serialized JSON Schemas and return a compatibility report.
+     *
+     * Either input may be `null`: a null old document is treated as a fresh schema (all
+     * fields added, no violations) and a null new document as a full deletion (all
+     * fields deleted).
+     */
     fun validate(oldJson: String?, newJson: String?): SchemaCompatibilityResult {
         if (oldJson == null && newJson == null) return SchemaCompatibilityResult()
         if (oldJson == null) {

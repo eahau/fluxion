@@ -4,7 +4,7 @@ import com.fluxion.acl.spi.AuthProvider
 import com.fluxion.acl.spi.model.AuthResult
 import com.fluxion.acl.spi.model.TokenClaims
 import com.fluxion.core.util.uncheckedCast
-import org.slf4j.LoggerFactory
+import org.slf4j.*
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.http.HttpEntity
@@ -16,15 +16,15 @@ import org.springframework.util.LinkedMultiValueMap
 import org.springframework.web.client.RestTemplate
 
 /**
- * 远程 ACL 客户端（OAuth 2.0 / OIDC 对齐）
+ * `AuthProvider` that delegates to an external OAuth 2.0 / OIDC-compatible IdP service.
  *
- * 调用外部 OAuth 2.0 / OIDC 兼容的身份服务，端点对齐标准规范：
- * - POST /oauth2/token          — OAuth 2.0 Token 端点（登录 / 签发）
- * - GET  /oauth2/userinfo       — OIDC UserInfo 端点（校验 Token + 获取用户信息）
- * - POST /oauth2/check          — Fluxion 扩展权限校验
+ * Endpoint contract (standard plus one Fluxion extension):
+ *   - `POST /oauth2/token`   – OAuth 2.0 Token endpoint (login / service-to-service issuance).
+ *   - `GET  /oauth2/userinfo` – OIDC UserInfo endpoint (token validation + identity).
+ *   - `POST /oauth2/check`   – Fluxion extension: fine-grained permission check.
  *
- * 可对接 Keycloak、Casdoor、Ory 等任何兼容 OAuth 2.0 / OIDC 的 IdP 服务。
- * 响应统一用 Map 解析，不定义 POJO，保持轻量。
+ * Works out of the box with Keycloak, Casdoor, Ory Keto/Hydra, Auth0, etc. Responses are
+ * parsed from generic `Map<String, Any>` payloads to keep the client dependency-free.
  */
 @Component
 @ConditionalOnProperty(name = ["fluxion.acl.provider"], havingValue = "remote")
@@ -36,8 +36,8 @@ class RemoteAclClient(
     private val restTemplate = RestTemplate()
 
     /**
-     * OAuth 2.0 Resource Owner Password Credentials — 用户登录
-     * POST /oauth2/token  grant_type=password
+     * Authenticate with the Resource Owner Password Credentials flow.
+     * `POST /oauth2/token` with `grant_type=password`.
      */
     override fun authenticate(username: String, password: String): AuthResult {
         val url = "$baseUrl/oauth2/token"
@@ -62,14 +62,14 @@ class RemoteAclClient(
                 AuthResult(success = false, errorMessage = "Authentication failed: empty access_token")
             }
         } catch (e: Exception) {
-            log.error("Remote ACL authenticate failed for user: $username", e)
+            log.error(e) { "Remote ACL authenticate failed for user: `$username" }
             throw e
         }
     }
 
     /**
-     * OIDC UserInfo 端点 — 校验 Token 并获取用户信息
-     * GET /oauth2/userinfo  Authorization: Bearer {token}
+     * Validate token and load identity via the OIDC UserInfo endpoint.
+     * `GET /oauth2/userinfo` with `Authorization: Bearer {token}`.
      */
     override fun validateToken(token: String): TokenClaims? {
         val url = "$baseUrl/oauth2/userinfo"
@@ -88,14 +88,14 @@ class RemoteAclClient(
                 tenant = json["tenant"] as? String
             )
         } catch (e: Exception) {
-            log.warn("Remote ACL validateToken failed: ${e.message}")
+            log.warn(e) { "Remote ACL validateToken failed: ${e.message}" }
             throw e
         }
     }
 
     /**
-     * OAuth 2.0 Client Credentials — 服务间签发 Token
-     * POST /oauth2/token  grant_type=client_credentials
+     * Issue a service-to-service token using the Client Credentials flow.
+     * `POST /oauth2/token` with `grant_type=client_credentials`.
      */
     override fun issueToken(username: String, authorities: List<String>, tenant: String?): String {
         val url = "$baseUrl/oauth2/token"
@@ -110,14 +110,14 @@ class RemoteAclClient(
             resp.uncheckedCast<Map<String, Any>>()?.get("access_token") as? String
                 ?: throw RuntimeException("Failed to issue token: empty access_token")
         } catch (e: Exception) {
-            log.error("Remote ACL issueToken failed for user: $username", e)
+            log.error(e) { "Remote ACL issueToken failed for user: `$username" }
             throw e
         }
     }
 
     /**
-     * Fluxion 扩展权限校验
-     * POST /oauth2/check
+     * Fine-grained permission check (Fluxion-specific endpoint).
+     * `POST /oauth2/check`.
      */
     override fun hasPermission(username: String, tenant: String?, permission: String): Boolean {
         val url = "$baseUrl/oauth2/check"
@@ -130,12 +130,12 @@ class RemoteAclClient(
             val result = restTemplate.postForObject(url, request, Map::class.java).uncheckedCast<Map<String, Any>>()
             result?.get("allowed") as? Boolean ?: false
         } catch (e: Exception) {
-            log.warn("Remote ACL hasPermission failed for user: $username", e)
+            log.warn(e) { "Remote ACL hasPermission failed for user: `$username" }
             throw e
         }
     }
 
-    // ============ Map 扩展函数 ============
+    // === Map extension helpers ==================================================================
 
     private fun Map<String, Any>.stringList(key: String): List<String> =
         this[key].uncheckedCast<List<*>>()?.filterIsInstance<String>() ?: emptyList()

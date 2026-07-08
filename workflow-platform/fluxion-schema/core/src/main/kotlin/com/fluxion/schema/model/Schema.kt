@@ -1,12 +1,22 @@
 package com.fluxion.schema.model
 
 /**
- * Schema 统一封装。
+ * Unified schema envelope shared across every schema format (JSON Schema,
+ * Protobuf, Avro, and any custom formats registered via extension modules).
  *
- * @property name 注册名，内联 schema 可为 null
- * @property format Schema 格式类型
- * @property raw 原始文本/JSON 字符串
- * @property parsed 编译后对象，格式相关：JSON Schema = [com.networknt.schema.JsonSchema]
+ * A [Schema] is the parsed+cached unit that flows through the validation,
+ * field-extraction, and codec pipelines. The `parsed` field carries the
+ * format-specific compiled representation — for JSON Schema this is a
+ * `com.networknt.schema.JsonSchema`, for Protobuf it's a `Descriptors.Descriptor`,
+ * etc. Callers never inspect `parsed` directly; format-specific SPIs handle
+ * it behind the typed interfaces in `com.fluxion.schema.api`.
+ *
+ * @property name   registered lookup name; `null` for inline / anonymous schemas
+ *                   that were parsed ad-hoc (e.g. node-level validation rules).
+ * @property format schema format code — routes the instance to the right SPI.
+ * @property raw    original source text (JSON string / `.proto` JSON / `.avsc`
+ *                   JSON) retained for error messages and round-tripping.
+ * @property parsed format-specific compiled object — opaque to generic code.
  */
 data class Schema(
     val name: String?,
@@ -15,15 +25,18 @@ data class Schema(
     val parsed: Any
 ) {
     /**
-     * 是否为空 Schema（不校验任何数据）。
+     * True when this schema imposes **no** constraints — i.e. validation
+     * should short-circuit to "always pass".
      *
-     * 空 Schema 的判定标准：
-     * - raw 为空白字符串
-     * - raw 为 `"null"`
-     * - raw 为 `"{}"`
+     * Three forms are recognized as empty, regardless of format:
+     * - blank / whitespace-only `raw`
+     * - the literal string `"{}"` (empty JSON object, ubiquitous across the
+     *   three built-in formats)
+     * - the literal string `"null"` (JSON Schema's way of spelling "no schema")
      *
-     * 空 Schema 在校验时直接通过，等价于"不做校验"。
-     * 三种格式（JSON Schema / Protobuf / Avro）统一遵循此约定。
+     * Keeping this check centralized means every validator in every format
+     * module skips work for trivially-empty schemas with a single cheap
+     * string comparison.
      */
     val isEmpty: Boolean
         get() {

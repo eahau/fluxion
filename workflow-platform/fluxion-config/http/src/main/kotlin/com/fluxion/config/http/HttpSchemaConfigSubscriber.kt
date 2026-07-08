@@ -1,9 +1,20 @@
+/**
+ * Worker-side schema config subscriber that pulls snapshots from the Admin
+ * server via HTTP endpoints and accepts push notifications.
+ *
+ * HTTP transport is the "zero-config-centre" mode: the Admin server publishes
+ * changes through its own REST push endpoints rather than via Apollo/Nacos.
+ * Unlike the config-centre subscribers, the HTTP path never deserialises raw
+ * key/value strings into snapshots — it always works with pre-serialised typed
+ * [SchemaConfigSnapshot] payloads, so [mapKeyToSnapshot] is not supported.
+ */
 package com.fluxion.config.http
 
 import com.fluxion.adapter.spi.config.ChangeType
 import com.fluxion.adapter.spi.config.SchemaConfigSnapshot
 import com.fluxion.config.core.AbstractKeyedConfigSubscriber
 import com.fluxion.core.util.JsonUtil
+import org.slf4j.*
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -11,11 +22,16 @@ import java.net.http.HttpResponse
 import java.time.Duration
 
 /**
- * HTTP Schema 配置订阅器 — Worker 侧
+ * Pulls schemas from the Admin server's internal HTTP API on the worker side.
  *
- * HTTP 模式下 Schema 由 Admin 主动推送（[onPushReceived]）或全量拉取（[loadAll]），
- * 不经过 `mapKeyToSnapshot` 原始 JSON 解析管线。
- * 降级追踪通过 [trackSnapshot] 在各入口显式调用。
+ * Two refresh mechanisms are combined:
+ * 1. Bulk [loadAll] is called during startup to seed the local cache.
+ * 2. Push events are delivered by the Admin server through
+ *    [SchemaPushController] which calls [onPushReceived] with a typed delta.
+ *
+ * The degrade/resolution cache is updated explicitly at both entry points via
+ * [trackSnapshot] / [evictSnapshot] because the class bypasses the standard
+ * `mapKeyToSnapshot` pipeline.
  */
 class HttpSchemaConfigSubscriber(
     adminBaseUrl: String
@@ -42,7 +58,7 @@ class HttpSchemaConfigSubscriber(
                     SchemaConfigSnapshot::class.java
                 )
                 for (snap in snapshots) { trackSnapshot(snap.schemaName, snap) }
-                log.info("Loaded ${snapshots.size} schema configs from Admin via HTTP")
+                log.info { "Loaded ${snapshots.size} schema configs from Admin via HTTP" }
                 snapshots
             } else {
                 throw RuntimeException("Load all schemas failed: status=${resp.statusCode()}")
@@ -72,15 +88,17 @@ class HttpSchemaConfigSubscriber(
                 null
             }
         } catch (e: Exception) {
-            log.error("Failed to get schema config for key=$key", e)
+            log.error(e) { "Failed to get schema config for key=$key" }
             null
         }
     }
 
     /**
-     * 由 SchemaPushController 调用，当 Admin 推送 Schema 配置到本实例时触发。
+     * Entry point invoked by [SchemaPushController] when the Admin server
+     * pushes a schema change event directly to this worker instance.
      *
-     * REMOVE 事件清理降级缓存；PUBLISH/UPDATE 记录降级缓存。
+     * REMOVE clears the degrade cache; PUBLISH/UPDATE records a fresh degrade
+     * snapshot before notifying registered listeners.
      */
     fun onPushReceived(snapshot: SchemaConfigSnapshot, changeType: ChangeType) {
         when (changeType) {
@@ -90,7 +108,7 @@ class HttpSchemaConfigSubscriber(
         notifyListeners(snapshot.schemaName, snapshot, changeType)
     }
 
-    /** HTTP 模式不经过原始 JSON 解析管线 */
+    // Typed HTTP mode never goes through raw key/content deserialization.
     override fun mapKeyToSnapshot(key: String, content: String): SchemaConfigSnapshot =
         throw UnsupportedOperationException("HTTP mode uses typed push/pull, not raw JSON parsing")
 }

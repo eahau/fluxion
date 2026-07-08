@@ -18,10 +18,13 @@ import org.springframework.web.reactive.function.server.ServerResponse
 import reactor.core.publisher.Mono
 
 /**
- * Convert WebFlux [ServerRequest] to [UnifiedRequest].
+ * Extension on [ServerRequest] that converts WebFlux-native request to [UnifiedRequest].
  *
- * Extracts query params, headers, body from the framework-specific request
- * and merges them into a protocol-agnostic [UnifiedRequest].
+ * Extracts:
+ * - Query params (via `queryParams()` — single→String, multi→List).
+ * - All HTTP headers as single-value map.
+ * - Path variables (already set by the HandlerMapping in [RouteMatch]).
+ * - Optional raw body via `bodyToMono(String::class.java)` (collected only on JSON bodies).
  */
 suspend fun ServerRequest.toUnifiedRequest(
     workflowId: String,
@@ -44,28 +47,35 @@ suspend fun ServerRequest.toUnifiedRequest(
 }
 
 /**
- * WebFlux dynamic route handler.
+ * WebFlux handler for dynamically-routed workflow HTTP requests.
  *
- * Each request matched by [HttpWebFluxAdapterAutoConfiguration.workflowHandlerMapping]
- * is delegated to this handler. The [RouteMatch] is pre-resolved by the HandlerMapping
- * and stored in exchange attributes under [ATTR_ROUTE_MATCH].
+ * Each request matched by [WorkflowHandlerMapping] is dispatched to this
+ * handler. The `RouteMatch` (workflowId + path variables) is pre-resolved by
+ * the HandlerMapping and stored in `exchange.attributes` under
+ * [ATTR_ROUTE_MATCH] to avoid redundant work here.
  *
- * Bridge: suspend → Mono via kotlinx-coroutines-reactor `mono { }`.
+ * Coroutine bridge: the public `handle(ServerRequest): Mono<ServerResponse>`
+ * entry point uses `mono { ... }` from kotlinx-coroutines-reactor so the
+ * suspend-based `WorkflowRouter.executeSuspend` path integrates seamlessly
+ * with the WebFlux reactive pipeline.
  */
 class WebFluxWorkflowHandler(
     private val workflowRouter: WorkflowRouter,
 ) {
     companion object {
+        /** Mirror of [HttpRequestProcessor.ATTR_ROUTE_MATCH] — convenience constant. */
         const val ATTR_ROUTE_MATCH = HttpRequestProcessor.ATTR_ROUTE_MATCH
     }
 
     private val log = LoggerFactory.getLogger(javaClass)
 
     /**
-     * Handle an incoming WebFlux request.
+     * Handle a single reactive request.
      *
-     * The [RouteMatch] (workflowId + pathVariables) is read from exchange attributes,
-     * pre-resolved by the HandlerMapping — no redundant route lookup needed.
+     * Reads the pre-resolved [RouteMatch] from exchange attributes (set by
+     * [WorkflowHandlerMapping]). If absent (HandlerMapping returned handler
+     * without setting match), returns 404. Otherwise converts to
+     * [UnifiedRequest] and delegates to the shared coroutine-based router.
      */
     fun handle(request: ServerRequest): Mono<ServerResponse> {
         val match = request.attribute(ATTR_ROUTE_MATCH)
@@ -75,6 +85,7 @@ class WebFluxWorkflowHandler(
 
         return mono {
             val unifiedRequest = request.toUnifiedRequest(match.workflowId, match.pathVariables)
+            log.debug { "WebFlux routing request path=${request.path()} -> workflowId=${match.workflowId}" }
             val result = workflowRouter.executeSuspend(unifiedRequest)
 
             ServerResponse.ok()

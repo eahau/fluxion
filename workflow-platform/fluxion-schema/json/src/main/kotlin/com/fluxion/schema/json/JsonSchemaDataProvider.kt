@@ -1,12 +1,17 @@
+/**
+ * Built-in [SchemaDataProvider] that operates on generic `Map<String, *>`
+ * payloads produced by JSON deserialization.
+ *
+ * Always available — requires zero additional dependencies beyond Jackson —
+ * and serves as the default provider when no format-specific provider has
+ * been registered or when the workflow payload is untyped JSON.
+ */
 package com.fluxion.schema.json
 
 import com.fluxion.schema.api.SchemaDataProvider
 
 /**
- * JSON Schema 数据访问提供者（内置默认实现）。
- *
- * 处理 `Map<String, Any?>` 格式的 JSON 数据，
- * 提供标准的 Map 键值访问。始终可用，无需额外依赖。
+ * Generic map-backed data access for JSON payloads.
  */
 class JsonSchemaDataProvider : SchemaDataProvider {
 

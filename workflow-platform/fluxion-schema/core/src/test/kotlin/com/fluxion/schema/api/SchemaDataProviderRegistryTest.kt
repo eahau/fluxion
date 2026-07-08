@@ -7,7 +7,7 @@ import org.junit.jupiter.api.assertThrows
 
 class SchemaDataProviderRegistryTest {
 
-    /** 仅用于测试注册表行为的简单 Stub Provider */
+    /** 浠呯敤浜庢祴璇曟敞鍐岃〃琛屼负鐨勭畝鍗?Stub Provider */
     private class TestSchemaDataProvider : SchemaDataProvider {
         override fun getField(data: Any, field: String): Any? = null
         override fun hasField(data: Any, field: String): Boolean = false

@@ -1,18 +1,33 @@
 package com.fluxion.schema.model
 
 /**
- * 跨格式统一的字段描述。
+ * Format-agnostic schema field descriptor — every format-specific extractor
+ * (JSON Schema, Protobuf, Avro) reduces its native field tree into this
+ * common shape so the admin UI, rule evaluator, and parameter-form UIs can
+ * render a single, format-independent field tree.
  *
- * 无论是 JSON Schema、Protobuf 还是 Avro，最终都映射为同一棵字段树，
- * 供前端字段选择器、条件规则配置、参数面板等场景使用。
+ * Nested fields live in [nestedFields]; there is no separate `SchemaFieldTree`
+ * wrapper because the recursive structure of [SchemaField] itself already IS
+ * the tree. Leaf nodes (primitives) carry an empty [nestedFields] list.
  *
- * @property name 字段名
- * @property type 字段类型
- * @property required 是否必填
- * @property description 字段说明
- * @property format 格式约束（如 email、date-time，主要用于 JSON Schema）
- * @property nestedFields 嵌套字段（object / array item / message / record）
- * @property metadata 各格式私有属性，如 enum、pattern、protobuf field number 等
+ * @property name         field key in the parent object.
+ * @property type         canonical logical type; maps to format-specific
+ *                          wire types via per-format conventions (e.g. JSON
+ *                          Schema `integer` → [FieldType.INTEGER], Protobuf
+ *                          `int64` → [FieldType.LONG]).
+ * @property required     true for required fields, false for optional / nullable.
+ * @property description  human-readable doc string, forwarded verbatim from
+ *                          the source schema (JSON Schema `description`,
+ *                          Protobuf comments, Avro `doc`).
+ * @property format       format-specific sub-type hint, e.g. `"email"`,
+ *                          `"date-time"` in JSON Schema — purely advisory,
+ *                          rendered by UIs but not validated generically.
+ * @property nestedFields child fields for `OBJECT` / `ARRAY item` /
+ *                          Protobuf `MESSAGE` / Avro `RECORD` nodes.
+ * @property metadata     escape hatch for format-specific extras:
+ *                          `enum` values, `pattern` regex, Protobuf field
+ *                          numbers, Avro default values, etc. Keys follow
+ *                          no cross-format contract.
  */
 data class SchemaField(
     val name: String,

@@ -1,3 +1,13 @@
+/**
+ * Avro-backed [SchemaValidator] that validates runtime data against a compiled
+ * Avro schema using a round-trip binary encode/decode strategy.
+ *
+ * Because Avro has no native runtime "validate" API, the validator converts
+ * the incoming value (GenericRecord, JSON string, Map/POJO) into a
+ * [GenericRecord], writes it using `GenericDatumWriter` to a binary stream,
+ * then reads it back with `GenericDatumReader`. Any schema mismatch surfaces
+ * as an exception which we translate into a [ValidationResult].
+ */
 package com.fluxion.schema.avro
 
 import com.fluxion.schema.api.SchemaValidator
@@ -12,14 +22,19 @@ import org.apache.avro.generic.GenericRecord
 import org.apache.avro.io.DecoderFactory
 import org.apache.avro.io.EncoderFactory
 import org.slf4j.LoggerFactory
+import org.slf4j.*
 import java.io.ByteArrayOutputStream
 
 /**
- * Avro Schema 校验器。
+ * Validates data against an Avro schema using round-trip binary ser/de.
  *
- * 动态校验：将 Map/POJO 数据转换为 Avro GenericRecord，
- * 再通过 Binary 编解码往返验证数据是否符合 Schema。
- * 全程无需代码生成，支持运行时动态 Schema。
+ * ### Supported input shapes
+ * * [GenericRecord] — directly serialised without conversion.
+ * * [String] — treated as Avro JSON encoding and parsed via [jsonDecoder].
+ * * `Map` / POJO — converted to GenericRecord via [AvroDataConverter] first.
+ *
+ * Empty schemas (isEmpty == true) short-circuit to [ValidationResult.ok] so
+ * callers that accept "any" data are not forced to define a schema.
  */
 class AvroSchemaValidator : SchemaValidator {
 
@@ -41,18 +56,18 @@ class AvroSchemaValidator : SchemaValidator {
 
         return try {
             if (data is GenericRecord) {
-                // 已是 GenericRecord，直接做 binary 往返校验
                 validateViaRoundTrip(avroSchema, data)
             } else if (data is String) {
-                // Avro JSON 格式（可能包含 union 包装），尝试直接解析
+                // Avro JSON payloads may include union wrappers; the JSON
+                // decoder natively understands them so no pre-processing is
+                // needed before round-tripping.
                 validateViaJsonDecoder(avroSchema, data)
             } else {
-                // Map / POJO → GenericRecord → binary 往返校验
                 val record = AvroDataConverter.toGenericRecord(data, avroSchema)
                 validateViaRoundTrip(avroSchema, record)
             }
         } catch (e: Exception) {
-            log.warn("Avro schema validation failed: ${e.message}")
+            log.warn(e) { "Avro schema validation failed: ${e.message}" }
             ValidationResult.failDetailed(listOf(
                 ValidationError(
                     path = extractPathFromException(e),
@@ -64,12 +79,14 @@ class AvroSchemaValidator : SchemaValidator {
     }
 
     /**
-     * 尝试从异常消息中提取字段路径。
-     * Avro 异常消息通常包含字段名，如 "Expected int, got STRING" 或 "Field xxx not found"。
+     * Best-effort extraction of a dotted field path from Avro exception text.
+     *
+     * Avro messages typically embed field names as `"field 'foo'"` or similar.
+     * When no pattern matches, an empty string is returned so callers can
+     * still attribute the error to the root value.
      */
     private fun extractPathFromException(e: Exception): String {
         val msg = e.message ?: return ""
-        // 简单提取：尝试匹配 "field 'xxx'" 或类似模式
         val fieldMatch = Regex("""field\s+'?([\w.]+)'?""", RegexOption.IGNORE_CASE).find(msg)
         if (fieldMatch != null) return fieldMatch.groupValues[1]
         return ""

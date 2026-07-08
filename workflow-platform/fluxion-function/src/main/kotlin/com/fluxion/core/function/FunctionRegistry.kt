@@ -25,7 +25,9 @@ import com.fluxion.core.exception.FunctionNotFoundException
 import com.fluxion.core.util.uncheckedCast
 import com.fluxion.core.value.FunctionMeta
 import com.fluxion.core.value.InlineMeta
-import org.slf4j.LoggerFactory
+import org.slf4j.*
+import org.slf4j.debug
+import org.slf4j.info
 import java.util.concurrent.ConcurrentHashMap
 
 /**

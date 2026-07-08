@@ -5,8 +5,7 @@ import com.fluxion.adapter.spi.config.FunctionChangeListener
 import com.fluxion.adapter.spi.config.FunctionConfigSnapshot
 import com.fluxion.adapter.spi.config.FunctionConfigSubscriber
 import com.fluxion.functionmeta.registry.InMemoryFunctionMetaRegistry
-import org.slf4j.LoggerFactory
-
+import org.slf4j.*
 /**
  * Worker-side adapter that translates config-center events into
  * [InMemoryFunctionMetaRegistry] mutations.

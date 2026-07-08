@@ -9,11 +9,15 @@ import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.RestController
 
 /**
- * 实例管理 Controller — Admin 后台
+ * Admin REST API for querying currently registered worker instances.
  *
- * 实现 OpenAPI 生成的 InstancesApi 接口，提供给前端查询当前已注册的业务实例，用于：
- *   - 发布时选择目标应用群/实例
- *   - 实例监控面板展示
+ * Implements the generated OpenAPI `InstancesApi` interface. The dashboard consumes
+ * this data for two primary use cases:
+ *   1. Let the publish wizard pick a target app group / instance list.
+ *   2. Feed the cluster health panel with per-group live counts.
+ *
+ * Only registered when the process is running as an admin node
+ * (`workflow.instance.role=admin`) because workers do not expose the admin view.
  */
 @RestController
 @ConditionalOnProperty(name = ["workflow.instance.role"], havingValue = "admin")
@@ -42,6 +46,8 @@ class InstanceController(
         })
     }
 
+    // Flatten the adapter InstanceInfo SPI record into the generated OpenAPI DTO;
+    // fields map 1:1, kept explicit so DTO changes surface compile errors.
     private fun toDto(info: com.fluxion.adapter.spi.registry.InstanceInfo): InstanceInfo = InstanceInfo().apply {
         instanceId = info.instanceId
         appGroup = info.appGroup

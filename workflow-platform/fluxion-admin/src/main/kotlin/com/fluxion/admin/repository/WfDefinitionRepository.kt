@@ -5,37 +5,46 @@ import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
 import java.util.Optional
 
+/**
+ * Spring Data JPA repository for [WfDefinition] workflow DAG entities.
+ *
+ * Most queries mirror the route-conflict detection performed by WfDefinitionService:
+ * protocol + (method) + bindKey uniqueness must be checked per scope (PLATFORM vs PRIVATE + appGroup)
+ * to avoid two different workflows sharing the same external trigger address.
+ */
 interface WfDefinitionRepository : JpaRepository<WfDefinition, Long> {
 
+    /** The standard lookup by stable business workflowId. */
     fun findByWorkflowId(workflowId: String): Optional<WfDefinition>
 
+    /** Batch-load every definition in a given lifecycle state. */
     fun findByStatus(status: String): List<WfDefinition>
 
-    /** 查询协议绑定 Key（路由时使用） */
+    /** Used by runtime route resolution when protocol + bindKey uniquely identify a workflow. */
     fun findByProtocolAndBindKey(protocol: String, bindKey: String): Optional<WfDefinition>
 
-    /** 查询指定协议 + 方法 + 绑定路径的工作流（用于重复检查） */
+    /** Full uniqueness check for (protocol, method, bindKey) triple — duplicates detection. */
     fun findByProtocolAndMethodAndBindKey(protocol: String, method: String?, bindKey: String?): Optional<WfDefinition>
 
-    /** 按 scope 查询路由冲突（PLATFORM/MARKETPLACE 场景，app_group 为 null） */
+    /** Scoped uniqueness check for PLATFORM / MARKETPLACE scope (appGroup is null by convention). */
     fun findByScopeAndProtocolAndMethodAndBindKey(
         scope: String, protocol: String, method: String?, bindKey: String?
     ): Optional<WfDefinition>
 
-    /** 按 scope + app_group 查询路由冲突（PRIVATE 场景） */
+    /** Scoped uniqueness check for PRIVATE tenant workflows. */
     fun findByScopeAndAppGroupAndProtocolAndMethodAndBindKey(
         scope: String, appGroup: String?, protocol: String, method: String?, bindKey: String?
     ): Optional<WfDefinition>
 
-    /** 按 scope 过滤查询所有 ACTIVE 工作流 */
+    /** Engine cold-start bootstrap: all ACTIVE PLATFORM workflows. */
     @Query("SELECT d FROM WfDefinition d WHERE d.status = 'ACTIVE' AND d.scope = :scope")
     fun findAllActiveByScope(scope: String): List<WfDefinition>
 
-    /** 按 scope + app_group 过滤查询 ACTIVE 工作流 */
+    /** Engine cold-start bootstrap: ACTIVE PRIVATE workflows for one tenant. */
     @Query("SELECT d FROM WfDefinition d WHERE d.status = 'ACTIVE' AND d.scope = :scope AND d.appGroup = :appGroup")
     fun findAllActiveByScopeAndAppGroup(scope: String, appGroup: String): List<WfDefinition>
 
-    /** 查询所有 ACTIVE 状态的工作流（引擎启动时加载） */
+    /** Engine cold-start bootstrap: every ACTIVE definition regardless of scope. */
     @Query("SELECT d FROM WfDefinition d WHERE d.status = 'ACTIVE'")
     fun findAllActive(): List<WfDefinition>
 }

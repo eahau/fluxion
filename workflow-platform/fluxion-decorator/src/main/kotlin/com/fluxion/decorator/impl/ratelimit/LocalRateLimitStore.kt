@@ -6,10 +6,11 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * 鏈湴鍐呭瓨婊戝姩绐楀彛闄愭祦瀛樺偍銆?
+ * In-process, single-JVM [RateLimitStore] implementation built on top of
+ * [ConcurrentHashMap.compute] for atomicity.
  *
- * 鍩轰簬 [ConcurrentHashMap.compute] 瀹炵幇鍗?JVM 鍐呯殑鍘熷瓙鏇存柊锛岄€傜敤浜庡崟瀹炰緥鎴栨祴璇曞満鏅€?
- * 澶氬疄渚嬮儴缃叉椂璇锋浛鎹负 [com.fluxion.redis.ratelimit.RedisRateLimitStore] 绛夊垎甯冨紡瀹炵幇銆?
+ * Suitable for single-instance deployments and unit tests. Replace with a
+ * Redis-backed implementation in any horizontally scaled setup.
  */
 class LocalRateLimitStore : RateLimitStore {
 
@@ -18,8 +19,11 @@ class LocalRateLimitStore : RateLimitStore {
     override fun tryAcquire(key: String, config: RateLimitConfig): Boolean {
         val now = System.currentTimeMillis()
         val allowed = AtomicBoolean(false)
+        // compute() is atomic per key: this serialises concurrent attempts
+        // to acquire the same bucket without locking globally.
         states.compute(key) { _, existing ->
-            val (state, ok) = existing?.tryAcquire(config, now) ?: (SlidingWindowState.initial(now) to true)
+            val (state, ok) = existing?.tryAcquire(config, now)
+                ?: (SlidingWindowState.initial(now) to true)
             allowed.set(ok)
             state
         }

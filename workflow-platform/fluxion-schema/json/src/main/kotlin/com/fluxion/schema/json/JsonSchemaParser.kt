@@ -9,7 +9,7 @@ import com.networknt.schema.SchemaValidatorsConfig
 import com.networknt.schema.SpecVersion
 
 /**
- * JSON Schema 解析器，基于 networknt/json-schema-validator。
+ * JSON Schema 瑙ｆ瀽鍣紝鍩轰簬 networknt/json-schema-validator銆?
  */
 class JsonSchemaParser : SchemaParser {
 
@@ -38,8 +38,8 @@ class JsonSchemaParser : SchemaParser {
     }
 
     /**
-     * 规范化原始输入：将 null / 空字符串 / 空对象统一视为空 Schema `"{}"`，
-     * 与原有 [com.fluxion.core.schema.SchemaValidator] 的 empty schema 行为保持一致。
+     * 瑙勮寖鍖栧師濮嬭緭鍏ワ細灏?null / 绌哄瓧绗︿覆 / 绌哄璞＄粺涓€瑙嗕负绌?Schema `"{}"`锛?
+     * 涓庡師鏈?[com.fluxion.core.schema.SchemaValidator] 鐨?empty schema 琛屼负淇濇寔涓€鑷淬€?
      */
     private fun normalizeRaw(raw: String): String {
         val trimmed = raw.trim()

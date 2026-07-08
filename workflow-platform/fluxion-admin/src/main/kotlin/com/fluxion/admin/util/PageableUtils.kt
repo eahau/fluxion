@@ -5,9 +5,11 @@ import org.springframework.data.domain.PageImpl
 import org.springframework.data.domain.Pageable
 
 /**
- * 对内存中的完整列表执行手动分页，返回 [Page] 包装。
+ * Slices a full in-memory `List<T>` into a Spring Data `Page<T>` matching the supplied
+ * `Pageable` (offset + pageSize).
  *
- * 适用于 Repository 不支持 Spring Data 分页（如先全量加载再过滤/合并）的场景。
+ * Used whenever a Repository does not support native Spring-Data paging, e.g. when the
+ * result set must first be fully loaded, then filtered or merged in application code.
  */
 fun <T> List<T>.toPage(pageable: Pageable): Page<T> {
     val start = pageable.offset.toInt()

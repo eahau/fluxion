@@ -1,3 +1,11 @@
+/**
+ * Protobuf-backed [SchemaValidator] that coerces runtime values into a
+ * [DynamicMessage] built from the schema's compiled [Descriptors.Descriptor].
+ *
+ * Successful construction of a DynamicMessage is sufficient proof that the
+ * data conforms to the schema — Protobuf rejects unknown fields, wrong
+ * scalar types, and malformed nested messages during builder merge.
+ */
 package com.fluxion.schema.protobuf
 
 import com.fluxion.schema.api.SchemaValidator
@@ -9,24 +17,19 @@ import com.google.protobuf.Descriptors
 import com.google.protobuf.DynamicMessage
 import com.google.protobuf.util.JsonFormat
 import org.slf4j.LoggerFactory
+import org.slf4j.*
 
 /**
- * Protobuf Schema 校验器。
+ * Validates data against a Protobuf descriptor.
  *
- * 通过将数据转换为 [DynamicMessage] 来验证字段类型和结构是否匹配 Schema。
- * 支持两种输入格式：
- * - Map<String, Any?>：通过 JSON 中转后解析
- * - String：Protobuf JSON 格式，直接解析
- * - DynamicMessage：已是 Protobuf 对象，直接做结构校验
+ * ### Accepted input types
+ * * [DynamicMessage] — descriptor compatibility is checked, then reused.
+ * * [String] — Protobuf JSON format; parsed via [JsonFormat.parser].
+ * * `Map` / arbitrary POJO — serialised via JsonUtil first, then merged.
  *
- * ### 校验范围
- *
- * - 字段类型是否匹配（int32/string/bool/message 等）
- * - 嵌套 message 结构是否正确
- * - repeated 字段是否为列表
- *
- * 注意：Protobuf 3 不支持 required 字段校验，所有字段均为 optional。
- * 未知字段会被忽略（Protobuf 标准行为）。
+ * Note that Protobuf 3 has no `required` concept so missing fields always
+ * validate. Unknown fields on the other hand are rejected by the default
+ * JsonFormat parser which matches strict validation expectations.
  */
 class ProtobufSchemaValidator : SchemaValidator {
 
@@ -55,12 +58,14 @@ class ProtobufSchemaValidator : SchemaValidator {
         }
 
         return try {
-            // 将数据转为 DynamicMessage，成功即表示校验通过
+            // A DynamicMessage can only be built when all fields honour the
+            // descriptor contract. Any structural mismatch throws, which we
+            // translate into a typed ValidationResult below.
             val message = toDynamicMessage(data, descriptor)
-            log.debug("Protobuf schema [{}] validation passed", descriptor.fullName)
+            log.debug { "Protobuf schema [${descriptor.fullName}] validation passed" }
             ValidationResult.ok()
         } catch (e: Exception) {
-            log.warn("Protobuf validation failed for [{}]: {}", descriptor.fullName, e.message)
+            log.warn(e) { "Protobuf validation failed for [${descriptor.fullName}]: ${e.message}" }
             ValidationResult.failDetailed(listOf(
                 ValidationError(
                     path = extractPathFromException(e),
@@ -72,12 +77,12 @@ class ProtobufSchemaValidator : SchemaValidator {
     }
 
     /**
-     * 将任意格式的数据转换为 DynamicMessage。
+     * Coerce an arbitrary input value into a [DynamicMessage] conforming to
+     * [descriptor].
      */
     private fun toDynamicMessage(data: Any, descriptor: Descriptors.Descriptor): DynamicMessage {
         return when (data) {
             is DynamicMessage -> {
-                // 已是 DynamicMessage，验证类型是否匹配
                 if (data.descriptorForType.fullName != descriptor.fullName) {
                     throw IllegalArgumentException(
                         "DynamicMessage type mismatch: expected ${descriptor.fullName}, " +
@@ -88,14 +93,15 @@ class ProtobufSchemaValidator : SchemaValidator {
             }
 
             is String -> {
-                // Protobuf JSON 格式
                 val builder = DynamicMessage.newBuilder(descriptor)
                 JsonFormat.parser().merge(data, builder)
                 builder.build()
             }
 
             else -> {
-                // Map / POJO → JSON → DynamicMessage
+                // Generic maps / POJOs go through an intermediate JSON step —
+                // JsonFormat is the only supported path to populate a
+                // DynamicMessage without generated Java code.
                 val json = com.fluxion.schema.util.JsonUtil.serialize(data)
                 val builder = DynamicMessage.newBuilder(descriptor)
                 JsonFormat.parser().merge(json, builder)
@@ -105,14 +111,12 @@ class ProtobufSchemaValidator : SchemaValidator {
     }
 
     /**
-     * 尝试从异常消息中提取字段路径。
+     * Best-effort field-path extraction from Protobuf parser exceptions.
      */
     private fun extractPathFromException(e: Exception): String {
         val msg = e.message ?: return ""
-        // 匹配 "field: xxx" 或类似模式
         val fieldMatch = Regex("""field\s+['"]?([\w.]+)['"]?""", RegexOption.IGNORE_CASE).find(msg)
         if (fieldMatch != null) return fieldMatch.groupValues[1]
-        // 匹配 "xxx field"
         val fieldMatch2 = Regex("""([\w.]+)\s+field""", RegexOption.IGNORE_CASE).find(msg)
         if (fieldMatch2 != null) return fieldMatch2.groupValues[1]
         return ""

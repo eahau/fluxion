@@ -38,9 +38,20 @@ import org.yaml.snakeyaml.Yaml
 import java.time.OffsetDateTime
 
 /**
- * 工作流定义管理 REST API
+ * Workflow definition administration & execution REST controller (implements OpenAPI-generated [WorkflowsApi]).
  *
- * 实现 OpenAPI 生成的 WorkflowsApi 接口，确保前后端契约一致。
+ * Bundles three families of operations:
+ *   1. **Admin CRUD + lifecycle** — create/update/delete/search, publish / deprecate / rollback,
+ *      route-conflict pre-checks, tenant filtering for list pages.
+ *   2. **Synchronous test execution** — `executeWorkflow` runs the DAG inside the admin
+ *      JVM (via [DagExecutor]) and persists a snapshot for the debug UI.
+ *   3. **OpenAPI tooling** — import from OpenAPI YAML/JSON + confirm import (bulk conflict
+ *      detection) + export selected workflows back to OpenAPI 3.0.
+ *
+ * Collaborates with: WfDefinitionService (business logic + config push), WorkflowMapper
+ * (DTO↔Entity + DAG node graph mapping), DagExecutor (sync test execution),
+ * DefinitionProvider (only ACTIVE definitions are executable), WfExecutionSnapshotService
+ * (snapshot persistence), SecurityContextHelper (tenant filtering for list pages).
  */
 @RestController
 class WfDefinitionController(
@@ -52,6 +63,13 @@ class WfDefinitionController(
     private val securityContext: SecurityContextHelper
 ) : WorkflowsApi {
 
+    /**
+     * Paginated workflow list with optional keyword filter.
+     *
+     * Post-pagination tenant filter (re-applied in-memory): non-ADMIN users see only
+     * PLATFORM + MARKETPLACE rows plus PRIVATE rows whose appGroup they belong to.
+     * ADMIN users (accessibleGroups == null) see every row unfiltered.
+     */
     override fun listWorkflows(
         keyword: String?,
         status: WorkflowStatus?,
@@ -62,7 +80,6 @@ class WfDefinitionController(
         val size = pageSize.coerceAtMost(100)
         val pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "updatedAt"))
         var result = service.search(keyword, pageable)
-        // 租户过滤：非 ADMIN 用户只能看到 PLATFORM + 自己 appGroup 的 PRIVATE
         val accessibleGroups = securityContext.accessibleAppGroups()
         if (accessibleGroups != null) {
             val filtered = result.content.filter { entity ->
@@ -79,25 +96,33 @@ class WfDefinitionController(
         })
     }
 
+    /** Fetch one workflow definition by business id. */
     override fun getWorkflow(workflowId: String): ResponseEntity<WorkflowDefinition> {
         val entity = service.getEntity(workflowId)
             ?: return ResponseEntity.notFound().build()
         return ResponseEntity.ok(workflowMapper.toDto(entity))
     }
 
+    /**
+     * Create a new workflow definition.
+     *
+     * Guards (in order):
+     *   - Auto-generates workflowId from HTTP path slug if blank (see [generateWorkflowId])
+     *   - 409 if id already exists
+     *   - PRIVATE scope requires non-blank appGroup
+     *   - appGroup tenant access check
+     *   - route-conflict pre-flight against protocol+method+bindKey (scope isolated)
+     */
     override fun createWorkflow(workflowDefinition: WorkflowDefinition): ResponseEntity<WorkflowDefinition> {
         val entity = workflowMapper.toEntity(workflowDefinition)
         if (entity.workflowId.isBlank()) {
             entity.workflowId = generateWorkflowId(entity)
         }
-        check(service.getEntity(entity.workflowId) == null) { "工作流已存在: ${entity.workflowId}" }
-        // PRIVATE scope 必须指定 appGroup
+        check(service.getEntity(entity.workflowId) == null) { "Workflow already exists: ${entity.workflowId}" }
         if (entity.scope == "PRIVATE" && entity.appGroup.isNullOrBlank()) {
-            throw WorkflowAdminException.badRequest("SCOPE_APP_GROUP_REQUIRED", "PRIVATE 作用域的工作流必须指定 appGroup")
+            throw WorkflowAdminException.badRequest("SCOPE_APP_GROUP_REQUIRED", "PRIVATE scope workflows require appGroup")
         }
-        // 租户权限校验
         entity.appGroup?.let { securityContext.requireAppGroupAccess(it) }
-        // 检查路由绑定是否冲突（相同协议 + 方法 + 路径，按 scope 隔离）
         service.findRouteConflict(
             protocol = entity.protocol,
             method = entity.method,
@@ -107,20 +132,22 @@ class WfDefinitionController(
         )?.let { conflict ->
             throw WorkflowAdminException.badRequest(
                 "ROUTE_CONFLICT",
-                "路由已被工作流 [${conflict.workflowId}] 占用: ${entity.protocol} ${entity.method ?: ""} ${entity.bindKey ?: ""}"
+                "Route already occupied by workflow [${conflict.workflowId}]: ${entity.protocol} ${entity.method ?: ""} ${entity.bindKey ?: ""}"
             )
         }
         return ResponseEntity.ok(workflowMapper.toDto(service.save(entity)))
     }
 
     /**
-     * 根据协议绑定信息自动生成可读的 workflowId。
-     * HTTP/HTTPS 协议：{protocol}-{slugified-path}（HTTPS 归一化为 http）；其他协议：wf-{uuid8}
-     * 若已存在同名工作流，追加数字后缀。
+     * Build a human-friendly workflow id.
+     *
+     * HTTP/HTTPS protocols: `http-{slugified-bindKey}` where slashes and non-alnum chars
+     * become dashes. Everything else: `wf-{uuid8}`. Collision-safe: if the candidate id
+     * is already taken, append `-1`, `-2`, ... until a free slot is found.
      */
     private fun generateWorkflowId(entity: com.fluxion.admin.entity.WfDefinition): String {
         val base = if (entity.protocol in HTTP_PROTOCOLS && !entity.bindKey.isNullOrBlank()) {
-            val proto = "http" // HTTP/HTTPS 归一化
+            val proto = "http"
             val slug = entity.bindKey!!
                 .trimStart('/')
                 .replace(Regex("[^a-zA-Z0-9]+"), "-")
@@ -139,22 +166,23 @@ class WfDefinitionController(
         return id
     }
 
+    /**
+     * Update a workflow definition. Mirrors the same guards used during create with
+     * the addition of `excludeWorkflowId = self` so the route-conflict check ignores
+     * the workflow's own existing binding.
+     */
     override fun updateWorkflow(
         workflowId: String,
         workflowDefinition: WorkflowDefinition
     ): ResponseEntity<WorkflowDefinition> {
         val existing = service.getEntity(workflowId)
             ?: return ResponseEntity.notFound().build()
-        // 租户权限校验（校验原始 appGroup）
         existing.appGroup?.let { securityContext.requireAppGroupAccess(it) }
         workflowMapper.updateEntity(workflowDefinition, existing)
-        // PRIVATE scope 必须指定 appGroup
         if (existing.scope == "PRIVATE" && existing.appGroup.isNullOrBlank()) {
-            throw WorkflowAdminException.badRequest("SCOPE_APP_GROUP_REQUIRED", "PRIVATE 作用域的工作流必须指定 appGroup")
+            throw WorkflowAdminException.badRequest("SCOPE_APP_GROUP_REQUIRED", "PRIVATE scope workflows require appGroup")
         }
-        // 若 appGroup 变更，还需校验新 appGroup 的权限
         existing.appGroup?.let { securityContext.requireAppGroupAccess(it) }
-        // 检查路由绑定是否与其他工作流冲突（按 scope 隔离）
         service.findRouteConflict(
             protocol = existing.protocol,
             method = existing.method,
@@ -165,12 +193,13 @@ class WfDefinitionController(
         )?.let { conflict ->
             throw WorkflowAdminException.badRequest(
                 "ROUTE_CONFLICT",
-                "路由已被工作流 [${conflict.workflowId}] 占用: ${existing.protocol} ${existing.method ?: ""} ${existing.bindKey ?: ""}"
+                "Route already occupied by workflow [${conflict.workflowId}]: ${existing.protocol} ${existing.method ?: ""} ${existing.bindKey ?: ""}"
             )
         }
         return ResponseEntity.ok(workflowMapper.toDto(service.save(existing)))
     }
 
+    /** Delete a workflow definition (tenant-gated by existing appGroup). */
     override fun deleteWorkflow(workflowId: String): ResponseEntity<Unit> {
         val existing = service.getEntity(workflowId)
         existing?.appGroup?.let { securityContext.requireAppGroupAccess(it) }
@@ -178,6 +207,14 @@ class WfDefinitionController(
         return ResponseEntity.noContent().build()
     }
 
+    /**
+     * Execute a workflow synchronously inside the admin JVM (debug / test-run button).
+     *
+     * Requires the workflow to be ACTIVE (uses definitionProvider so non-ACTIVE versions
+     * correctly 404). Exceptions during execution are caught and returned as a FAILED
+     * DebugResult rather than 500ing — the UI renders the inline error message. Snapshot
+     * is persisted regardless of success so the debug UI can inspect partial outputs.
+     */
     override fun executeWorkflow(
         workflowId: String,
         executeWorkflowRequest: ExecuteWorkflowRequest?
@@ -196,17 +233,17 @@ class WfDefinitionController(
             return ResponseEntity.ok(
                 DebugResult().apply {
                     status = DebugStatus.FAILED
-                    finalOutput = mutableMapOf("error" to (ex.message ?: "执行失败"))
+                    finalOutput = mutableMapOf("error" to (ex.message ?: "Execution failed"))
                 }
             )
         }
 
-        // 同步保存执行快照（管理端执行默认记录）
         snapshotService.save(result, entity.workflowId, entity.version)
 
         return ResponseEntity.ok(toDebugResult(result))
     }
 
+    /** Publish a workflow (DRAFT → ACTIVE) with optional target-group directives. */
     override fun publishWorkflow(
         workflowId: String,
         publishTarget: PublishTarget?
@@ -216,17 +253,20 @@ class WfDefinitionController(
         return ResponseEntity.ok(workflowMapper.toDto(service.publish(workflowId, publishTarget)))
     }
 
+    /** Deprecate a workflow (ACTIVE → DEPRECATED). */
     override fun deprecateWorkflow(workflowId: String): ResponseEntity<WorkflowDefinition> {
         val entity = service.getEntity(workflowId)
             ?: return ResponseEntity.notFound().build()
         return ResponseEntity.ok(workflowMapper.toDto(service.deprecate(workflowId)))
     }
 
+    /** List historical versions for a workflow (currently one row). */
     override fun listWorkflowVersions(workflowId: String): ResponseEntity<List<WorkflowDefinition>> {
         val versions = service.findVersions(workflowId)
         return ResponseEntity.ok(versions.map { workflowMapper.toDto(it) })
     }
 
+    /** Rollback (placeholder: flips latest row back to DRAFT + bumps version). */
     override fun rollbackWorkflow(
         workflowId: String,
         rollbackRequest: RollbackRequest
@@ -236,6 +276,11 @@ class WfDefinitionController(
         return ResponseEntity.ok(workflowMapper.toDto(service.rollback(workflowId, rollbackRequest.version)))
     }
 
+    /**
+     * Preview-import an OpenAPI 3.0 document (YAML or JSON). Returns a list of
+     * unsaved WorkflowDefinition DTOs — one per HTTP method/path combination — so
+     * the UI can render the "confirm import" diff modal.
+     */
     override fun importOpenAPI(@RequestPart(value = "file", required = false) file: MultipartFile?): ResponseEntity<List<WorkflowDefinition>> {
         if (file == null || file.isEmpty) {
             return ResponseEntity.ok(emptyList())
@@ -249,7 +294,7 @@ class WfDefinitionController(
         } ?: return ResponseEntity.ok(emptyList())
 
         val paths = doc["paths"].uncheckedCast<Map<String, Map<String, Any>>>() ?: emptyMap()
-        val now = OffsetDateTime.now()
+        val now = OffsetDateTime.now().toInstant().toEpochMilli()
         val imported = mutableListOf<WorkflowDefinition>()
 
         paths.forEach { (path, methods) ->
@@ -291,45 +336,54 @@ class WfDefinitionController(
     }
 
     /**
-     * 导入工作流定义 JSON 文件（非 OpenAPI 生成端点）
+     * Import a single workflow-definition JSON file (non-OpenAPI format; raw persisted
+     * DTO export). Resets status → DRAFT + version → 1 so it can't silently override
+     * a live ACTIVE definition in the config center.
      */
     @PostMapping("/api/admin/workflows/import/definition", consumes = [MediaType.MULTIPART_FORM_DATA_VALUE])
     fun importWorkflowDefinition(
         @RequestParam("file") file: MultipartFile?
     ): ResponseEntity<WorkflowDefinition> {
         if (file == null || file.isEmpty) {
-            throw WorkflowAdminException.badRequest("IMPORT_FILE_EMPTY", "导入文件不能为空")
+            throw WorkflowAdminException.badRequest("IMPORT_FILE_EMPTY", "Import file cannot be empty")
         }
         val content = file.inputStream.bufferedReader().use { it.readText() }
         val dto = try {
             JsonUtil.deserialize(content, WorkflowDefinition::class.java)
         } catch (ex: Exception) {
-            throw WorkflowAdminException.badRequest("IMPORT_JSON_INVALID", "JSON 解析失败: ${ex.message}")
+            throw WorkflowAdminException.badRequest("IMPORT_JSON_INVALID", "JSON parse failed: ${ex.message}")
         }
-        // 导入时重置为草稿，避免直接覆盖 ACTIVE 状态导致配置中心异常
         dto.status = WorkflowStatus.DRAFT
         dto.version = 1
-        val now = OffsetDateTime.now()
+        val now = OffsetDateTime.now().toInstant().toEpochMilli()
         dto.createdAt = now
         dto.updatedAt = now
         val entity = try {
             workflowMapper.toEntity(dto)
         } catch (ex: Exception) {
-            throw WorkflowAdminException.badRequest("IMPORT_CONVERT_ERROR", "工作流转换失败: ${ex.message}")
+            throw WorkflowAdminException.badRequest("IMPORT_CONVERT_ERROR", "Workflow conversion failed: ${ex.message}")
         }
         val saved = try {
             service.save(entity)
         } catch (ex: Exception) {
-            throw WorkflowAdminException.badRequest("IMPORT_SAVE_ERROR", "保存失败: ${ex.message}")
+            throw WorkflowAdminException.badRequest("IMPORT_SAVE_ERROR", "Save failed: ${ex.message}")
         }
         return ResponseEntity.ok(workflowMapper.toDto(saved))
     }
 
+    /**
+     * Confirm bulk OpenAPI import. Runs two pre-checks before saving:
+     *   1. Collision check (duplicate ids across the batch)
+     *   2. Route-conflict pre-flight for every row that declares a bindKey
+     *
+     * Any failure throws a single combined 409. Successes are saved in order; any row
+     * whose conversion fails mid-batch is simply skipped (silent skip keeps the UI
+     * responsive when one row in a large batch is badly-formed).
+     */
     override fun confirmImportOpenAPI(
         importConfirmRequest: ImportConfirmRequest
     ): ResponseEntity<List<WorkflowDefinition>> {
         val items = importConfirmRequest.items ?: emptyList()
-        // 预检查：收集已存在的 ID 和路由冲突
         val duplicateIds = mutableListOf<String>()
         val routeConflicts = mutableListOf<String>()
         items.forEach { dto ->
@@ -348,16 +402,15 @@ class WfDefinitionController(
                         appGroup = entity.appGroup,
                         excludeWorkflowId = id
                     )?.let { conflict ->
-                            routeConflicts.add("${entity.protocol} ${entity.method ?: ""} ${entity.bindKey} → 已被 [${conflict.workflowId}] 占用")
+                            routeConflicts.add("${entity.protocol} ${entity.method ?: ""} ${entity.bindKey} → occupied by [${conflict.workflowId}]")
                         }
                 }
             } catch (_: Exception) {
-                // 转换失败的在后续保存时也会失败，由下面统一处理
             }
         }
         val errors = mutableListOf<String>()
-        if (duplicateIds.isNotEmpty()) errors.add("工作流 ID 已存在: ${duplicateIds.joinToString(", ")}")
-        if (routeConflicts.isNotEmpty()) errors.add("路由冲突: ${routeConflicts.joinToString("; ")}")
+        if (duplicateIds.isNotEmpty()) errors.add("Duplicate workflow IDs: ${duplicateIds.joinToString(", ")}")
+        if (routeConflicts.isNotEmpty()) errors.add("Route conflicts: ${routeConflicts.joinToString("; ")}")
         if (errors.isNotEmpty()) {
             throw WorkflowAdminException.conflict("IMPORT_CONFLICT", errors.joinToString("\n"))
         }
@@ -372,6 +425,7 @@ class WfDefinitionController(
         return ResponseEntity.ok(saved)
     }
 
+    /** Export a subset of workflow IDs (or all ACTIVE) to an OpenAPI 3.0 map. */
     override fun exportOpenAPI(
         ids: List<String>?,
         title: String?,
@@ -381,11 +435,13 @@ class WfDefinitionController(
         return ResponseEntity.ok(exported)
     }
 
+    /** Batch variant of the export endpoint (POST body carries the id list). */
     override fun batchExportOpenAPI(openAPIExportRequest: OpenAPIExportRequest): ResponseEntity<Any> {
         val exported = service.exportOpenAPI(openAPIExportRequest.ids, openAPIExportRequest.title, openAPIExportRequest.version)
         return ResponseEntity.ok(exported)
     }
 
+    /** EngineResult → DebugResult DTO mapping. */
     private fun toDebugResult(result: EngineResult): DebugResult =
         DebugResult().apply {
             status = if (result.success) DebugStatus.COMPLETED else DebugStatus.FAILED
@@ -401,6 +457,7 @@ class WfDefinitionController(
             } ?: mutableMapOf()
         }
 
+    /** NodeExecutionRecord → NodeTrace DTO mapping (UI renderable trace node). */
     private fun toNodeTrace(record: NodeExecutionRecord): NodeTrace =
         NodeTrace().apply {
             nodeId = record.nodeId
@@ -413,6 +470,7 @@ class WfDefinitionController(
             error = record.errorMessage
         }
 
+    /** Walk a nested OpenAPI JSON map extracting a schema document (returns null if any segment missing). */
     private fun extractSchema(op: Map<String, Any>, path: List<String>): Map<String, Any>? {
         var current: Any? = op
         for (key in path) {

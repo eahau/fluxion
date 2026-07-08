@@ -29,7 +29,7 @@ import com.fluxion.core.function.WorkflowFunction
 import com.fluxion.core.signal.SignalBroker
 import com.fluxion.core.util.uncheckedCast
 import okhttp3.OkHttpClient
-import org.slf4j.LoggerFactory
+import org.slf4j.*
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.transaction.PlatformTransactionManager

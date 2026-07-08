@@ -1,14 +1,27 @@
 package com.fluxion.adapter.spi.mq
 
 /**
- * MQ 消息发布结果（协议无关）
+ * Message Queue publishing SPI — protocol-agnostic abstraction for sending
+ * string messages to a topic/queue.
  *
- * @param success 是否发送成功
- * @param topic 目标 Topic
- * @param partition 分区（Kafka 等分区 MQ 使用）
- * @param offset 偏移量（Kafka 等分区 MQ 使用）
- * @param messageId 消息唯一标识（RocketMQ/RabbitMQ 等使用）
- * @param error 失败原因（成功时为 null）
+ * Supports multiple MQ implementations (Kafka, RabbitMQ, RocketMQ, etc.).
+ * Implementations only need to focus on how to deliver a serialized string
+ * payload to a named destination.
+ */
+
+/**
+ * Result wrapper for an MQ publish operation.
+ *
+ * Populated fields vary by MQ implementation:
+ * - Kafka: topic, partition, offset are always populated on success
+ * - RocketMQ/RabbitMQ: messageId is the primary identifier
+ *
+ * @param success   Whether the message was successfully sent
+ * @param topic     Target topic/queue name (optional, always populated for Kafka)
+ * @param partition Partition number (partitioned MQs only)
+ * @param offset    Message offset within the partition (Kafka only)
+ * @param messageId Message unique identifier (RocketMQ/RabbitMQ-style)
+ * @param error     Error detail on failure; null on success
  */
 data class MqPublishResult(
     val success: Boolean,
@@ -20,21 +33,25 @@ data class MqPublishResult(
 )
 
 /**
- * MQ 消息发布适配器 SPI（协议无关）
+ * MQ publisher SPI — implementations provide send capability to a specific
+ * message broker.
  *
- * 支持不同 MQ 实现：Kafka、RabbitMQ、RocketMQ 等。
- * 实现类只需关注如何把一个字符串消息发送到指定 Topic/Queue/Exchange。
+ * Callers (e.g. the Dead Letter Queue handler in [KafkaWorkflowConsumer])
+ * use this interface without depending on Kafka/RabbitMQ client libraries
+ * directly.
  */
 fun interface MqPublisher {
 
     /**
-     * 发布消息到指定 Topic
+     * Publish a string message to the specified topic.
      *
-     * @param topic 目标 Topic
-     * @param key 消息 Key（分区路由，可选）
-     * @param message 消息内容（已序列化的字符串）
-     * @param async 是否异步发送；true 时方法应立即返回，由实现方自行处理回调/异常
-     * @return 发布结果元数据
+     * @param topic   Target topic/queue/exchange name
+     * @param key     Message key for partition routing (optional; pass empty string if not used)
+     * @param message Serialized string payload (usually JSON)
+     * @param async   If true, return immediately without waiting for broker ACK.
+     *                The implementation handles callbacks and error logging internally.
+     *                If false, block until the broker confirms delivery.
+     * @return Publish result metadata (partial for async mode)
      */
     fun publish(topic: String, key: String, message: String, async: Boolean): MqPublishResult
 }

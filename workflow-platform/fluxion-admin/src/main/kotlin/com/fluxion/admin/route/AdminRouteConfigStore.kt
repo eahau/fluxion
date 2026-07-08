@@ -10,13 +10,22 @@ import org.springframework.core.env.Environment
 import org.springframework.stereotype.Component
 
 /**
- * Admin 内部动态路由配置存储。
+ * Admin-internal dynamic HTTP route store backed by the `wf_definition` table.
  *
- * 默认从 `wf_definition` 表加载 scope = PLATFORM、category = META、status = ACTIVE、protocol = HTTP 的工作流，
- * 注册为 admin 自身的动态路由（admin 自举）。
+ * Production behaviour (non-local profiles):
+ *   Only HTTP workflows marked `scope = PLATFORM`, `category = META` and `status = ACTIVE`
+ *   are loaded, representing the admin console's own meta-workflow endpoints (self-hosted
+ *   admin actions that execute inside the admin JVM).
  *
- * 在 `local` / `dev` 等本地开发 profile 下，admin 实例通常也承担 Worker 职责，
- * 因此会同时加载所有 PRIVATE 工作流，方便本地直接调试业务 API。
+ * Local / dev profile behaviour:
+ *   In addition to PLATFORM meta-workflows, every ACTIVE PRIVATE workflow with an HTTP
+ *   binding is loaded as well. Local dev boxes typically collocate the admin and Worker
+ *   roles, so exposing PRIVATE routes directly here saves running a separate worker
+ *   process for ad-hoc end-to-end testing.
+ *
+ * Implements `ApplicationListener<WorkflowDefinitionRouteRefreshEvent>` so the HTTP adapter
+ * reloads its route table whenever a meta-workflow definition is published, deprecated or
+ * removed.
  */
 @Component
 class AdminRouteConfigStore(
@@ -32,11 +41,9 @@ class AdminRouteConfigStore(
 
     override fun loadAll(): List<HttpRouteDefinition> {
         val definitions = if (isLocalProfile) {
-            // 本地开发：加载 PLATFORM + 所有 PRIVATE（充当全量 Worker）
             definitionRepository.findAllActive()
                 .filter { it.protocol == "HTTP" && !it.bindKey.isNullOrBlank() }
         } else {
-            // 生产环境：只加载 PLATFORM（category=META 的元工作流）
             definitionRepository.findAllActive()
                 .filter {
                     it.protocol == "HTTP" &&
@@ -65,8 +72,8 @@ class AdminRouteConfigStore(
     }
 
     /**
-     * 加载指定 appGroup 可见的路由（PLATFORM + 该 appGroup 的 PRIVATE）。
-     * 供配置下发时使用。
+     * Load the PLATFORM routes plus every PRIVATE route visible to the supplied `appGroup`.
+     * Used when pushing config snapshots to downstream workers.
      */
     fun loadAll(appGroup: String): List<HttpRouteDefinition> {
         val platformRoutes = definitionRepository.findAllActive()

@@ -1,3 +1,17 @@
+/**
+ * Factory for building Nacos-backed [KeyedConfigPublisher] and
+ * [KeyedConfigSubscriber] instances with a consistent [group] prefix.
+ *
+ * The Nacos adapter ships both keyed (multi-key index-driven) and single-key
+ * subscriber/publisher variants; callers normally construct one factory bean
+ * in the auto-config layer and then use the typed helpers to bind publishers
+ * and subscribers for each config resource (function, schema, workflow
+ * definitions) instead of manually wiring data-IDs and groups repeatedly.
+ *
+ * Default group is `WORKFLOW` which matches the convention used by the
+ * Apollo and HTTP push adapters so config migrations between backends are
+ * transparent to application code.
+ */
 package com.fluxion.config.nacos
 
 import com.alibaba.nacos.api.config.ConfigService
@@ -7,32 +21,11 @@ import com.fluxion.adapter.spi.config.KeyedConfigSubscriber
 import com.fluxion.core.util.JsonUtil
 
 /**
- * Nacos 配置工厂 — 封装 [ConfigService] + [group] 公共依赖，消除重复参数传递
+ * Builds Nacos adapter instances sharing a common [configService] handle and
+ * [group] namespace.
  *
- * 对标 `NacosConfigs.java` 中 `ConfigProvider` 的声明式注册体验：
- * AutoConfiguration 只需注册一次本工厂，后续新增配置类型仅传业务参数。
- *
- * ```kotlin
- * // AutoConfiguration 中注册工厂（一次性）
- * @Bean fun nacosConfigFactory(cs: ConfigService) = NacosConfigFactory(cs)
- *
- * // 新增 keyed 配置（不再重复 ConfigService / group）
- * @Bean fun myPublisher(f: NacosConfigFactory) =
- *     f.keyedPublisher<MySnapshot>("my.config.", "my.config.__index__")
- *
- * @Bean fun mySubscriber(f: NacosConfigFactory) =
- *     f.keyedSubscriber<MySnapshot>("my.config.", "my.config.__index__",
- *         mapper = { _, json -> MySnapshot.fromJson(json) })
- *
- * // 新增单值配置
- * @Bean fun mySingle(f: NacosConfigFactory) =
- *     f.subscriber("workflow.idempotency",
- *         mapper = { JsonUtil.deserialize(it, IdempotencyConfig::class.java) },
- *         default = IdempotencyConfig())
- * ```
- *
- * @param configService Nacos 配置服务（Spring Bean）
- * @param group         Nacos 分组名（默认 "WORKFLOW"）
+ * @property configService Nacos SDK handle provided by the host application
+ * @property group Nacos group prefix, defaults to `WORKFLOW`
  */
 class NacosConfigFactory(
     private val configService: ConfigService,
@@ -40,11 +33,13 @@ class NacosConfigFactory(
 ) {
 
     /**
-     * 创建多键配置发布器
+     * Builds a keyed publisher that writes `{prefix}/{key}` entries plus
+     * maintains an optional index data-id listing all known keys.
      *
-     * @param dataIdPrefix 单个配置项的 dataId 前缀（如 `"workflow.definition."`）
-     * @param indexDataId  索引 dataId；传 null 则不维护索引
-     * @param serializer   快照 → JSON 字符串的序列化函数（默认使用 [JsonUtil]）
+     * @param dataIdPrefix data-id prefix that prepends the per-key suffix
+     * @param indexDataId optional central index data-id (set to `null` if the
+     *   caller manages key discovery out-of-band)
+     * @param serializer serialiser from `T` → JSON string; defaults to Jackson
      */
     fun <T> keyedPublisher(
         dataIdPrefix: String,
@@ -54,11 +49,13 @@ class NacosConfigFactory(
         NacosKeyedConfigPublisher(configService, group, dataIdPrefix, indexDataId, serializer)
 
     /**
-     * 创建多键配置订阅器
+     * Builds a keyed subscriber that uses the index data-id to discover keys
+     * and then pulls each individual entry through the user-supplied mapper.
      *
-     * @param dataIdPrefix 单个配置项的 dataId 前缀
-     * @param indexDataId  索引 dataId
-     * @param mapper       原始 JSON → 类型化快照的转换函数
+     * @param dataIdPrefix shared data-id prefix used by the publisher side
+     * @param indexDataId central index listing every active key (required)
+     * @param mapper per-key content mapper — receives the raw JSON string and
+     *   returns `null` to signal a parse failure that should be logged and skipped
      */
     fun <T : Any> keyedSubscriber(
         dataIdPrefix: String,
@@ -68,11 +65,12 @@ class NacosConfigFactory(
         NacosKeyedConfigSubscriber(configService, group, dataIdPrefix, indexDataId, mapper)
 
     /**
-     * 创建单值配置订阅器
+     * Builds a single-value (non-keyed) subscriber for static, single-entry
+     * config such as rate-limit rules or shared feature flags.
      *
-     * @param dataId  配置 dataId（如 `"workflow.idempotency"`）
-     * @param mapper  原始 JSON 字符串 → 类型化配置对象的转换函数
-     * @param default 解析失败或缺失时的默认值（可选）
+     * @param dataId Nacos data-id of the single config entry
+     * @param mapper raw JSON content → typed object converter
+     * @param default fallback value returned if the mapper throws on load
      */
     fun <T> subscriber(
         dataId: String,

@@ -6,9 +6,15 @@ import jakarta.persistence.Table
 import jakarta.persistence.UniqueConstraint
 
 /**
- * 用户-应用分组关联实体（多租户隔离）。
+ * User-to-application-group membership entity used for multi-tenant data isolation.
  *
- * 源表：`user_app_groups`
+ * Each row grants a user visibility into a specific `appGroup`. The pair
+ * `(username, app_group)` is enforced unique by the `uk_user_app_group` constraint.
+ * Used by `SecurityContextHelper.accessibleAppGroups()` to scope PRIVATE workflows/schemas.
+ *
+ * Source table: `user_app_groups`.
+ *
+ * Collaborates with: UserAppGroupRepository, SecurityContextHelper, WfSchemaService (scope filtering).
  */
 @Entity
 @Table(
@@ -19,11 +25,11 @@ import jakarta.persistence.UniqueConstraint
 )
 class UserAppGroup : BaseEntity() {
 
-    /** 用户名（列：`username`） */
+    /** Owning user username, maps to column `username`. */
     @Column(name = "username", nullable = false, length = 64)
     var username: String = ""
 
-    /** 应用分组（列：`app_group`） */
+    /** Application group identifier the user is a member of, maps to column `app_group`. */
     @Column(name = "app_group", nullable = false, length = 128)
     var appGroup: String = ""
 }

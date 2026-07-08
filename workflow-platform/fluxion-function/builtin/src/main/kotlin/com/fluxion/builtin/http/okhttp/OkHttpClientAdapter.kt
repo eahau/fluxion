@@ -7,7 +7,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import org.slf4j.LoggerFactory
+import org.slf4j.*
 import java.util.concurrent.TimeUnit
 
 /**

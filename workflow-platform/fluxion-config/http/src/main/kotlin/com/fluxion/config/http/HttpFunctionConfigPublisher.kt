@@ -9,7 +9,7 @@ import com.fluxion.config.core.HttpPushClient
 import org.slf4j.*
 
 /**
- * HTTP 默认实现 — Admin 侧函数配置发布器
+ * HTTP 榛樿瀹炵幇 鈥?Admin 渚у嚱鏁伴厤缃彂甯冨櫒
  */
 class HttpFunctionConfigPublisher(
     instanceDiscovery: InstanceDiscovery
@@ -41,7 +41,7 @@ class HttpFunctionConfigPublisher(
 
     override fun unpublish(functionName: String) {
         val instances = instanceDiscovery.getAllInstances()
-        val body = serialize(FunctionConfigSnapshot.removed(functionName), "unpublish payload for function: $functionName")
+        val body = serialize(FunctionConfigSnapshot.removed(functionName), "unpublish payload for function: `$functionName")
 
         val (success, fail) = pushClient.push(instances, PUSH_PATH, body, functionName)
         log.info {

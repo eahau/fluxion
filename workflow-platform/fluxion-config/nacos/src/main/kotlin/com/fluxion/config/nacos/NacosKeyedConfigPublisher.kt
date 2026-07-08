@@ -5,27 +5,7 @@ import com.fluxion.adapter.spi.config.KeyedConfigPublisher
 import com.fluxion.core.util.JsonUtil
 import org.slf4j.*
 
-/**
- * Nacos 通用多键配置发布器 — 封装 索引 + 独立 dataId 模式的公共发布逻辑
- *
- * 本类为具体类，可直接实例化使用。与 [NacosKeyedConfigSubscriber] 完全对称，
- * 新增 keyed 配置类型只需在 AutoConfiguration 中一行注册：
- *
- * ```kotlin
- * @Bean
- * fun myConfigPublisher(cs: ConfigService) =
- *     NacosKeyedConfigPublisher<MySnapshot>(
- *         configService = cs, group = "WORKFLOW",
- *         dataIdPrefix = "my.config.", indexDataId = "my.config.__index__")
- * ```
- *
- * @param T             配置快照类型
- * @param configService Nacos 配置服务
- * @param group         Nacos 分组名
- * @param dataIdPrefix  单个配置项的 dataId 前缀
- * @param indexDataId   索引 dataId；传 null 则不维护索引
- * @param serializer    快照 → JSON 字符串的序列化函数（默认使用 [JsonUtil]）
- */
+
 open class NacosKeyedConfigPublisher<T>(
     private val configService: ConfigService,
     private val group: String,
@@ -34,9 +14,8 @@ open class NacosKeyedConfigPublisher<T>(
     private val serializer: (T) -> String = { JsonUtil.serialize(it) }
 ) : KeyedConfigPublisher<T> {
 
-    protected val log: Logger = LoggerFactory.getLogger(javaClass)
+    protected val log = LoggerFactory.getLogger(javaClass)
 
-    /** 索引更新锁 — 防止并发 publish/unpublish 导致 read-modify-write 竞态 */
     private val indexLock = Any()
 
     override fun publish(key: String, snapshot: T) {
@@ -56,7 +35,7 @@ open class NacosKeyedConfigPublisher<T>(
             throw RuntimeException("Nacos publishConfig returned false for dataId=$dataId")
         }
         updateIndex(key, add = true)
-        log.info("Published config to Nacos: dataId=$dataId")
+        log.info { "Published config to Nacos: dataId=$dataId" }
     }
 
     override fun unpublish(key: String) {
@@ -67,14 +46,12 @@ open class NacosKeyedConfigPublisher<T>(
             throw RuntimeException("Failed to remove config from Nacos: dataId=$dataId", e)
         }
         if (success) {
-            log.info("Removed config from Nacos: dataId=$dataId")
+            log.info { "Removed config from Nacos: dataId=$dataId" }
         } else {
-            log.warn("Nacos removeConfig returned false (may not exist): dataId=$dataId")
+            log.warn { "Nacos removeConfig returned false (may not exist): dataId=$dataId" }
         }
         updateIndex(key, add = false)
     }
-
-    // ─── 索引管理 ──────────────────────────────────────────────────
 
     private fun updateIndex(key: String, add: Boolean) {
         val idx = indexDataId ?: return
@@ -89,10 +66,10 @@ open class NacosKeyedConfigPublisher<T>(
                 val changed = if (add) index.add(key) else index.remove(key)
                 if (changed) {
                     configService.publishConfig(idx, group, JsonUtil.serialize(index))
-                    log.info("Updated Nacos config index: key=$key add=$add")
+                    log.info { "Updated Nacos config index: key=$key add=$add" }
                 }
             } catch (e: Exception) {
-                log.error("Failed to update Nacos config index for key=$key", e)
+                log.error(e) { "Failed to update Nacos config index for key=$key" }
             }
         }
     }

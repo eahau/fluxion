@@ -5,43 +5,51 @@ import jakarta.persistence.Entity
 import jakarta.persistence.Table
 
 /**
- * 工作流执行快照实体。
+ * Immutable post-execution snapshot of a completed workflow invocation.
  *
- * 源表：`wf_execution_snapshot`
+ * Stored asynchronously by the engine after execution finishes (success or failure).
+ * Contains the original inputs, per-node outputs, and the full execution trace
+ * (NodeExecutionRecord list). UI uses these rows for execution history / debug replay.
+ * Separate from runtime execution log store to allow long-term retention and SQL queries.
+ *
+ * Source table: `wf_execution_snapshot`.
+ *
+ * Collaborates with: WfExecutionSnapshotRepository, WfExecutionSnapshotService,
+ * WorkflowEngine (writer), ExecutionsController (reader).
  */
 @Entity
 @Table(name = "wf_execution_snapshot")
 class WfExecutionSnapshot : BaseEntity() {
 
-    /** 执行唯一 ID（列：`execution_id`） */
+    /** Engine-level execution UUID, maps to column `execution_id`. */
     @Column(name = "execution_id", nullable = false, unique = true, length = 64)
     var executionId: String = ""
 
-    /** 工作流 ID（列：`workflow_id`） */
+    /** Workflow that was executed, maps to column `workflow_id`. */
     @Column(name = "workflow_id", nullable = false, length = 64)
     var workflowId: String = ""
 
-    /** 执行时的工作流版本（列：`workflow_version`） */
+    /** Snapshot of workflow.version at execution time, maps to column `workflow_version`. */
     @Column(name = "workflow_version", nullable = false)
     var workflowVersion: Int = 1
 
-    /** 执行是否成功（列：`success`） */
+    /** True if the workflow completed without error, maps to column `success`. */
     @Column(name = "success", nullable = false)
     var success: Boolean = true
 
-    /** 工作流原始入参（Map<String,Object> JSON）（列：`inputs_json`） */
+    /** Original workflow inputs Map<String,Object> JSON, maps to column `inputs_json`. */
     @Column(name = "inputs_json", columnDefinition = "MEDIUMTEXT")
     var inputsJson: String? = null
 
-    /** 各节点输出快照（Map<nodeId,output> JSON）（列：`node_outputs_json`） */
+    /** Map<nodeId, outputValue> JSON for every completed node, maps to column `node_outputs_json`. */
     @Column(name = "node_outputs_json", columnDefinition = "MEDIUMTEXT")
     var nodeOutputsJson: String? = null
 
-    /** 节点执行轨迹（List<NodeExecutionRecord> JSON）（列：`trace_json`） */
+    /** List<NodeExecutionRecord> trace JSON for timeline/debug UI, maps to column `trace_json`. */
     @Column(name = "trace_json", columnDefinition = "MEDIUMTEXT")
     var traceJson: String? = null
 
-    /** 错误信息（列：`error_msg`） */
+    /** Root error message if success=false, maps to column `error_msg`. */
     @Column(name = "error_msg", length = 512)
     var errorMsg: String? = null
 }

@@ -8,7 +8,7 @@ import com.fluxion.core.util.JsonUtil
 import org.slf4j.*
 
 /**
- * Apollo 实现 — 函数配置发布器（Admin 侧）
+ * Apollo 瀹炵幇 鈥?鍑芥暟閰嶇疆鍙戝竷鍣紙Admin 渚э級
  */
 class ApolloFunctionConfigPublisher(
     private val openApiClient: ApolloOpenApiClient,

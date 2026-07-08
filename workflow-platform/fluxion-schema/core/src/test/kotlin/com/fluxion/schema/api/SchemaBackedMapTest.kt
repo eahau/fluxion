@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test
 
 class SchemaBackedMapTest {
 
-    /** 简易 mock provider：用 Map 模拟非 Map 数据对象的字段访问 */
+    /** 绠€鏄?mock provider锛氱敤 Map 妯℃嫙闈?Map 鏁版嵁瀵硅薄鐨勫瓧娈佃闂?*/
     private val mockProvider = object : SchemaDataProvider {
         override fun getField(data: Any, field: String): Any? =
             (data as? Map<*, *>)?.get(field)
@@ -28,7 +28,7 @@ class SchemaBackedMapTest {
     private val rawData = mapOf("name" to "Alice", "age" to 30, "email" to null)
     private val backedMap: Map<String, Any?> = SchemaBackedMap(rawData, mockProvider)
 
-    // ─── get ──────────────────────────────────────────────────────
+    // 鈹€鈹€鈹€ get 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
     @Test
     fun `get returns field value via provider`() {
@@ -47,7 +47,7 @@ class SchemaBackedMapTest {
         assertTrue(backedMap.containsKey("email")) // but containsKey is true
     }
 
-    // ─── containsKey ──────────────────────────────────────────────
+    // 鈹€鈹€鈹€ containsKey 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
     @Test
     fun `containsKey delegates to provider hasField`() {
@@ -56,7 +56,7 @@ class SchemaBackedMapTest {
         assertFalse(backedMap.containsKey("missing"))
     }
 
-    // ─── keys / size / isEmpty ────────────────────────────────────
+    // 鈹€鈹€鈹€ keys / size / isEmpty 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
     @Test
     fun `keys returns all field names from provider`() {
@@ -80,7 +80,7 @@ class SchemaBackedMapTest {
         assertEquals(0, emptyMap.size)
     }
 
-    // ─── entries / values (triggers lazy toMap) ───────────────────
+    // 鈹€鈹€鈹€ entries / values (triggers lazy toMap) 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
     @Test
     fun `entries returns all entries via toMap`() {
@@ -98,7 +98,7 @@ class SchemaBackedMapTest {
         assertTrue(values.contains(30))
     }
 
-    // ─── rawData / dataProvider ───────────────────────────────────
+    // 鈹€鈹€鈹€ rawData / dataProvider 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
     @Test
     fun `rawData returns original data object`() {
@@ -112,7 +112,7 @@ class SchemaBackedMapTest {
         assertSame(mockProvider, schemaMap.dataProvider())
     }
 
-    // ─── wrap companion factory ───────────────────────────────────
+    // 鈹€鈹€鈹€ wrap companion factory 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
     @Test
     fun `wrap with provider returns SchemaBackedMap`() {
@@ -134,7 +134,7 @@ class SchemaBackedMapTest {
         assertTrue(result.isEmpty())
     }
 
-    // ─── Map interop (forEach, filter, etc.) ──────────────────────
+    // 鈹€鈹€鈹€ Map interop (forEach, filter, etc.) 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
     @Test
     fun `forEach iterates all entries`() {
@@ -158,7 +158,7 @@ class SchemaBackedMapTest {
         assertEquals(30, standard["age"])
     }
 
-    // ─── equality ─────────────────────────────────────────────────
+    // 鈹€鈹€鈹€ equality 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
     @Test
     fun `equals with standard Map`() {

@@ -1,28 +1,32 @@
-// 全局插件仓库（关键：拉 Gradle src 源码走这里）
+// Plugin repositories configuration - resolved in declaration order for plugin artifact downloads.
+// Local Maven cache is checked first to reuse previously downloaded plugins, followed by
+// Alibaba Cloud mirrors for faster downloads within mainland China networks.
 pluginManagement {
     repositories {
-        // 优先复用本地Maven缓存 .m2/repository
         mavenLocal()
-        // 国内镜像放最前面，优先下载
         maven("https://maven.aliyun.com/repository/gradle-plugin/")
         maven("https://maven.aliyun.com/repository/public/")
     }
 }
 
-// 依赖仓库统一国内源
+// Dependency resolution management - repositories declared here are shared across ALL subprojects
+// via RepositoriesMode.PREFER_SETTINGS (settings-level repos win over project-level repos).
+// Local Maven cache followed by Alibaba Cloud public mirror for optimized dependency resolution.
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
     repositories {
-        // 优先复用本地Maven缓存 .m2/repository
         mavenLocal()
         maven("https://maven.aliyun.com/repository/public/")
     }
 }
 
+// Root project name for Gradle build identity and Maven artifact group resolution.
 rootProject.name = "fluxion-platform"
 
 include(
-    // workflow-schema 数据契约基座（JSON Schema / Protobuf / Avro）
+    // === fluxion-schema group ===
+    // Data contract and schema validation abstraction layer supporting JSON Schema,
+    // Protocol Buffers, and Apache Avro formats with Spring Boot auto-configuration.
     "fluxion-schema:core",
     "fluxion-schema:json",
     "fluxion-schema:protobuf",
@@ -30,64 +34,139 @@ include(
     "fluxion-schema:avro",
     "fluxion-schema:avro:spring-boot",
     "fluxion-schema:spring-boot",
-    "fluxion-core",
-    "fluxion-core-spring-boot",
-    // workflow-decorator-impl 子模块群
-    "fluxion-decorator-impl:core",
-    "fluxion-decorator-impl:spring-boot",
+
+    // === fluxion-core group ===
+    // Foundation module providing base types, node abstractions, workflow context,
+    // utilities, and Spring Boot auto-configuration for core engine capabilities.
+    "fluxion-core:spring-boot",
+
+    // === fluxion-log ===
+    // Unified Kotlin SLF4J lazy logging extension functions shared across all modules.
+    "fluxion-log",
+
+    // === fluxion-function group ===
+    // Workflow function abstraction layer with built-in function implementations,
+    // external transport adapters (HTTP/gRPC/Dubbo), metadata registry, and Spring Boot
+    // auto-configuration for runtime function discovery and invocation.
+    "fluxion-function",
+    "fluxion-function:builtin",
+    "fluxion-function:external",
+    "fluxion-function:external:dubbo",
+    "fluxion-function:external:dubbo:spring-boot",
+    "fluxion-function:external:grpc",
+    "fluxion-function:external:grpc:spring-boot",
+    "fluxion-function:external:http",
+    "fluxion-function:external:http:spring-boot",
+    "fluxion-function:meta",
+    "fluxion-function:spring-boot",
+
+    // === fluxion-engine ===
+    // DAG (Directed Acyclic Graph) workflow execution engine driving node scheduling,
+    // dependency resolution, idempotency enforcement, and error handling.
+    "fluxion-engine",
+
+    // === fluxion-decorator group ===
+    // Decorator SPI and cross-cutting concern implementations (metrics, tracing, caching,
+    // async dispatch) with Spring Boot auto-configuration for decorator registration.
+    "fluxion-decorator",
+    "fluxion-decorator:spring-boot",
+
+    // === fluxion-mock ===
+    // Mock engine enabling workflow testing with simulated function responses using
+    // AviatorScript expression evaluation without real external dependencies.
+    "fluxion-mock",
+
+    // === fluxion-debug ===
+    // Debug and dependency injection support module providing FunctionInstanceProvider,
+    // DependencyResolver, and DI abstractions for pluggable bean resolution strategies.
+    "fluxion-debug",
+
+    // === fluxion-adapter-spi ===
+    // Adapter Service Provider Interface defining contracts for protocol adapters (HTTP/RPC/MQ),
+    // configuration subscribers, schema change listeners, and capability domain SPIs.
     "fluxion-adapter-spi",
-    // workflow-acl-spi（ACL 能力域）
+
+    // === fluxion-acl-spi ===
+    // Access Control List SPI abstraction defining permission, role, and authentication
+    // interfaces for pluggable security implementations in admin modules.
     "fluxion-acl-spi",
-    // workflow-adapter-http 子模块群（HTTP 能力域）
+
+    // === fluxion-adapter-http group ===
+    // HTTP protocol adapter suite supporting Spring MVC (Servlet stack) and WebFlux (Reactive stack)
+    // with Nacos/Apollo-based dynamic route configuration storage and Spring Boot auto-configuration.
     "fluxion-adapter-http:core",
     "fluxion-adapter-http:springmvc",
     "fluxion-adapter-http:springmvc:nacos",
     "fluxion-adapter-http:springmvc:apollo",
     "fluxion-adapter-http:springmvc:spring-boot",
-    // workflow-adapter-http-webflux（WebFlux HTTP 适配器）
+
+    // === fluxion-adapter-http:webflux ===
+    // Reactive HTTP adapter implementation for Spring WebFlux (RouterFunction-based) supporting
+    // non-blocking workflow invocation with Kotlin coroutines reactive bridge.
     "fluxion-adapter-http:webflux",
-    // workflow-adapter-rpc 子模块群（RPC 能力域）
+
+    // === fluxion-adapter-rpc group ===
+    // RPC protocol adapter suite with Apache Dubbo and gRPC transport implementations,
+    // including protobuf codegen tasks and Spring Boot auto-configuration for RPC exposure.
     "fluxion-adapter-rpc:dubbo",
     "fluxion-adapter-rpc:grpc",
     "fluxion-adapter-rpc:spring-boot",
-    // workflow-adapter-mq 子模块群（MQ 能力域）
+
+    // === fluxion-adapter-mq group ===
+    // Message Queue protocol adapter with Apache Kafka native client implementation
+    // and Spring Boot auto-configuration for producer/consumer bean registration.
     "fluxion-adapter-mq:kafka",
     "fluxion-adapter-mq:spring-boot",
-    // workflow-builtin-functions 子模块群（内置函数能力域）
-    "fluxion-builtin-functions:core",
-    "fluxion-builtin-functions:spring-boot",
-    // workflow-redis 子模块群（嵌套在 workflow-redis 目录下）
+
+    // === fluxion-redis group ===
+    // Redis capability domain with core command SPI, client adapter implementations
+    // (Lettuce, Redisson, Spring Data Redis), and Spring Boot auto-configuration.
     "fluxion-redis:core",
     "fluxion-redis:spring-boot",
     "fluxion-redis:lettuce",
     "fluxion-redis:redisson",
     "fluxion-redis:spring-data",
-    // workflow-script-engine 子模块群（脚本引擎能力域）
+
+    // === fluxion-script-engine group ===
+    // Embedded script execution engine supporting Groovy dynamic evaluation with
+    // compilation caching and Spring Boot auto-configuration for script registry beans.
     "fluxion-script-engine:core",
     "fluxion-script-engine:spring-boot",
-    // workflow-external-function 子模块群（外部函数 outbound 能力域）
-    "fluxion-external-function-dubbo:core",
-    "fluxion-external-function-dubbo:spring-boot",
-    "fluxion-external-function-grpc:core",
-    "fluxion-external-function-grpc:spring-boot",
-    "fluxion-external-function-http:core",
-    "fluxion-external-function-http:spring-boot",
-    // workflow-config 子模块群（配置中心能力域）
+
+    // === fluxion-config group ===
+    // Configuration center capability domain with core SPI, multiple backend implementations
+    // (Apollo, Nacos, HTTP bootstrap), Spring Boot auto-configuration, and HTTP service registry.
     "fluxion-config:core",
     "fluxion-config:apollo",
     "fluxion-config:nacos",
     "fluxion-config:http",
     "fluxion-config:spring-boot",
-    // workflow-registry 子模块群（注册中心能力域）
+
+    // === fluxion-config:registry-http ===
+    // HTTP-based service registry implementation for lightweight workflow service discovery
+    // without heavyweight registry infrastructure dependencies.
     "fluxion-config:registry-http",
-    // workflow-di 子模块群（依赖注入能力域）
+
+    // === fluxion-di group ===
+    // Dependency injection capability domain providing Spring Framework-based integration
+    // that bridges fluxion-debug DI abstractions to Spring ApplicationContext bean resolution.
     "fluxion-di:spring",
-    // workflow-runtime 子模块群（运行面 / sidecar）
+
+    // === fluxion-runtime group ===
+    // Runtime execution plane (sidecar / application launcher) with framework-agnostic core,
+    // Spring Boot auto-configuration assembly, and deployable Spring Boot application entry point.
     "fluxion-runtime:core",
     "fluxion-runtime:spring-boot",
     "fluxion-runtime",
+
+    // === fluxion-admin ===
+    // Admin management console application - Spring Boot executable with JPA persistence,
+    // OpenAPI-generated REST API, Spring Security authentication, and UI serving capabilities.
     "fluxion-admin",
-    // 测试 fixtures 与内存实现共享模块
+
+    // === fluxion-test group ===
+    // Shared test fixtures and in-memory SPI implementations providing base test classes,
+    // JUnit 5 extensions, and helper utilities consumed as testImplementation dependencies.
     "fluxion-test",
     "fluxion-test:webflux"
 )

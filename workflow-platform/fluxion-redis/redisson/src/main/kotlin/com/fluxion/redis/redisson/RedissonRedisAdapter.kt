@@ -10,7 +10,15 @@ import java.time.Duration
 import java.util.concurrent.TimeUnit
 
 /**
- * Redisson 实现的 RedisClientAdapter
+ * Redisson-based implementation of [RedisClientAdapter].
+ *
+ * Implements each supported Redis command by delegating to Redisson's typed reactive
+ * objects (RBucket, RMap, RDeque, RSet, RScoredSortedSet, …). Commands that are not
+ * explicitly handled throw [UnsupportedOperationException] and callers are expected to
+ * fall back to EVAL with a Lua script for edge cases.
+ *
+ * Pipeline execution uses Redisson's [RBatch] API. Commands that lack a direct async
+ * batch counterpart are executed sequentially as a fallback after the batch flush.
  */
 class RedissonRedisAdapter(
     private val client: RedissonClient
@@ -18,13 +26,15 @@ class RedissonRedisAdapter(
 
     private val log = LoggerFactory.getLogger(javaClass)
 
-    // ─── 同步命令 ──────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────
+    // Synchronous single-command execution
+    // ─────────────────────────────────────────────────────────────────────
 
     override fun execute(command: String, key: String, args: List<String>): Any? {
         log.debug { "redisson execute: $command key=[$key] args=$args" }
 
         return when (command.uppercase()) {
-            // ── String（RBucket） ──────────────────────────────────────────
+            // ─── String (RBucket) ──────────────────────────────────────
             "GET" -> client.getBucket<String>(key).get()
 
             "SET" -> {
@@ -99,7 +109,7 @@ class RedissonRedisAdapter(
                 v?.length?.toLong() ?: 0L
             }
 
-            // ── Hash（RMap） ───────────────────────────────────────────────
+            // ─── Hash (RMap) ────────────────────────────────────────────
             "HGET" -> client.getMap<String, String>(key)[arg(args, 0)]
 
             "HSET" -> {
@@ -144,7 +154,7 @@ class RedissonRedisAdapter(
                 newVal
             }
 
-            // ── List（RDeque）──────────────────────────────────────────────
+            // ─── List (RDeque) ──────────────────────────────────────────
             "LPUSH" -> {
                 val deque = client.getDeque<String>(key)
                 for (i in args.indices.reversed()) deque.addFirst(args[i])
@@ -197,7 +207,7 @@ class RedissonRedisAdapter(
                 removed
             }
 
-            // ── Set（RSet） ────────────────────────────────────────────────
+            // ─── Set (RSet) ─────────────────────────────────────────────
             "SADD" -> {
                 val rset = client.getSet<String>(key)
                 args.count { rset.add(it) }.toLong()
@@ -215,7 +225,7 @@ class RedissonRedisAdapter(
             "SPOP" -> client.getSet<String>(key).removeRandom()
             "SRANDMEMBER" -> client.getSet<String>(key).random()
 
-            // ── ZSet（RScoredSortedSet） ───────────────────────────────────
+            // ─── Sorted Set (RScoredSortedSet) ──────────────────────────
             "ZADD" -> {
                 val score = arg(args, 0).toDouble()
                 val added = client.getScoredSortedSet<String>(key).add(score, arg(args, 1))
@@ -264,7 +274,7 @@ class RedissonRedisAdapter(
             "ZPOPMIN" -> client.getScoredSortedSet<String>(key).pollFirstEntry()?.value
             "ZPOPMAX" -> client.getScoredSortedSet<String>(key).pollLastEntry()?.value
 
-            // ── 分布式锁（Redisson 原生优势）──────────────────────────────
+            // ─── Distributed locks (Redisson-native strength) ──────────
             "LOCK" -> {
                 val lock = client.getLock(key)
                 if (args.isNotEmpty()) lock.lock(arg(args, 0).toLong(), TimeUnit.MILLISECONDS)
@@ -289,7 +299,7 @@ class RedissonRedisAdapter(
                 "OK"
             }
 
-            // ── Pub/Sub ────────────────────────────────────────────────────
+            // ─── Pub/Sub ───────────────────────────────────────────────
             "PUBLISH" -> client.getTopic(key).publish(arg(args, 0))
 
             else -> throw UnsupportedOperationException(
@@ -298,7 +308,9 @@ class RedissonRedisAdapter(
         }
     }
 
-    // ─── Lua EVAL ─────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────
+    // Lua scripting (EVAL / SCRIPT LOAD / EVALSHA)
+    // ─────────────────────────────────────────────────────────────────────
 
     override fun eval(script: String, keys: List<String>, args: List<String>): Any? {
         log.debug { "redisson EVAL keys=$keys args=$args" }
@@ -328,7 +340,9 @@ class RedissonRedisAdapter(
         )
     }
 
-    // ─── Pipeline（RBatch） ────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────
+    // Pipeline (RBatch) execution
+    // ─────────────────────────────────────────────────────────────────────
 
     override fun pipeline(commands: List<RedisRawCommand>): List<Any?> {
         if (commands.isEmpty()) return emptyList()
@@ -395,7 +409,9 @@ class RedissonRedisAdapter(
         }
     }
 
-    // ─── 工具方法 ─────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────
+    // Internal helpers
+    // ─────────────────────────────────────────────────────────────────────
 
     private fun arg(args: List<String>, index: Int): String {
         if (index < args.size) return args[index]

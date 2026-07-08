@@ -1,18 +1,15 @@
 package com.fluxion.adapter.http.core
 
 /**
- * HTTP 路由定义（admin 后台发布后通过配置中心下发）
+ * HTTP route transfer object — published from Admin via a config center and
+ * consumed by both Spring MVC and WebFlux Worker adapters.
  *
- * 与具体 HTTP 框架无关，可被 Spring MVC、WebFlux、JAX-RS 等实现复用。
+ * Purposefully framework-agnostic so the same DTO can drive the Spring MVC
+ * dynamic `RequestMappingHandlerMapping` registration path and the WebFlux
+ * direct-query `WorkflowHandlerMapping` path without recompilation or
+ * duplicated definitions.
  *
- * @param routeKey   路由唯一标识（通常为 "METHOD:path"，用于追踪注册状态）
- * @param path       HTTP 路径模式，支持路径变量：/api/user/{id}
- * @param method     HTTP 方法（GET / POST / PUT / DELETE / PATCH）
- * @param workflowId 对应的工作流 ID（wf_definition.workflow_id）
- * @param scope      工作流作用域（PLATFORM / PRIVATE / MARKETPLACE）
- * @param enabled    是否启用（false 时由具体框架实现注销）
- *
- * 配置中心 JSON 格式示例（Nacos dataId: workflow.http.routes）：
+ * Config-center JSON shape (Nacos dataId `workflow.http.routes`):
  * ```json
  * {
  *   "routes": [
@@ -27,6 +24,19 @@ package com.fluxion.adapter.http.core
  *   ]
  * }
  * ```
+ *
+ * @param routeKey   Opaque unique key for the route. Conventionally `"METHOD:path"`;
+ *                   used as the primary identity for diff/register/unregister operations.
+ * @param path       URL path template supporting Spring-style path variables
+ *                   (`/api/users/{id}`, `/api/orders/{orderId}/items/{itemId}`).
+ * @param method     Upper-case HTTP method token: GET / POST / PUT / DELETE / PATCH.
+ * @param workflowId Primary key of the workflow that should execute when this
+ *                   route matches a request (`wf_definition.workflow_id`).
+ * @param scope      Scope label (PLATFORM / PRIVATE / MARKETPLACE). Used as a
+ *                   dedup tie-breaker when the same `routeKey` is defined in
+ *                   multiple scopes (PRIVATE wins over PLATFORM if both present).
+ * @param enabled    Soft-delete flag; `false` routes are filtered out by the
+ *                   config-center layer before reaching the live registry.
  */
 data class HttpRouteDefinition(
     val routeKey:   String,
@@ -37,7 +47,13 @@ data class HttpRouteDefinition(
     val enabled:    Boolean = true
 ) {
     companion object {
-        /** 规范化 routeKey：METHOD:path */
+        /**
+         * Build the canonical `"METHOD:path"` route key.
+         *
+         * @param method HTTP method (normalized to upper-case internally)
+         * @param path   URL path template
+         * @return Canonical opaque route key used as the registry identity
+         */
         fun keyOf(method: String, path: String) = "${method.uppercase()}:$path"
     }
 }

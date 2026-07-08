@@ -13,15 +13,18 @@ import com.fluxion.redis.spi.RedisRawCommand
 import org.slf4j.*
 
 /**
- * 通用 Redis 命令函数（builtin:redisCommand）
+ * Built-in workflow function `builtin:redisCommand` that exposes the Redis command
+ * surface authored through the admin designer.
  *
- * 支持两种配置方式：
- *   1. 结构化参数：选择 command + 填写 key/args/script/keys/commands
- *   2. 原始命令行：在 raw 字段直接输入 Redis CLI 风格完整命令
+ * Two configuration modes are supported and disambiguated at runtime:
+ *   1. **Structured** — callers pick a command from an enum dropdown and populate
+ *      individual fields `command` / `key` / `args` / `script` / `keys` / `commands`.
+ *   2. **Raw**       — callers fill in `raw` as a free-form Redis CLI string which
+ *      is then tokenized, template-rendered, and dispatched.
  *
- * key 参数支持两种格式：
- *   1. 结构化绑定：{"$ref": "input.userId", "prefix": "user:"}
- *   2. 模板字符串："user:${username}:${password}"（${var} 自动解析）
+ * The `key` (and each item in `args` / `keys`) accepts either a structured binding
+ * map (`{"$ref": "input.userId", "prefix": "user:"}`) or a template string with
+ * `${var}` placeholders; both forms are resolved through `NodeInput.resolveBinding`.
  */
 class RedisCommandFunction(
     private val redisAdapter: RedisClientAdapter
@@ -30,10 +33,10 @@ class RedisCommandFunction(
     private val log = LoggerFactory.getLogger(javaClass)
 
     /**
-     * 执行 Redis 命令。
+     * Dispatch a Redis invocation based on the author-provided parameter shape.
      *
-     * 支持命令：GET/SET/DEL/... 常规命令，PIPELINE 批量执行，EVAL Lua 脚本，
-     * 以及 raw 原始命令行直接输入。
+     * Supported execution paths: raw CLI string → structured PIPELINE batch →
+     * structured EVAL script → normal single command (default).
      */
     override fun apply(input: NodeInput): FunctionResult<Any> {
         val result: Any? = if (input.param<String>("raw")?.isNotBlank() == true) {
@@ -55,25 +58,22 @@ class RedisCommandFunction(
         return FunctionResult.success(result).uncheckedCast<FunctionResult<Any>>()!!
     }
 
-    override fun meta() = RedisFunctionMetas.REDIS_COMMAND
-
-    // ─── Raw 命令行解析 ───────────────────────────────────────────
+    // ─── Raw CLI string parsing ────────────────────────────────────────────────
 
     /**
-     * 执行原始 Redis CLI 风格命令行。
+     * Execute a raw Redis CLI style string provided via the `raw` parameter.
      *
-     * raw 字符串先经过 [NodeInput.resolveBinding] 解析 ${var} 模板变量，
-     * 再按 Redis CLI 规则拆分为 token：
-     * - 空格分隔普通 token
-     * - 双引号 / 单引号包裹含空格的 token
-     * - 反斜杠转义
+     * The raw string is first run through `NodeInput.resolveBinding` to expand
+     * `${var}` templates and structured bindings; the remainder is then split into
+     * tokens respecting double/single quoting and backslash escape sequences.
      *
-     * 解析结果：
-     * - 第一词作为 command
-     * - 第二词作为 key（EVAL 除外）
-     * - 其余作为 args
+     * Token interpretation:
+     *   - tokens[0]   → command
+     *   - tokens[1]   → key (except for EVAL)
+     *   - tokens[2+]  → positional args
      *
-     * EVAL 特殊处理：tokens 顺序为 EVAL script numkeys key [key ...] arg [arg ...]
+     * For EVAL the raw token stream follows `EVAL script numkeys key [key ...] arg [arg ...]`
+     * and is routed through a dedicated parser to correctly split KEYS / ARGV.
      */
     private fun executeRawCommand(input: NodeInput): Any? {
         val rawTemplate: String = input.requireParam("raw")
@@ -106,12 +106,12 @@ class RedisCommandFunction(
     }
 
     /**
-     * 按 Redis CLI 风格拆分命令行字符串。
+     * Split a Redis CLI style string into tokens respecting quoted substrings and
+     * backslash escapes.
      *
-     * 支持双引号 / 单引号包裹含空格的 token，以及反斜杠转义。
-     * 示例：
-     *   SET user:1001 name "John Doe" -> [SET, user:1001, name, John Doe]
-     *   EVAL "return KEYS[1]" 1 key1 arg1 -> [EVAL, return KEYS[1], 1, key1, arg1]
+     * Examples:
+     *   `SET user:1001 name "John Doe"` → `[SET, user:1001, name, John Doe]`
+     *   `EVAL "return KEYS[1]" 1 key1 arg1` → `[EVAL, return KEYS[1], 1, key1, arg1]`
      */
     private fun tokenizeRedisCli(raw: String): List<String> {
         val tokens = mutableListOf<String>()
@@ -145,8 +145,8 @@ class RedisCommandFunction(
     }
 
     /**
-     * 解析 raw 模式下的 EVAL 命令。
-     * 格式：EVAL script numkeys key [key ...] arg [arg ...]
+     * Parse an EVAL token stream generated from raw mode and execute it.
+     * Expected token order: `EVAL script numkeys key [key ...] arg [arg ...]`.
      */
     private fun parseAndExecuteEval(tokens: List<String>, input: NodeInput): Any? {
         if (tokens.size < 4) {
@@ -169,14 +169,15 @@ class RedisCommandFunction(
         return redisAdapter.eval(script, keys, args)
     }
 
-    // ─── Key 解析 ────────────────────────────────────────────────
+    // ─── Key resolution ────────────────────────────────────────────────────────
 
     /**
-     * 解析 key 参数，统一委托 NodeInput.resolveBinding：
-     * - Map → 结构化绑定（$ref + prefix/suffix）
-     * - String → ${var} 模板插值
+     * Resolve the `key` parameter for structured invocations.
      *
-     * 解析后若 key 仍包含未解析的 ${...} 占位符，记录 warn 日志辅助排查。
+     * Accepts either a Map (structured binding `$ref` + prefix/suffix) or a raw String
+     * with `${var}` template placeholders; both are delegated to `NodeInput.resolveBinding`.
+     * If any `${...}` placeholder survives resolution a warning is logged so workflow
+     * authors can track down missing inputs.
      */
     private fun resolveKeyParam(rawValue: Any?, input: NodeInput): String {
         if (rawValue == null) return ""
@@ -187,13 +188,11 @@ class RedisCommandFunction(
         return resolved
     }
 
-    // ─── Args 解析 ──────────────────────────────────────────────
+    // ─── Args resolution ───────────────────────────────────────────────────────
 
     /**
-     * 解析 args 列表，每个元素可以是：
-     * - 字面量字符串："fieldValue"
-     * - 模板字符串："user:${userId}"
-     * - 绑定对象：{"$ref": "input.userName"}
+     * Resolve the `args` list; each element may be a plain literal, a template string
+     * or a structured binding map.
      */
     private fun resolveArgsList(rawValue: Any?, input: NodeInput): List<String> {
         if (rawValue !is List<*>) return emptyList()
@@ -202,9 +201,9 @@ class RedisCommandFunction(
         }
     }
 
-    // ─── Pipeline ─────────────────────────────────────────────
+    // ─── Pipeline ──────────────────────────────────────────────────────────────
 
-    /** 执行 Redis Pipeline 批量命令（原子性发送，减少网络往返） */
+    /** Execute a structured `commands` batch through the adapter pipeline API. */
     private fun executePipeline(input: NodeInput): List<Any?> {
         val cmdsParam: Any? = input.param("commands")
         require(cmdsParam is List<*>) { "PIPELINE command requires 'commands' param as List" }
@@ -222,9 +221,9 @@ class RedisCommandFunction(
         return redisAdapter.pipeline(commands)
     }
 
-    // ─── EVAL (Lua) ──────────────────────────────────────────
+    // ─── EVAL (Lua) ────────────────────────────────────────────────────────────
 
-    /** 执行 Lua 脚本（EVAL 命令） */
+    /** Execute a structured Lua script invocation (EVAL command path). */
     private fun executeEval(input: NodeInput): Any? {
         val script: String = input.requireParam("script")
 
@@ -239,7 +238,7 @@ class RedisCommandFunction(
         return redisAdapter.eval(script, keys, args)
     }
 
-    /** 按 Redis Key 命名规范包装用户配置的 key（若已带 hash tag 则保持原样）。 */
+    /** Wrap a user-provided key with `{appGroup:workflowId}:hash-tag` when not already tagged. */
     private fun wrapKey(input: NodeInput, key: String): String =
         RedisKey.wrapIfNeeded(input.meta?.appGroup, input.meta?.workflowId ?: "", key)
 }

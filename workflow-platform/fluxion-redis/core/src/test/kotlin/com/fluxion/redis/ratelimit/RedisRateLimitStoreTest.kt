@@ -7,6 +7,13 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import java.security.MessageDigest
 
+/**
+ * Unit tests for [RedisRateLimitStore].
+ *
+ * Verifies the EVALSHA fast-path, NOSCRIPT transparent re-upload fallback,
+ * multi-type result normalization (Boolean/Long/List), and fail-open
+ * behaviour when the Redis server is completely down.
+ */
 class RedisRateLimitStoreTest {
 
     private val config = RateLimitConfig(upLimited = 6, cdSeconds = 10)

@@ -25,7 +25,15 @@ import java.util.concurrent.Executor
 import java.util.concurrent.TimeUnit
 
 /**
- * metrics 瑁呴グ鍣?鈥?Micrometer 璁℃椂 & 璁℃暟
+ * Node decorator that records Micrometer counters + timers for every
+ * invocation.
+ *
+ * Counters emitted:
+ *  - `workflow.node.success` (tagged: workflow, node)
+ *  - `workflow.node.error`   (tagged: workflow, node, error=simple class name)
+ *
+ * Timer emitted:
+ *  - `workflow.node.duration` (milliseconds)
  */
 class MetricsDecorator(private val meterRegistry: MeterRegistry) : NodeDecorator {
 
@@ -49,18 +57,22 @@ class MetricsDecorator(private val meterRegistry: MeterRegistry) : NodeDecorator
 }
 
 /**
- * rateLimit 瑁呴グ鍣?鈥?婊戝姩绐楀彛闄愭祦銆?
+ * Sliding-window rate limit decorator for individual nodes.
  *
- * 閫氳繃 [RateLimitStore] SPI 瑙ｈ€﹀簳灞傚瓨鍌細
- * - 鏃犲閮ㄥ瓨鍌ㄦ椂锛屼娇鐢ㄥ唴缃殑 [LocalRateLimitStore]锛堝崟 JVM锛?
- * - 鍒嗗竷寮忓満鏅笅娉ㄥ叆 Redis 绛?[RateLimitStore] 瀹炵幇
+ * Underlying permit storage is pluggable via [RateLimitStore] SPI:
+ *  - Default: in-process [LocalRateLimitStore] (single JVM only).
+ *  - Production: inject a Redis-backed [RateLimitStore] bean for multi-instance
+ *    coordination.
  *
- * 閰嶇疆鍙傛暟锛堥€氳繃 [WorkflowNode.decoratorParams] 鐨?"ratelimit:slidingWindow" 閿級锛?
- * - `upLimited`:     绐楀彛鍐呮渶澶ц姹傛暟锛岄粯璁?6
- * - `cdSeconds`:     鎭㈠鍛ㄦ湡锛堢锛夛紝榛樿 10
- * - `recoveryPerCd`: 姣忎釜鍛ㄦ湡鎭㈠鐨勪护鐗屾暟锛岄粯璁ょ瓑浜?upLimited
- * - `rateLimitKey`:  鏄惧紡闄愭祦閿紝浼樺厛绾ф渶楂?
- * - `keyPrefix`:     閿墠缂€锛岄粯璁?"fluxion:ratelimit:"
+ * ### Configuration via `WorkflowNode.decoratorParams["ratelimit:slidingWindow"]`
+ *
+ * | Key              | Description                                       | Default           |
+ * |------------------|---------------------------------------------------|-------------------|
+ * | `upLimited`      | Max permits inside the sliding window             | 6                 |
+ * | `cdSeconds`      | Cooldown window length (seconds)                  | 10                |
+ * | `recoveryPerCd`  | Permits restored every `cdSeconds`                | equals `upLimited`|
+ * | `rateLimitKey`   | Explicit lock key (highest priority)              | `ratelimit:<nodeId>` |
+ * | `keyPrefix`      | Prepended to the generated business key           | `fluxion:ratelimit:` |
  */
 class RateLimitDecorator(private val store: RateLimitStore = LocalRateLimitStore()) : NodeDecorator {
 
@@ -97,7 +109,11 @@ class RateLimitDecorator(private val store: RateLimitStore = LocalRateLimitStore
 }
 
 /**
- * cache 瑁呴グ鍣?鈥?L1 鏈湴缂撳瓨
+ * L1 (single-node) result cache decorator.
+ *
+ * Cache key resolution supports a subset of SpEL expressions evaluated against
+ * the node's `directInput` via `#input` (the default). Results are stored under
+ * a scoped [RedisKey] with a caller-supplied TTL.
  */
 class CacheDecorator(private val cacheStore: CacheStore) : NodeDecorator {
 
@@ -134,7 +150,13 @@ class CacheDecorator(private val cacheStore: CacheStore) : NodeDecorator {
 }
 
 /**
- * async 瑁呴グ鍣?鈥?寮傛鎵ц锛岀珛鍗宠繑鍥?asyncId锛涗换鍔″畬鎴愬悗閫氳繃 [AsyncCallback] 鍥炶皟缁撴灉銆?
+ * Fire-and-forget async decorator: submits the real function to `executor`,
+ * returns immediately with a PENDING envelope, then publishes the final
+ * success / failure outcome through [AsyncCallback].
+ *
+ * Typical consumer is a long-running node (external HTTP call, DB batch
+ * operation) where the HTTP caller does not want to block. The companion
+ * result is forwarded out-of-band (Kafka / HTTP webhook) via the callback.
  */
 class AsyncDecorator(
     private val executor: Executor,
@@ -175,7 +197,7 @@ class AsyncDecorator(
                     val result = function.apply(input)
                     callback.publish(context(AsyncCallbackStatus.SUCCESS, result.output, null))
                 } catch (e: Exception) {
-                    log.error("Async node [${node.name}] execution failed: ${e.message}", e)
+                    log.error(e) { "Async node [${node.name}] execution failed: ${e.message}" }
                     callback.publish(context(AsyncCallbackStatus.FAILED, null, e.message))
                 }
             }
@@ -191,7 +213,11 @@ class AsyncDecorator(
 }
 
 /**
- * logging 瑁呴グ鍣?鈥?鍑芥暟鎵ц鍓嶅悗鎵撳嵃鍏ュ弬鍜岀粨鏋滄棩蹇?
+ * Structured logging decorator -- emits a before + after INFO line per node
+ * invocation including inputs, success/failure status and wall-clock duration.
+ *
+ * This is intentionally minimal; production deployments typically replace it
+ * with a structured (JSON) logger + tracing integration.
  */
 class LoggingDecorator : NodeDecorator {
 

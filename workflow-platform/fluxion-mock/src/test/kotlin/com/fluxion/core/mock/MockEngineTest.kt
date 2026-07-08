@@ -7,8 +7,22 @@ import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 
+/**
+ * Full-behaviour unit tests for [MockEngine] — every public API path has at
+ * least one dedicated test case. The test suite doubles as executable
+ * documentation for operators: if you want to know "can I mock X", search
+ * the test names below.
+ *
+ * All tests use `runBlocking` for consistency even though the public
+ * engine APIs are synchronous today — keeps them forward-compatible if we
+ * later move the engine onto coroutines.
+ */
 class MockEngineTest {
 
+    /**
+     * Build a test-scoped [NodeInput]. Defaults represent the common
+     * happy-path case (empty inputs, synthetic execution metadata).
+     */
     private fun nodeInput(
         directInput: Any? = null,
         workflowInput: Map<String, Any> = emptyMap(),

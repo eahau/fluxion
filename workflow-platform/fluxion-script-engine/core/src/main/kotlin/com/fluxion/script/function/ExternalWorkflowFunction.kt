@@ -7,14 +7,25 @@ import com.fluxion.core.function.external.ExternalFunctionConfigParser
 import com.fluxion.core.function.external.ExternalFunctionRequest
 import com.fluxion.core.function.external.ExternalFunctionTransportRegistry
 import com.fluxion.core.model.NodeInput
-import com.fluxion.core.value.FunctionMeta
 import com.fluxion.core.value.FunctionResult
 
 /**
- * 外部函数工作流节点实现。
+ * DAG-node wrapper for outbound "external" (HTTP / gRPC / Dubbo …) calls.
  *
- * 通过 [ExternalFunctionTransportRegistry] 按 protocol 路由到对应传输层，
- * 支持 HTTP / gRPC / Dubbo 等 outbound 调用。
+ * The runtime-core deliberately knows nothing about any outbound transport
+ * — it only exposes a pluggable `ExternalFunctionTransport` SPI. This class
+ * is the bridge between that SPI and the DAG engine: it resolves the
+ * correct transport for a given function's declared `protocol`, applies an
+ * optional input-field mapping (`paramMapping`), builds the
+ * [ExternalFunctionRequest] and invokes the transport.
+ *
+ * Two construction paths exist:
+ * - Primary: direct object instantiation with a pre-parsed
+ *   [ExternalFunctionConfig] (used by `FunctionConfigApplier` which already
+ *   did validation while reading the config snapshot).
+ * - Convenience: raw `Map<String, Any>` config that gets parsed through
+ *   [ExternalFunctionConfigParser] on construction (used in tests and when
+ *   functions are registered imperatively).
  */
 class ExternalWorkflowFunction(
     private val name: String,
@@ -25,6 +36,13 @@ class ExternalWorkflowFunction(
     private val description: String? = null
 ) : WorkflowFunction<Any?> {
 
+    /** Registered function reference (e.g. `external:userService.getUser`). */
+    override val functionName: String = name
+
+    /**
+     * Convenience constructor — parses a raw config map through
+     * [ExternalFunctionConfigParser] before delegating to the primary ctor.
+     */
     constructor(
         name: String,
         configMap: Map<String, Any>?,
@@ -41,6 +59,19 @@ class ExternalWorkflowFunction(
         description = description
     )
 
+    /**
+     * Execute the external call.
+     *
+     * Pipeline:
+     * 1. Resolve transport by `config.protocol` (fail-fast if unregistered).
+     * 2. Optionally apply `paramMapping` to the DAG input — map entries are
+     *    `targetField -> sourceDotPath` (e.g. `"city" -> "user.address.city"`).
+     *    If no mapping is declared, `directInput` is passed as-is.
+     * 3. Wrap in [ExternalFunctionRequest] and delegate to the transport.
+     * 4. Check `response.success`; on failure surface via
+     *    [WorkflowNodeException] so the DAG engine can route to a
+     *    compensation / error handler instead of NPE-ing on a null output.
+     */
     override fun apply(input: NodeInput): FunctionResult<Any?> {
         val transport = transportRegistry.resolve(config.protocol)
             ?: throw WorkflowNodeException(
@@ -83,23 +114,21 @@ class ExternalWorkflowFunction(
         return FunctionResult.success(response.output)
     }
 
-    override fun meta(): FunctionMeta = FunctionMeta.builder(name)
-        .description(description ?: "External function: $name")
-        .apply {
-            paramSchema?.let { paramSchema(it) }
-            outputSchema?.let { outputSchema(it) }
-        }
-        .build()
-
     /**
-     * 按 paramMapping 从源对象中提取字段，构造目标参数 Map。
-     * value 支持点号路径，如 user.address.city。
+     * Apply `paramMapping` — converts from DAG's input shape to the remote
+     * service's expected request shape.
+     *
+     * For each `targetKey=dotPath` entry, walks the source map by splitting
+     * the dot path and indexing into nested maps at each level. Missing
+     * intermediate objects short-circuit to null (matching JSON-path
+     * semantics for missing leaves).
      */
     private fun mapInput(mapping: Map<String, String>, source: Any?): Map<String, Any?> {
         val srcMap = source as? Map<*, *> ?: return emptyMap()
         return mapping.mapValues { (_, path) -> getByPath(srcMap, path) }
     }
 
+    /** Walk a dot-separated path through nested maps, returning the leaf value or null. */
     @Suppress("UNCHECKED_CAST")
     private fun getByPath(source: Map<*, *>, path: String): Any? {
         val parts = path.split('.')

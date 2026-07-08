@@ -11,9 +11,9 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 
 /**
- * Avro Schema 全链路集成测试。
+ * Avro Schema 鍏ㄩ摼璺泦鎴愭祴璇曘€?
  *
- * 覆盖：Parser → Validator → FieldExtractor → Codec → DefaultSchemaManager 多格式路由。
+ * 瑕嗙洊锛歅arser 鈫?Validator 鈫?FieldExtractor 鈫?Codec 鈫?DefaultSchemaManager 澶氭牸寮忚矾鐢便€?
  */
 class AvroSchemaIntegrationTest {
 

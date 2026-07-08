@@ -12,13 +12,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 
-/**
- * Avro Schema 扩展 Spring Boot 自动装配。
- *
- * 当 classpath 存在 Apache Avro（`org.apache.avro.Schema`）时注册 Avro 格式 Bundle。
- * 由 [com.fluxion.schema.spring.boot.FluxionSchemaAutoConfiguration] 的
- * `SchemaManager` 自动收集，无需额外编排。
- */
 @Configuration
 @ConditionalOnClass(name = ["org.apache.avro.Schema"])
 class AvroSchemaAutoConfiguration {

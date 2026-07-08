@@ -1,7 +1,5 @@
 package com.fluxion.script.groovy
 
-import com.fluxion.script.meta.ScriptEngineFunctionMetas
-
 import com.github.benmanes.caffeine.cache.Cache
 import com.github.benmanes.caffeine.cache.Caffeine
 import com.fluxion.core.exception.WorkflowNodeException
@@ -17,28 +15,55 @@ import groovy.lang.Script
 import org.codehaus.groovy.control.CompilationFailedException
 import org.codehaus.groovy.control.CompilerConfiguration
 import org.codehaus.groovy.control.customizers.SecureASTCustomizer
-import org.slf4j.*
+import org.slf4j.LoggerFactory
 
 /**
- * Groovy 脚本执行函数
+ * Built-in DAG function that executes arbitrary Groovy snippets.
+ *
+ * Two invocation modes are supported (selected by which node param is set):
+ * - **Inline script** (`script` param): the literal Groovy source is passed in
+ *   the node's parameters. Used for ad-hoc transforms that live alongside
+ *   the workflow definition.
+ * - **Named script ref** (`scriptRef` param): a logical identifier that is
+ *   resolved through [scriptRefResolver] — deployments typically wire this
+ *   through `FunctionConfigSubscriber.get(ref).scriptBody` so the script
+ *   lives in the config center and can be updated without touching the
+ *   workflow DAG.
+ *
+ * Compilation caching: the raw source's hashCode is used as the cache key
+ * into a bounded Caffeine cache (default 500 entries) of compiled
+ * `Class<out Script>` objects. Once warmed, the hot path is a newInstance()
+ * + binding assign + run() call — ~zero parser overhead per invocation.
+ *
+ * Security: a `SecureASTCustomizer` whitelists the import classes the
+ * script may use (`java.util.*`, `java.math.*`, `groovy.json.*`). Scripts
+ * cannot directly `import` classes outside this list (they CAN still
+ * reference fully-qualified names — to fully lock this down replace the
+ * customizer with a stricter AST visitor).
+ *
+ * Target bytecode is set to JDK 17 so modern Java APIs (records, pattern
+ * matching, Text Blocks compiled from Groovy 4+) are available to scripts.
  */
 class GroovyScriptFunction(maxCacheSize: Int = 500) : WorkflowFunction<Any> {
 
     private val log = LoggerFactory.getLogger(javaClass)
 
-    /** Caffeine 编译缓存：scriptHash → Script Class */
+    override val functionName: String = "builtin:groovyScript"
+
+    /** Cache keyed by script source hashCode → compiled Script subclass. */
     private val compileCache: Cache<Int, Class<out Script>> =
         Caffeine.newBuilder().maximumSize(maxCacheSize.toLong()).build()
 
     /**
-     * 可选的 scriptRef 解析器。
-     * 当节点参数使用 scriptRef 而非 inline script 时，优先通过解析器获取实际脚本内容。
+     * Optional resolver that maps a `scriptRef` identifier to the actual
+     * Groovy source. Typically wired in Spring Boot to look up the ref
+     * against the `FunctionConfigSubscriber` snapshot store.
      */
     var scriptRefResolver: ((String) -> String?)? = null
 
     /**
-     * 可选的依赖解析器。
-     * 向 Groovy 脚本暴露 `bean(name)` / `beanByType(type)` 函数，使其能访问 DI 容器中的实例。
+     * Optional DI resolver; when set exposes bean-lookup helpers in the
+     * script's Groovy binding (see [buildBinding]).
      */
     var dependencyResolver: DependencyResolver? = null
 
@@ -48,6 +73,9 @@ class GroovyScriptFunction(maxCacheSize: Int = 500) : WorkflowFunction<Any> {
         val config = CompilerConfiguration()
         config.targetBytecode = CompilerConfiguration.JDK17
 
+        // Restrict script imports — prevents naive usage of unsafe classes.
+        // NOTE: fully-qualified classnames bypass this check; for full
+        // sandboxing add a second AST customizer that blocks class literals.
         val secure = SecureASTCustomizer()
         secure.allowedImports = listOf("java.util.*", "java.math.*", "groovy.json.*")
         config.addCompilationCustomizers(secure)
@@ -55,6 +83,18 @@ class GroovyScriptFunction(maxCacheSize: Int = 500) : WorkflowFunction<Any> {
         this.shell = GroovyShell(Binding(), config)
     }
 
+    /**
+     * Run a script invocation.
+     *
+     * Source resolution order:
+     * 1. `input.param("script")` — inline body from node params.
+     * 2. `input.param("scriptRef")` → [scriptRefResolver] lookup.
+     * 3. If both are absent/empty → fail fast with `WorkflowNodeException`.
+     *
+     * The cached Script class is instantiated fresh per invocation so the
+     * same compiled class can be called concurrently (Scripts are NOT
+     * thread-safe; the Binding is per-instance).
+     */
     override fun apply(input: NodeInput): FunctionResult<Any> {
         var rawScript: String? = input.param("script")
         if (rawScript.isNullOrBlank()) {
@@ -64,7 +104,7 @@ class GroovyScriptFunction(maxCacheSize: Int = 500) : WorkflowFunction<Any> {
             }
         }
         if (rawScript.isNullOrBlank()) {
-            throw WorkflowNodeException(meta().name,
+            throw WorkflowNodeException(functionName,
                 IllegalArgumentException("Either 'script' or 'scriptRef' param is required"))
         }
 
@@ -87,15 +127,30 @@ class GroovyScriptFunction(maxCacheSize: Int = 500) : WorkflowFunction<Any> {
             return FunctionResult.success(result).uncheckedCast<FunctionResult<Any>>()!!
         } catch (ex: RuntimeException) {
             if (ex.cause is CompilationFailedException) {
-                throw WorkflowNodeException(meta().name, ex.cause)
+                throw WorkflowNodeException(functionName, ex.cause)
             }
-            throw WorkflowNodeException(meta().name, ex)
+            throw WorkflowNodeException(functionName, ex)
         } catch (ex: Exception) {
-            throw WorkflowNodeException(meta().name, ex)
+            throw WorkflowNodeException(functionName, ex)
         }
     }
 
-    override fun meta() = ScriptEngineFunctionMetas.GROOVY_SCRIPT
+    /**
+     * Build the Groovy script binding — exposes the DAG context as script variables.
+     *
+     * Variables always available:
+     * - `input`    — [NodeInput.directInput] (the DAG-level resolved dependency payload).
+     * - `params`   — [NodeInput.nodeParams]   (raw node-level configuration params).
+     * - `deps`     — [NodeInput.declaredDeps] (raw dependency-output map before merging).
+     * - `wfInput`  — [NodeInput.workflowInput] (the original top-level workflow request params).
+     * - `meta`     — [NodeInput.meta] (workflow id, tenant, trace id …).
+     *
+     * Variables available only when [dependencyResolver] is configured:
+     * - `bean(name)`              → lookup bean by name.
+     * - `beanByType(Class)`       → lookup bean by runtime class.
+     * - `beanType(String)`        → lookup by FQCN string (convenience for scripts).
+     * - `beans`                   → [BeanNameMap] proxy for `beans.foo` property access.
+     */
     private fun buildBinding(input: NodeInput): Binding {
         val binding = Binding()
         binding.setVariable("input", input.directInput)

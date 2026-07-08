@@ -19,16 +19,18 @@ import io.lettuce.core.output.ValueListOutput
 import io.lettuce.core.output.ValueOutput
 import io.lettuce.core.protocol.CommandArgs
 import io.lettuce.core.protocol.CommandType
-import org.slf4j.LoggerFactory
+import org.slf4j.*
 import org.slf4j.debug
 import org.slf4j.warn
 import java.util.concurrent.TimeUnit
 
 /**
- * Lettuce 实现的 RedisClientAdapter
+ * Lettuce-based implementation of [RedisClientAdapter].
  *
- * execute / pipeline 均通过 dispatch() API 发送原始协议命令，
- * 避免按命令名逐分支调用 Lettuce typed API 导致的映射逻辑重复。
+ * Both `execute` and `pipeline` dispatch raw protocol commands via the Lettuce
+ * `dispatch(..)` API instead of routing through the typed per-method surface; this
+ * eliminates the enormous when-branch that would otherwise be needed to map every
+ * Redis command name onto a specific Lettuce typed call.
  */
 class LettuceRedisAdapter(
     private val connection: StatefulRedisConnection<String, String>
@@ -36,7 +38,9 @@ class LettuceRedisAdapter(
 
     private val log = LoggerFactory.getLogger(javaClass)
 
-    // ─── 同步命令 ──────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────
+    // Synchronous single-command execution
+    // ─────────────────────────────────────────────────────────────────────
 
     override fun execute(command: String, key: String, args: List<String>): Any? {
         val cmdName = command.uppercase()
@@ -62,7 +66,9 @@ class LettuceRedisAdapter(
         }
     }
 
-    // ─── Pipeline ─────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────
+    // Pipeline (batch) execution
+    // ─────────────────────────────────────────────────────────────────────
 
     @Suppress("UNCHECKED_CAST")
     override fun pipeline(commands: List<RedisRawCommand>): List<Any?> {
@@ -93,7 +99,9 @@ class LettuceRedisAdapter(
         }
     }
 
-    // ─── Lua EVAL ─────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────
+    // Lua scripting (EVAL / SCRIPT LOAD / EVALSHA)
+    // ─────────────────────────────────────────────────────────────────────
 
     override fun eval(script: String, keys: List<String>, args: List<String>): Any? {
         val keysArr = keys.toTypedArray()
@@ -114,35 +122,40 @@ class LettuceRedisAdapter(
         return connection.sync().evalsha(sha, ScriptOutputType.OBJECT, keysArr, *argsArr)
     }
 
-    // ─── 工具方法 ─────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────
+    // CommandOutput resolution by command type
+    // ─────────────────────────────────────────────────────────────────────
 
     /**
-     * 按命令类型解析对应的 CommandOutput，
-     * 确保 Redis 协议层响应被正确解析为 Java 类型。
+     * Pick the correct Lettuce [CommandOutput] for a given [CommandType].
      *
-     * | Output 类型         | Java 返回类型                | 命令                                                                  |
-     * |---------------------|-----------------------------|----------------------------------------------------------------------|
-     * | StatusOutput        | "OK"                        | SET, SETEX, PSETEX, LSET, LTRIM, HMSET, LINSERT, RENAME, COPY, PERSIST |
+     * The output class determines how the raw Redis protocol bytes are decoded into
+     * a Java/Kotlin type. Incorrect output classes cause either a decode exception or
+     * a silently truncated response, so each family is explicitly mapped below.
+     *
+     * | Output type         | Java return type            | Commands                                                                 |
+     * |---------------------|-----------------------------|--------------------------------------------------------------------------|
+     * | StatusOutput        | "OK"                        | SET, SETEX, PSETEX, LSET, LTRIM, HMSET, LINSERT, RENAME, COPY, PERSIST  |
      * | ValueOutput         | String?                     | GET, GETSET, HGET, LPOP, RPOP, LINDEX, SRANDMEMBER, SPOP, TYPE, OBJECT, PUBLISH, GETRANGE |
      * | IntegerOutput       | Long                        | DEL, UNLINK, EXPIRE, PEXPIRE, TTL, PTTL, INCR, INCRBY, DECR, DECRBY, APPEND, STRLEN, SETRANGE, LPUSH, RPUSH, LPUSHX, RPUSHX, LLEN, LREM, SADD, SREM, SCARD, ZADD, ZREM, ZRANK, ZREVRANK, ZCARD, ZCOUNT, ZINCRBY, HDEL, HLEN, HSET, XLEN |
-     * | BooleanOutput       | Boolean                     | EXISTS, SETNX, HEXISTS, HSETNX, SISMEMBER                            |
-     * | DoubleOutput        | Double                      | INCRBYFLOAT, HINCRBYFLOAT                                            |
-     * | MapOutput           | Map<String, String>         | HGETALL                                                              |
-     * | KeyListOutput       | List<String>                | KEYS                                                                 |
+     * | BooleanOutput       | Boolean                     | EXISTS, SETNX, HEXISTS, HSETNX, SISMEMBER                               |
+     * | DoubleOutput        | Double                      | INCRBYFLOAT, HINCRBYFLOAT                                                |
+     * | MapOutput           | Map<String, String>         | HGETALL                                                                  |
+     * | KeyListOutput       | List<String>                | KEYS                                                                     |
      * | ValueListOutput     | List<String>                | HMGET, HKEYS, HVALS, LRANGE, ZRANGE, ZREVRANGE, ZRANGEBYSCORE, ZREVRANGEBYSCORE, SMEMBERS |
-     * | ScoredValueOutput   | ScoredValue<String>         | ZSCORE, ZPOPMIN, ZPOPMAX                                             |
+     * | ScoredValueOutput   | ScoredValue<String>         | ZSCORE, ZPOPMIN, ZPOPMAX                                                 |
      */
     private fun resolveOutput(cmdType: CommandType): CommandOutput<String, String, *> {
         val codec = StringCodec.UTF8
         return when (cmdType) {
-            // ── Status ("OK") ──────────────────────────────────────────────
+            // ─── Status ("OK") ────────────────────────────────────────────
             CommandType.SET, CommandType.SETEX, CommandType.PSETEX,
             CommandType.LSET, CommandType.LTRIM, CommandType.HMSET,
             CommandType.LINSERT,
             CommandType.RENAME, CommandType.COPY, CommandType.PERSIST
                 -> StatusOutput(codec)
 
-            // ── Value (String?) ────────────────────────────────────────────
+            // ─── Value (String) ───────────────────────────────────────────
             CommandType.GET, CommandType.GETSET, CommandType.GETRANGE,
             CommandType.HGET,
             CommandType.LPOP, CommandType.RPOP, CommandType.LINDEX,
@@ -151,7 +164,7 @@ class LettuceRedisAdapter(
             CommandType.PUBLISH
                 -> ValueOutput(codec)
 
-            // ── Integer (Long) ─────────────────────────────────────────────
+            // ─── Integer (Long) ───────────────────────────────────────────
             CommandType.DEL, CommandType.UNLINK,
             CommandType.EXPIRE, CommandType.PEXPIRE,
             CommandType.TTL, CommandType.PTTL,
@@ -169,23 +182,23 @@ class LettuceRedisAdapter(
             CommandType.XLEN
                 -> IntegerOutput(codec)
 
-            // ── Boolean ────────────────────────────────────────────────────
+            // ─── Boolean ──────────────────────────────────────────────────
             CommandType.EXISTS, CommandType.SETNX,
             CommandType.HEXISTS, CommandType.HSETNX,
             CommandType.SISMEMBER
                 -> BooleanOutput(codec)
 
-            // ── Double ─────────────────────────────────────────────────────
+            // ─── Double ───────────────────────────────────────────────────
             CommandType.INCRBYFLOAT, CommandType.HINCRBYFLOAT
                 -> DoubleOutput(codec)
 
-            // ── Map ────────────────────────────────────────────────────────
+            // ─── Map ─────────────────────────────────────────────────────
             CommandType.HGETALL -> MapOutput(codec)
 
-            // ── Key List ───────────────────────────────────────────────────
+            // ─── Key List ────────────────────────────────────────────────
             CommandType.KEYS -> KeyListOutput(codec)
 
-            // ── Value List ─────────────────────────────────────────────────
+            // ─── Value List ───────────────────────────────────────────────
             CommandType.HMGET, CommandType.HKEYS, CommandType.HVALS,
             CommandType.LRANGE,
             CommandType.ZRANGE, CommandType.ZREVRANGE,
@@ -193,7 +206,7 @@ class LettuceRedisAdapter(
             CommandType.SMEMBERS
                 -> ValueListOutput(codec)
 
-            // ── Scored Value ───────────────────────────────────────────────
+            // ─── Scored Value ─────────────────────────────────────────────
             CommandType.ZSCORE, CommandType.ZPOPMIN, CommandType.ZPOPMAX
                 -> ScoredValueOutput(codec)
 
