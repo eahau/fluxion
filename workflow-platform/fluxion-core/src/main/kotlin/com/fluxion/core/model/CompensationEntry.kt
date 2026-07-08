@@ -3,17 +3,23 @@ package com.fluxion.core.model
 import com.fluxion.core.value.SideEffect
 
 /**
- * Saga 补偿栈条目 — 记录已执行节点的补偿信息
+ * A row in the Saga compensation plan.
+ *
+ * [SagaExecutor] builds an ordered list of CompensationEntry as each
+ * node succeeds; on failure it walks the list in *reverse* and invokes
+ * [compensateFunctionRef], passing the stored [sideEffects] and the
+ * node's original [output] so the compensator can reconstruct the
+ * pre-side-effect state.
  */
 data class CompensationEntry(
-    /** 节点 ID */
+    /** The node that produced the side effect(s). */
     val nodeId: String,
-    /** 节点名称 */
+    /** Human-readable node name for audit / error messages. */
     val nodeName: String,
-    /** 补偿函数引用 */
+    /** Function ref used during compensation (may be null for no-op nodes). */
     val compensateFunctionRef: String?,
-    /** 节点执行时的副作用（补偿时用于构建 compensate NodeInput） */
+    /** Side effects the compensator must reverse. */
     val sideEffects: List<SideEffect>,
-    /** 节点执行时的输出（补偿时用于构建 compensate directInput） */
+    /** Original node output — supplied as `directInput` to the compensate function. */
     val output: Any?
 )

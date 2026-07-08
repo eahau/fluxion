@@ -32,7 +32,7 @@ class NodeInputTest {
         meta = meta
     )
 
-    // ─── directInput 安全访问 ────────────────────────────────────
+    // 闁冲厜鍋撻柍鍏夊亾闁冲厜鍋?directInput 閻庣懓顦崣蹇曟媼閸ф锛?闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾
 
     @Test
     fun `input returns typed value`() {
@@ -96,7 +96,7 @@ class NodeInputTest {
         }
     }
 
-    // ─── nodeParams 安全访问 ────────────────────────────────────
+    // 闁冲厜鍋撻柍鍏夊亾闁冲厜鍋?nodeParams 閻庣懓顦崣蹇曟媼閸ф锛?闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾
 
     @Test
     fun `param retrieves node parameter`() {
@@ -128,7 +128,7 @@ class NodeInputTest {
         assertTrue(ni.paramAsBoolean("flag"))
     }
 
-    // ─── workflowInput 安全访问 ──────────────────────────────────
+    // 闁冲厜鍋撻柍鍏夊亾闁冲厜鍋?workflowInput 閻庣懓顦崣蹇曟媼閸ф锛?闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾
 
     @Test
     fun `wfInput retrieves workflow parameter`() {
@@ -148,8 +148,7 @@ class NodeInputTest {
         assertEquals(3, ni.wfInputAsInt("page"))
     }
 
-    // ─── declaredDeps 安全访问 ───────────────────────────────────
-
+    // 闁冲厜鍋撻柍鍏夊亾闁冲厜鍋?declaredDeps 閻庣懓顦崣蹇曟媼閸ф锛?闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋?
     @Test
     fun `dep retrieves upstream node output`() {
         val ni = input(declaredDeps = mapOf("n1" to mapOf("userId" to "u-123")))
@@ -168,8 +167,7 @@ class NodeInputTest {
         assertThrows<InvalidParamException> { ni.requireDep<String>("n1") }
     }
 
-    // ─── 模板插值 resolveBinding ─────────────────────────────────
-
+    // 闁冲厜鍋撻柍鍏夊亾闁冲厜鍋?婵☆垪鍓濆姗€骞撻幒鎴斿亾?resolveBinding 闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋?
     @Test
     fun `interpolate simple variable from workflowInput`() {
         val ni = input(workflowInput = mapOf("name" to "alice"))
@@ -212,8 +210,7 @@ class NodeInputTest {
         assertEquals("42", ni.resolveBinding(42))
     }
 
-    // ─── 结构化绑定 $ref ─────────────────────────────────────────
-
+    // 闁冲厜鍋撻柍鍏夊亾闁冲厜鍋?缂備焦鎸婚悗顖炲礌閺嶎偆鎷ㄩ悗?$ref 闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋?
     @Test
     fun `ref from workflowInput`() {
         val ni = input(workflowInput = mapOf("userId" to "u-001"))
@@ -270,7 +267,7 @@ class NodeInputTest {
         assertEquals(listOf("1", "2", "literal"), ni.resolveBindingList(list))
     }
 
-    // ─── 不可变更新 withXxx ──────────────────────────────────────
+    // 闁冲厜鍋撻柍鍏夊亾闁冲厜鍋?濞戞挸绉磋ぐ鏌ュ矗濡粯绾柡?withXxx 闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾
 
     @Test
     fun `withDirectInput preserves other fields`() {
@@ -307,8 +304,7 @@ class NodeInputTest {
         assertEquals("new", updated.declaredDeps["n2"])
     }
 
-    // ─── Schema 感知数据访问 ─────────────────────────────────────
-
+    // 闁冲厜鍋撻柍鍏夊亾闁冲厜鍋?Schema 闁规壆鍠撻悡锟犲极閻楀牆绁﹂悹浣告健濡?闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋?
     @Test
     fun `inputField falls back to Map access when no provider`() {
         val ni = input(directInput = mapOf("name" to "Alice", "age" to 30))
@@ -407,8 +403,7 @@ class NodeInputTest {
         assertSame(registry, ni.providerRegistry)
     }
 
-    // ─── directInputView / depView (SchemaBackedMap) ─────────────
-
+    // 闁冲厜鍋撻柍鍏夊亾闁冲厜鍋?directInputView / depView (SchemaBackedMap) 闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋?
     @Test
     fun `directInputView returns empty map when directInput is null`() {
         val ni = input(directInput = null)

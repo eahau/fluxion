@@ -1,21 +1,25 @@
 package com.fluxion.core.value
 
 /**
- * 执行元信息 — 类比 CPU 的 Thread-Local Storage
- * 绑定到单次工作流执行，贯穿所有节点（只读）
+ * Immutable metadata bag carried through every stage of a single execution.
+ *
+ * Stored once at workflow start (see [ImmutableExecutionState.start]) and
+ * threaded through nodes, decorators and the execution log.  All fields are
+ * trivially serializable (no framework types) so the object is safe to
+ * attach to MDC, distribute to threads, or persist in audit logs.
  */
 data class ExecutionMeta(
-    /** 工作流定义 ID */
+    /** Owning workflow id (matches [WorkflowDefinition.id]). */
     val workflowId: String,
-    /** 工作流名称（日志/Metrics 用） */
+    /** Human-readable workflow name; used for log messages and metrics tags. */
     val workflowName: String,
-    /** 当前执行的工作流版本号 */
+    /** Definition version; incremented by the admin console on publish. */
     val version: Int,
-    /** 所属应用分组（对应 WorkflowDefinition.appGroup） */
+    /** Tenant / application group; drives Redis keys and multi-tenant routing. */
     val appGroup: String? = null,
-    /** 本次执行唯一 ID（UUID） */
+    /** Unique per-execution UUID. */
     val executionId: String,
-    /** 执行开始时间（毫秒时间戳） */
+    /** Wall-clock start time (`System.currentTimeMillis()`). */
     val startTime: Long
 ) {
     companion object {
@@ -23,6 +27,7 @@ data class ExecutionMeta(
         fun builder() = Builder()
     }
 
+    /** Fluent builder for call-sites that construct metadata piecemeal. */
     class Builder {
         var workflowId: String = ""
         var workflowName: String = ""

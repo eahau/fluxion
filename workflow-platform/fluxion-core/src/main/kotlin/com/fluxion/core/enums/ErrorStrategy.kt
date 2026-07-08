@@ -1,16 +1,25 @@
 package com.fluxion.core.enums
 
 /**
- * 节点错误处理策略
- * 配置在 WorkflowNode.errorStrategy，决定节点异常时引擎的行为
+ * Core enumeration types used across the Fluxion workflow engine.
+ *
+ * This file defines the error handling strategy that a workflow node applies
+ * when its execution fails.
+ */
+
+/**
+ * Strategy for handling node execution failures.
+ *
+ * Determines how [com.fluxion.core.engine.DagExecutor] reacts when a
+ * [com.fluxion.core.model.WorkflowNode] throws an exception.
  */
 enum class ErrorStrategy {
-    /** 抛出异常，中止整个工作流 */
+    /** Fail immediately — propagate error and halt downstream nodes. */
     FAIL,
-    /** 跳过本节点，继续执行下一节点（output 为 null） */
+    /** Skip the node and continue with successors (output is null). */
     SKIP,
-    /** 调用 WorkflowFunction.fallback() 获取降级输出，继续执行 */
+    /** Execute the configured fallback function and continue. */
     FALLBACK,
-    /** 按 retryCount / retryBaseMs 指数退避重试 */
+    /** Retry up to [WorkflowNode.retryCount] times, then FAIL. */
     RETRY
 }

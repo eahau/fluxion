@@ -4,46 +4,46 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * 外部信号 — 类比 Temporal Signal，用于向运行中的工作流注入数据
+ * External signal -- similar to Temporal Signal, used to inject data into running workflows.
  *
- * 典型场景：
- *   - 人工审批：向等待审批的工作流发送 approve/reject 信号
- *   - 外部事件驱动：webhook 回调向工作流注入数据
- *   - 人工干预：运维人员向卡住的工作流注入跳过数据
+ * Typical scenarios:
+ *   - Manual approval: send approve/reject signal to a workflow waiting for approval
+ *   - External event driven: webhook callback injects data into workflow
+ *   - Manual intervention: ops injects skip data into a stuck workflow
  */
 data class Signal(
-    /** 信号名称（对应 waitForSignal 节点的 signalName 参数） */
+    /** Signal name (matches the signalName parameter of a waitForSignal node) */
     val name: String,
-    /** 信号携带的数据（作为 waitForSignal 节点的输出） */
+    /** Data carried by the signal (serves as output of the waitForSignal node) */
     val payload: Any? = null
 )
 
 /**
- * 信号投递代理 — 管理运行中工作流的信号收发
+ * Signal delivery broker -- manages signal reception for running workflows.
  *
- * 支持信号缓冲：信号可以先于 await 到达（deliver-then-await），
- * 也可以后于 await 到达（await-then-deliver），两种顺序均安全。
+ * Supports signal buffering: signals can arrive before await (deliver-then-await)
+ * or after await (await-then-deliver); both orderings are safe.
  *
- * 线程安全：基于 ConcurrentHashMap，适用于高并发场景。
+ * Thread-safe: based on ConcurrentHashMap, suitable for high-concurrency scenarios.
  */
 class SignalBroker {
 
-    /** 等待中的信号槽：executionId → signalName → pending future */
+    /** Waiting signal slots: executionId -> signalName -> pending future */
     private val waiters = ConcurrentHashMap<String, ConcurrentHashMap<String, CompletableFuture<Signal>>>()
 
-    /** 已缓冲的信号（信号先于 await 到达）：executionId → signalName → completed future */
+    /** Buffered signals (signal arrived before await): executionId -> signalName -> completed future */
     private val buffered = ConcurrentHashMap<String, ConcurrentHashMap<String, CompletableFuture<Signal>>>()
 
     /**
-     * 发送信号到指定执行。
+     * Send a signal to a specified execution.
      *
-     * 如果有节点正在等待该信号 → 立即唤醒；
-     * 如果尚无节点等待 → 缓冲信号，后续 await 时立即返回。
+     * If a node is currently waiting for this signal -> wake it immediately;
+     * If no node is waiting -> buffer the signal, later await returns immediately.
      *
-     * @return true 信号已被接受（投递或缓冲）
+     * @return true if signal was accepted (delivered or buffered)
      */
     fun send(executionId: String, signal: Signal): Boolean {
-        // 检查是否有等待者
+        // check if there are waiters
         val execWaiters = waiters[executionId]
         if (execWaiters != null) {
             val future = execWaiters.remove(signal.name)
@@ -52,22 +52,23 @@ class SignalBroker {
                 return true
             }
         }
-        // 无等待者 → 缓冲
-        buffered.computeIfAbsent(executionId) { ConcurrentHashMap() }[signal.name] = CompletableFuture.completedFuture(signal)
+        // no waiter -> buffer
+        buffered.computeIfAbsent(executionId) { ConcurrentHashMap() }[signal.name] =
+            CompletableFuture.completedFuture(signal)
         return true
     }
 
     /**
-     * 阻塞等待信号到达。
+     * Block waiting for a signal to arrive.
      *
-     * 如果信号已缓冲 → 立即返回；
-     * 如果信号未到达 → 注册等待槽并阻塞直到 [send] 唤醒。
+     * If signal is already buffered -> return immediately;
+     * If signal hasn't arrived -> register waiter and block until [send] wakes it.
      *
-     * @param timeoutMs 超时毫秒数（<=0 表示无限等待）
-     * @return 信号对象，超时返回 null
+     * @param timeoutMs timeout in milliseconds (<=0 means wait indefinitely)
+     * @return Signal object, or null on timeout
      */
     fun awaitSignal(executionId: String, signalName: String, timeoutMs: Long = 0): Signal? {
-        // 检查缓冲
+        // check buffered
         val execBuffered = buffered[executionId]
         if (execBuffered != null) {
             val future = execBuffered.remove(signalName)
@@ -76,12 +77,12 @@ class SignalBroker {
             }
         }
 
-        // 注册等待槽
+        // register waiter
         val future = CompletableFuture<Signal>()
         val execWaiters = waiters.computeIfAbsent(executionId) { ConcurrentHashMap() }
         execWaiters[signalName] = future
 
-        // 二次检查缓冲（send 可能在 put 和 get 之间到达）
+        // double-check buffered (send may have arrived between put and get)
         val execBuffered2 = buffered[executionId]
         if (execBuffered2 != null) {
             val bufferedFuture = execBuffered2.remove(signalName)
@@ -108,7 +109,7 @@ class SignalBroker {
     }
 
     /**
-     * 查询指定执行的已缓冲信号列表（用于 Query API）
+     * Query buffered signal list for a specified execution (used by Query API)
      */
     fun pendingSignals(executionId: String): List<String> {
         val execBuffered = buffered[executionId] ?: return emptyList()
@@ -116,7 +117,7 @@ class SignalBroker {
     }
 
     /**
-     * 查询指定执行正在等待的信号列表（用于 Query API）
+     * Query waiting signal list for a specified execution (used by Query API)
      */
     fun waitingSignals(executionId: String): List<String> {
         val execWaiters = waiters[executionId] ?: return emptyList()
@@ -124,7 +125,7 @@ class SignalBroker {
     }
 
     /**
-     * 清理指定执行的所有信号槽（执行结束后调用）
+     * Clean up all signal slots for a specified execution (called after execution ends)
      */
     fun cleanup(executionId: String) {
         waiters.remove(executionId)?.values?.forEach { it.cancel(true) }

@@ -12,7 +12,7 @@ class DagTopologyTest {
     private fun node(id: String, dependsOn: List<String>? = null) =
         WorkflowNode(id = id, name = id, dependsOn = dependsOn)
 
-    // ─── topologicalSort ────────────────────────────────────────
+    // 闁冲厜鍋撻柍鍏夊亾闁冲厜鍋?topologicalSort 闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾
 
     @Test
     fun `linear chain sorted correctly`() {
@@ -28,7 +28,7 @@ class DagTopologyTest {
 
     @Test
     fun `diamond dependency`() {
-        // a → b, a → c, b → d, c → d
+        // a 闁?b, a 闁?c, b 闁?d, c 闁?d
         val nodes = listOf(
             node("a"),
             node("b", dependsOn = listOf("a")),
@@ -67,7 +67,7 @@ class DagTopologyTest {
         assertTrue(sorted!!.isEmpty())
     }
 
-    // ─── 环检测 ────────────────────────────────────────────────
+    // 闁冲厜鍋撻柍鍏夊亾闁冲厜鍋?闁绘粠鍨遍ˉ鍛?闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾
 
     @Test
     fun `cycle returns null`() {
@@ -96,7 +96,7 @@ class DagTopologyTest {
         assertNull(DagTopology.topologicalSort(nodes))
     }
 
-    // ─── validate ──────────────────────────────────────────────
+    // 闁冲厜鍋撻柍鍏夊亾闁冲厜鍋?validate 闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾
 
     @Test
     fun `validate returns sorted result for valid DAG`() {
@@ -138,13 +138,13 @@ class DagTopologyTest {
         }
     }
 
-    // ─── 复杂场景 ──────────────────────────────────────────────
+    // 闁冲厜鍋撻柍鍏夊亾闁冲厜鍋?濠㈣泛绉靛鍛村捶閻戞ɑ鐝?闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾
 
     @Test
     fun `complex DAG with multiple roots`() {
         // Two independent roots: a, x
-        // a → b → d
-        // x → y → d
+        // a 闁?b 闁?d
+        // x 闁?y 闁?d
         val nodes = listOf(
             node("a"),
             node("x"),
@@ -162,8 +162,8 @@ class DagTopologyTest {
 
     @Test
     fun `fan-out then fan-in`() {
-        // a → b, a → c, a → d
-        // b → e, c → e, d → e
+        // a 闁?b, a 闁?c, a 闁?d
+        // b 闁?e, c 闁?e, d 闁?e
         val nodes = listOf(
             node("a"),
             node("b", dependsOn = listOf("a")),

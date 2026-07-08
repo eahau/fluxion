@@ -3,16 +3,21 @@ package com.fluxion.core.value
 import com.fluxion.core.enums.FunctionStatus
 
 /**
- * 函数执行结果 — 显式声明副作用
+ * Typed return value from a single function invocation.
  *
- * @param O 业务输出类型
+ * Functions may return a raw value (which the engine wraps in
+ * [FunctionResult.success] automatically) or a `FunctionResult` directly
+ * when they need to report [FunctionStatus.SKIPPED] or attach side-effects
+ * for Saga compensation.
+ *
+ * @param O the declared output type of the function.
  */
 data class FunctionResult<O>(
-    /** 业务输出（下一节点的 directInput） */
+    /** Value produced by the function; null when status != SUCCESS. */
     val output: O?,
-    /** 函数执行状态 */
+    /** Terminal status of this invocation. */
     val status: FunctionStatus,
-    /** 声明发生的副作用（DB写、MQ发送），供 Saga 回滚使用 */
+    /** Side effects produced; consumed by [SagaExecutor] during compensation planning. */
     val sideEffects: List<SideEffect> = emptyList()
 ) {
     companion object {

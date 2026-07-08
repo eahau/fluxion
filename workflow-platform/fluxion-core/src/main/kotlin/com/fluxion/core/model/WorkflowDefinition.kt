@@ -5,89 +5,92 @@ import com.fluxion.core.enums.Protocol
 import com.fluxion.core.util.DagTopology
 
 /**
- * 工作流定义 — 对应 wf_definition 表，序列化后存储 nodes_config
+ * Immutable description of a workflow that the engine can execute.
+ *
+ * Mirrors the `wf_definition` table schema published by the admin
+ * console. Serialised payloads from the admin are JSON (stored in
+ * `nodes_config`) and the runtime rehydrates them into this data class
+ * before handing them to [WorkflowEngine].
  */
 data class WorkflowDefinition(
     var id: String = "",
     var name: String = "",
-    /** 工作流类别：META（元工作流）/ BUSINESS */
+    /** UI / grouping category (free-form, e.g. `BUSINESS`, `INTEGRATION`). */
     var category: String = "BUSINESS",
-    /** 1=核心元工作流，禁止删除 */
+    /** Protected-flag: `1` means only operators with elevated rights can edit. */
     var isProtectedFlag: Int = 0,
-    /** 适配器协议 */
+    /** Transport protocol used by inbound adapters (HTTP / Dubbo / gRPC / Kafka / INTERNAL). */
     var protocol: Protocol = Protocol.HTTP,
-    /** 路由标识（HTTP=path, Dubbo=serviceMethod, gRPC=method, Kafka=topic） */
+    /** Protocol-specific address: HTTP=path, Dubbo=serviceMethod, gRPC=method, Kafka=topic. */
     var method: String? = null,
     var path: String? = null,
-    /** 协议扩展配置（Dubbo/gRPC/Kafka 特有字段） */
+    /** Additional per-protocol knobs (gRPC package, Kafka consumer group, ...). */
     var protocolConfig: Map<String, Any>? = null,
-    /** 入参 JSON Schema（对应 wf_definition.input_schema） */
+    /** Inline JSON schema for the workflow input. */
     var inputSchema: Any? = null,
     /**
-     * 入参 Schema 格式标识（"json-schema" / "protobuf" / "avro"）。
+     * Schema format for `inputSchema` — `json-schema`, `protobuf`, `avro`, ...
      *
-     * 为 null 时默认使用 JSON Schema（向后兼容）。
-     * 对应 wf_definition.input_schema_format 列。
+     * When `null` the engine treats the payload as legacy JSON Schema (default
+     * behaviour for admin console versions that do not set the field).
      */
     var inputSchemaFormat: String? = null,
-    /** 出参 JSON Schema */
+    /** Inline JSON schema for the workflow output. */
     var outputSchema: Any? = null,
-    /**
-     * 出参 Schema 格式标识（"json-schema" / "protobuf" / "avro"）。
-     *
-     * 为 null 时默认使用 JSON Schema（向后兼容）。
-     */
+    /** Schema format for `outputSchema`; same semantics as [inputSchemaFormat]. */
     var outputSchemaFormat: String? = null,
-    /** 节点列表（顺序执行 / DAG 执行） */
+    /** The DAG of nodes that makes up the workflow body. */
     var nodes: List<WorkflowNode> = emptyList(),
-    /** 工作流级全局参数（所有节点可通过 nodeParams 引用） */
+    /** Workflow-level params merged with every node's [NodeInput.workflowInput]. */
     var globalParams: Map<String, Any>? = null,
-    /** 事务配置（null=不开启事务） */
+    /** Optional DB-transaction wrapping (isolation, propagation, timeout). */
     var transactionConfig: TransactionConfig? = null,
     /**
-     * 工作流级装饰器列表（按顺序包裹整段工作流执行）。
+     * Decorator refs applied to the *whole* workflow (not individual nodes).
      *
-     * 与 [WorkflowNode.decorators] 相互独立：前者作用于工作流整体，后者作用于单个节点。
-     * 示例：["workflow:transaction", "workflow:lock", "workflow:ratelimit"]
+     * Typical entries: `["workflow:transaction", "workflow:lock", "workflow:ratelimit"]`.
+     * Per-node decorators run inside the scope of workflow-level decorators.
      */
     var workflowDecorators: List<String>? = null,
-    /**
-     * 工作流级装饰器参数（key=装饰器名，value=该装饰器的参数 Map）。
-     *
-     * 参数读取复用 [WorkflowNode.decoratorParams] 同一套扩展函数。
-     */
+    /** Per-workflow-decorator parameter map: `decoratorName → { key → value }`. */
     var workflowDecoratorParams: Map<String, Map<String, Any>>? = null,
-    /** 1=使用 SagaExecutor 执行 */
+    /** `1` enables Saga compensation on failure walk-back. */
     var sagaEnabled: Int = 0,
-    /** 工作流状态：DRAFT / PUBLISHED / DEPRECATED */
+    /** Draft / Published / Deprecated lifecycle flag (admin console only). */
     var status: String = "DRAFT",
     var version: Int = 0,
     var createdBy: String? = null,
-    /** 作用域：PLATFORM / PRIVATE / MARKETPLACE */
+    /** Visibility scope: PLATFORM / PRIVATE / MARKETPLACE. */
     var scope: String = "PRIVATE",
-    /** 所属应用分组（scope=PRIVATE 时有效） */
+    /** Owning app / tenant group (required when scope == PRIVATE). */
     var appGroup: String? = null,
     /**
-     * 错误处理函数引用（可选）
-     * 示例：errorHandlerRef = "wf:errorWrapper" → 管理后台配置的错误封装工作流
+     * Global error handler reference invoked when a node fails and its
+     * own [ErrorStrategy] does not fully resolve the problem.
+     *
+     * Typical value: `"wf:errorWrapper"` — wraps the underlying error in
+     * a user-friendly envelope and writes the full stack to the audit log.
      */
     var errorHandlerRef: String? = null,
-    /**
-     * 触发器列表（定义工作流的启动方式，支持多种触发方式）
-     */
+    /** All triggers that can launch an instance of this definition. */
     var triggers: List<WorkflowTrigger> = emptyList()
 ) {
     /**
-     * 拓扑排序后的节点 ID 列表。
+     * Topologically-sorted node ids derived from [nodes] and
+     * [WorkflowNode.dependsOn].
      *
-     * 懒加载：每个 WorkflowDefinition 实例只计算一次；
-     * 不参与 JSON 序列化，避免污染对外存储/传输格式。
+     * Memoised (lazy) because the same definition is reused across
+     * thousands of executions; JSON deserialisation does not re-run the
+     * sort and the sorted view survives cache round-trips because the
+     * property is annotated `@get:JsonIgnore`. Returns `emptyList()`
+     * if the graph has a cycle (callers that require strict correctness
+     * should call [DagTopology.validate] explicitly).
      */
     @get:JsonIgnore
     val sortedNodeIds: List<String> by lazy { DagTopology.topologicalSort(nodes) ?: emptyList() }
 
-    /** 是否开启 Saga */
+    /** True when Saga compensation walk-back is enabled. */
     fun isSagaEnabled(): Boolean = sagaEnabled == 1
-    /** 是否是受保护的元工作流 */
+    /** True when the definition is marked read-only for non-operators. */
     fun isProtected(): Boolean = isProtectedFlag == 1
 }

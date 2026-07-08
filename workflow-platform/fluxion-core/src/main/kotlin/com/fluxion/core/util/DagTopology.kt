@@ -5,34 +5,41 @@ import com.fluxion.core.exception.DuplicateNodeIdException
 import com.fluxion.core.model.WorkflowNode
 
 /**
- * DAG 拓扑工具。
+ * DAG (directed acyclic graph) validation and topological sorting for
+ * workflow node graphs.
  *
- * 集中处理拓扑排序、环检测、重复节点 ID 与悬空依赖检查，
- * 供执行器与配置时校验共用。
+ * Two entry points:
+ *  - [validate] — full structural check (unique ids, no dangling
+ *    references, no cycles) used at publish-time.  Throws typed
+ *    exceptions so the admin console can render precise error UI.
+ *  - [topologicalSort] — hot-path Kahn sort used at the start of every
+ *    execution.  Returns `null` on cycle instead of throwing because
+ *    hot-path callers prefer a graceful degrade + fallback to linear
+ *    order rather than a fatal exception.
  */
 object DagTopology {
 
     /**
-     * 拓扑校验结果。
+     * Result wrapper from [validate].
      *
-     * @property sortedIds 拓扑排序后的节点 ID 列表
+     * @property sortedIds nodes in a valid topological execution order.
      */
     data class Result(val sortedIds: List<String>)
 
     /**
-     * 校验并拓扑排序。
+     * Full structural validation of a workflow definition graph.
      *
-     * 校验项：
-     * 1. 节点 ID 不能重复
-     * 2. dependsOn 引用的节点必须存在
-     * 3. DAG 不能成环
+     * Performs three checks in order:
+     *  1. Every node id is unique.
+     *  2. Every `dependsOn` reference resolves to an existing node.
+     *  3. The graph contains no cycles (topological sort covers all nodes).
      *
-     * @param workflowId 工作流 ID，用于异常信息
-     * @param nodes 节点列表
-     * @return 拓扑排序结果
-     * @throws DuplicateNodeIdException 存在重复节点 ID
-     * @throws CyclicDependencyException 存在循环依赖
-     * @throws IllegalArgumentException 依赖了不存在的节点
+     * @param workflowId owning definition id — attached to exception messages.
+     * @param nodes      the graph to validate.
+     * @return sorted node ids if valid.
+     * @throws DuplicateNodeIdException if any node id repeats.
+     * @throws CyclicDependencyException if the graph contains a cycle.
+     * @throws IllegalArgumentException if a node references a non-existent dep.
      */
     fun validate(workflowId: String, nodes: List<WorkflowNode>): Result {
         val duplicate = nodes.groupingBy { it.id }.eachCount().entries.find { it.value > 1 }?.key
@@ -45,7 +52,7 @@ object DagTopology {
             node.dependsOn?.forEach { dep ->
                 if (dep !in nodeIds) {
                     throw IllegalArgumentException(
-                        "节点 [${node.id}] 依赖了不存在的节点 [$dep]"
+                        "Node [${node.id}] depends on [$dep] which does not exist in workflow [$workflowId]"
                     )
                 }
             }
@@ -57,9 +64,16 @@ object DagTopology {
     }
 
     /**
-     * Kahn 算法拓扑排序。
+     * Kahn's algorithm — produces a topological order of the node ids
+     * from a list of [WorkflowNode] whose edges are carried in
+     * [WorkflowNode.dependsOn].
      *
-     * @return 拓扑有序节点 ID 列表；若存在环则返回 null
+     * Returns `null` if the graph has a cycle (i.e. the resulting
+     * order contains fewer nodes than the input).  The algorithm is
+     * O(V + E) and allocation-light on hot paths because it reuses
+     * mutable maps built once per call.
+     *
+     * @return topologically-sorted node ids, or `null` on cycle.
      */
     fun topologicalSort(nodes: List<WorkflowNode>): List<String>? {
         val inDegree = mutableMapOf<String, Int>()

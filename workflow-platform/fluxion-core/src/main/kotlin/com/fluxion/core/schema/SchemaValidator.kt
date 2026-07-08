@@ -1,23 +1,31 @@
 package com.fluxion.core.schema
 
 import com.fluxion.core.exception.SchemaValidationException
-import com.fluxion.core.value.ValidationResult
 import com.fluxion.schema.api.SchemaManager
 import com.fluxion.schema.json.JsonSchemaParser
 import com.fluxion.schema.json.JsonSchemaValidator
 import com.fluxion.schema.model.Schema
 import com.fluxion.schema.model.SchemaFormat
+import com.fluxion.schema.model.ValidationResult
 import org.slf4j.LoggerFactory
+import org.slf4j.error
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * JSON Schema 校验器 — 已迁移至 [com.fluxion.schema.api.SchemaManager]。
+ * Validates payloads against JSON Schema (and, optionally, other
+ * SchemaManager-backed formats).
  *
- * 此类作为 fluxion-core 的兼容适配器保留。
- * - 若构造时传入 [SchemaManager]，则委托其多格式能力进行解析与校验；
- * - 否则回退到纯 JSON Schema 模式（兼容旧代码）。
+ * Operates in two modes:
+ *  - **Bare (no SchemaManager injected):** Falls back to a bundled
+ *    Jackson-backed `JsonSchemaValidator` plus `JsonSchemaParser`.
+ *    Sufficient for local dev and tests, no admin console dependency.
+ *  - **With SchemaManager injected:** Delegates parse + validate to
+ *    the manager so that Protobuf/Avro/custom formats are also
+ *    honoured, and reference schemas (`schema:name`) resolve cleanly.
  *
- * 新增代码建议直接使用 [com.fluxion.schema.api.SchemaManager]。
+ * Compiled schemas are cached by identity-hashcode of the raw input
+ * plus format, so repeated calls with the same payload definition
+ * do not re-parse.
  */
 class SchemaValidator @JvmOverloads constructor(
     private val schemaManager: SchemaManager? = null
@@ -27,32 +35,28 @@ class SchemaValidator @JvmOverloads constructor(
     private val parser = JsonSchemaParser()
     private val validator = JsonSchemaValidator()
 
-    /**
-     * 缓存已编译的 Schema（按原始对象 identityHashCode 去重）。
-     */
+    /** identityHashCode(schemaAny) → compiled Schema. */
     private val schemaCache = ConcurrentHashMap<Int, Schema>()
 
     /**
-     * 校验数据是否符合 Schema。
-     *
-     * schema 为 null 或空 Schema 时直接返回 ok（不校验）。
-     * 当有 SchemaManager 时支持多格式，否则仅支持 JSON Schema。
-     *
-     * @param schema  Schema（String 或 Map）
-     * @param data    待校验数据
-     * @return 校验结果（valid + errors）
+     * Validate `data` against `schema` using the default JSON Schema
+     * format.  Returns a [ValidationResult] — callers decide whether
+     * to throw, log, or attach to an HTTP 400 envelope.
      */
     fun validate(schema: Any?, data: Any?): ValidationResult {
         return validate(schema, data, null)
     }
 
     /**
-     * 格式感知的 Schema 校验。
+     * Validate `data` against `schema` with an explicit [SchemaFormat].
      *
-     * @param schema  Schema（String 或 Map）
-     * @param data    待校验数据
-     * @param format  Schema 格式（null 时默认 JSON Schema，向后兼容）
-     * @return 校验结果（valid + errors）
+     * When a SchemaManager is present it is used for both parse and
+     * validate; otherwise the bundled JSON Schema validator handles
+     * the call.  `null` or empty schemas short-circuit to `ok()`.
+     *
+     * @param schema raw schema — String, Map, or (rarely) pre-parsed.
+     * @param data   payload to validate.
+     * @param format declared format; `null` ⇒ JSON Schema (legacy default).
      */
     fun validate(schema: Any?, data: Any?, format: SchemaFormat?): ValidationResult {
         if (schema == null || isEmptySchema(schema)) return ValidationResult.ok()
@@ -65,24 +69,23 @@ class SchemaValidator @JvmOverloads constructor(
                 validator.validate(compiled, data)
             }
         } catch (e: Exception) {
-            log.error("Schema validation error: ${e.message}", e)
+            log.error(e) { "Schema validation error: ${e.message}" }
             ValidationResult.fail(listOf("Schema validation internal error: ${e.message}"))
         }
     }
 
     /**
-     * 严格模式校验：不通过时抛出 [SchemaValidationException]。
-     * 用于工作流级 outputSchema 契约校验。
+     * Strict variant of [validate] that throws [SchemaValidationException]
+     * if the result is invalid.
+     *
+     * Used on output paths (e.g. after a function returns) where a
+     * contract violation must fail-fast rather than silently degrade.
      */
     fun validateStrict(schema: Any?, data: Any?) {
         validateStrict(schema, data, null)
     }
 
-    /**
-     * 格式感知的严格模式校验：不通过时抛出 [SchemaValidationException]。
-     *
-     * @param format Schema 格式（null 时默认 JSON Schema，向后兼容）
-     */
+    /** @see validateStrict */
     fun validateStrict(schema: Any?, data: Any?, format: SchemaFormat?) {
         if (schema == null || isEmptySchema(schema)) return
         val result = validate(schema, data, format)
@@ -92,14 +95,17 @@ class SchemaValidator @JvmOverloads constructor(
     }
 
     /**
-     * 判断是否为空 Schema（null、空字符串、空 JSON "{}" 等）
+     * True if the schema payload carries no constraints.
+     *
+     * Accepts raw JSON strings (`"{}"`, `"null"`, blank) and Map/Node
+     * forms — compares against the serialised JSON form for safety.
      */
     private fun isEmptySchema(schema: Any): Boolean {
         val str = if (schema is String) schema.trim() else com.fluxion.core.util.JsonUtil.serialize(schema)
         return str.isBlank() || str == "{}" || str == "null"
     }
 
-    /** 编译并缓存 Schema（JSON Schema 模式）。 */
+    /** Compile and cache a raw JSON Schema payload. */
     private fun compileSchema(schema: Any): Schema {
         val hashKey = System.identityHashCode(schema)
         return schemaCache.computeIfAbsent(hashKey) {
@@ -108,10 +114,10 @@ class SchemaValidator @JvmOverloads constructor(
     }
 
     /**
-     * 编译并缓存 Schema（多格式模式）。
-     *
-     * @param schema Schema 原始内容（String 或 Map）
-     * @param format Schema 格式（决定使用哪个 Parser/Validator）
+     * Compile and cache a schema payload for an arbitrary format via
+     * SchemaManager.  Cache key is identity-hash × format-hash so the
+     * same Map parsed once as JSON Schema and once as Protobuf does
+     * not collide.
      */
     private fun compileSchemaMultiFormat(schema: Any, format: SchemaFormat = SchemaFormat.JSON_SCHEMA): Schema {
         val hashKey = System.identityHashCode(schema) * 31 + format.hashCode()

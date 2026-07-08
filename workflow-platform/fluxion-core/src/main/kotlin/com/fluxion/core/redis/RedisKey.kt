@@ -4,26 +4,30 @@ import com.fluxion.core.model.NodeInput
 import com.fluxion.core.model.WorkflowNode
 
 /**
- * Redis Key 命名规范工具。
+ * Redis key formatter for Fluxion engine data structures.
  *
- * 规范：{appName:domain}:businessKey
- * - appName：应用名（通常对应 WorkflowDefinition.appGroup）
- * - domain：域（通常对应 workflowId）
- * - businessKey：业务键
+ * Produces keys of the form `{appName:domain}:businessKey`.  The curly
+ * braces form a Redis Cluster *hash tag* so that all keys sharing the
+ * same `(appName, domain)` pair land on the same shard — this is what
+ * makes multi-key operations (stream XREADGROUP with consumer groups,
+ * Lua scripts that read a lock and a rate-limit counter, etc.) safe in
+ * clustered deployments.
  *
- * 在 Redis 集群中，花括号内的 "appName:domain" 作为 hash tag，
- * 确保同一应用/工作流下的相关 Key 路由到同一个哈希槽。
+ * `appName` defaults to the appGroup declared on [WorkflowDefinition]
+ * or the static string `"fluxion"`; `domain` is usually a workflow id
+ * or a sub-system identifier.  `businessKey` is the per-instance
+ * discriminator (idempotency key, lock key, node id, ...).
  */
 object RedisKey {
 
     private const val DEFAULT_APP_NAME = "fluxion"
 
     /**
-     * 按规范格式化 Redis Key。
+     * Format a hashed Redis key.
      *
-     * @param appName 应用名，为空时使用默认值 "fluxion"
-     * @param domain 域，为空时使用默认值 "default"
-     * @param businessKey 业务键
+     * @param appName     app/tenant group; blank falls back to `"fluxion"`.
+     * @param domain      sub-system identifier (workflowId, subsystem); blank → `"default"`.
+     * @param businessKey per-instance discriminator.
      */
     @JvmStatic
     fun format(appName: String?, domain: String, businessKey: String): String {
@@ -33,34 +37,31 @@ object RedisKey {
         return "{$app:$dom}:$biz"
     }
 
-    /**
-     * 从 [WorkflowNode] 生成 Key：appName=node.appGroup, domain=node.workflowId。
-     */
+    /** Convenience overload that sources appGroup/workflowId from a [WorkflowNode]. */
     @JvmStatic
     fun fromNode(node: WorkflowNode, businessKey: String): String =
         format(node.appGroup, node.workflowId, businessKey)
 
-    /**
-     * 从 [NodeInput] 生成 Key：appName=meta.appGroup, domain=meta.workflowId。
-     */
+    /** Convenience overload that sources appGroup/workflowId from a [NodeInput]'s metadata. */
     @JvmStatic
     fun fromInput(input: NodeInput, businessKey: String): String =
         format(input.meta?.appGroup, input.meta?.workflowId ?: "", businessKey)
 
     /**
-     * 判断 key 是否已经包含集群 hash tag（形如 {...}:...）。
+     * True iff `key` already has a hash tag of the form `{...}:...`.
      *
-     * 用于用户显式传入 Key 的场景：若已带 hash tag 则不再二次包装，
-     * 避免破坏用户自定义的槽位路由。
+     * When true, callers should pass the key through unchanged so that
+     * admin-supplied cache / rate-limit keys retain their user-chosen
+     * shard affinity.
      */
     @JvmStatic
     fun hasHashTag(key: String): Boolean =
         key.startsWith("{") && key.contains("}:")
 
     /**
-     * 若 key 尚未包含 hash tag，则按规范包装；否则保持原样。
-     *
-     * 适用于 RedisCommandFunction、CacheFunctions 等接收用户配置 Key 的场景。
+     * Wrap a user-supplied key with a hash tag if it does not already
+     * carry one.  Idempotent — keys that already look tagged are
+     * returned verbatim.
      */
     @JvmStatic
     fun wrapIfNeeded(appName: String?, domain: String, key: String): String {

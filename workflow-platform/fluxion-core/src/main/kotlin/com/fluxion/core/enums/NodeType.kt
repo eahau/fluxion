@@ -1,19 +1,24 @@
 package com.fluxion.core.enums
 
-/** 节点函数类型（决定 FunctionRegistry 的解析优先级） */
+/**
+ * Classification of workflow nodes used by
+ * [com.fluxion.core.engine.WorkflowEngine] to route execution to the correct
+ * component (builtin registry, script engine, external gateway or control
+ * executor).
+ */
 enum class NodeType {
-    /** 内置函数（builtin:* 前缀，引擎内置） */
+    /** Built-in function shipped with Fluxion (registered via `builtin:*` refs). */
     BUILTIN,
-    /** 自定义函数（代码中 registry.register() 注册） */
+    /** User-defined Kotlin/Java function registered via FunctionRegistry. */
     CUSTOM,
-    /** 脚本函数（Groovy/JS，存储在 wf_function 表） */
+    /** Script-based function (Groovy / JS) loaded from `wf_function`. */
     SCRIPT,
-    /** 外部服务函数（通过 Function Gateway gRPC/HTTP 调用） */
+    /** Remote call through the Function Gateway (gRPC / HTTP / Dubbo). */
     EXTERNAL,
-    /** 循环节点（遍历数组，每次迭代执行子节点） */
+    /** Loop control node — drives iterative execution over a collection. */
     LOOP,
-    /** 等待节点（暂停执行，等待外部信号恢复） */
+    /** Wait (signal) node — suspends execution until an external signal arrives. */
     WAIT,
-    /** 子工作流节点（调用另一个工作流，实现逻辑复用与组合） */
+    /** Sub-workflow node — delegates to another [WorkflowDefinition] tree. */
     SUB_WORKFLOW
 }

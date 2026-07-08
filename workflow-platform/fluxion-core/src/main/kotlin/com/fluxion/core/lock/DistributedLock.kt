@@ -4,26 +4,26 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * 分布式锁句柄 — 获取成功后返回，用于释放锁。
+ * Distributed lock handle -- returned on successful acquire, used to release the lock.
  *
- * 实现类应持有底层客户端的锁引用（如 Redisson RLock、
- * Redis SET NX 的 token 等），但对外仅暴露 key 与 token。
+ * Implementations should hold the underlying client's lock reference (e.g. Redisson RLock,
+ * Redis SET NX token, etc.), but only expose key and token externally.
  */
 interface DistributedLock {
-    /** 锁键 */
+    /** Lock key */
     val key: String
 
     /**
-     * 唯一标识符（用于安全释放，避免误释放他人持有的锁）。
-     * 对于不区分持有者的简单实现，可返回空字符串。
+     * Unique identifier (for safe release to avoid releasing a lock held by others).
+     * For simple implementations that don't distinguish holders, may return empty string.
      */
     val token: String
 }
 
 /**
- * 分布式锁参数。
+ * Distributed lock parameters.
  *
- * 供 [DistributedLockProvider.lock] / [lockSuspending] 使用，避免方法签名过长。
+ * Used by [DistributedLockProvider.lock] / [lockSuspending] to avoid overly long method signatures.
  */
 data class LockParams(
     val waitMillis: Long = 0L,
@@ -35,24 +35,27 @@ data class LockParams(
 )
 
 /**
- * 分布式锁提供者 SPI — 零框架依赖。
+ * Distributed lock provider SPI -- zero framework dependencies.
  *
- * 屏蔽底层 Redis / ZooKeeper / Database 等实现差异，
- * 供 [com.fluxion.core.decorator.NodeDecorator] 与 WorkflowRouter 使用。
+ * Hides underlying Redis / ZooKeeper / Database implementation differences,
+ * for use by [com.fluxion.decorator.decorator.NodeDecorator] and WorkflowRouter.
  */
 interface DistributedLockProvider {
 
     /**
-     * 尝试获取分布式锁。
+     * Attempt to acquire a distributed lock.
      *
-     * @param lockKey     锁键（调用方已拼接好业务维度，如 workflowId:nodeId:bizKey）
-     * @param leaseMillis 锁租约（最大持有时间，毫秒）。超过此时间未释放，锁应自动失效。
-     * @param waitMillis  最大等待时间（毫秒）。0 表示不等待，立即返回。
-     * @param retry       获取失败后的重试次数（默认 0）。
-     * @param retryIntervalMillis 每次重试间隔（毫秒，默认 0）。
-     * @param sync        是否同步阻塞获取锁（默认 false）。为 true 时拿不到锁一直阻塞，
-     *                    直到获取成功（慎用，会阻塞当前线程/协程）。
-     * @return 获取成功返回 [DistributedLock]，失败返回 null
+     * @param lockKey     Lock key (caller has already concatenated business dimensions,
+     *                    e.g. workflowId:nodeId:bizKey)
+     * @param leaseMillis Lock lease (max hold time, milliseconds). If not released
+     *                    before this time, the lock should auto-expire.
+     * @param waitMillis  Max wait time (milliseconds). 0 means don't wait, return immediately.
+     * @param retry       Number of retries after failure (default 0).
+     * @param retryIntervalMillis Interval between retries (milliseconds, default 0).
+     * @param sync        Whether to block synchronously acquiring the lock (default false).
+     *                    When true, blocks until lock is acquired (use with caution,
+     *                    will block the current thread/coroutine).
+     * @return [DistributedLock] on success, null on failure.
      */
     fun acquire(
         lockKey: String,
@@ -64,20 +67,23 @@ interface DistributedLockProvider {
     ): DistributedLock?
 
     /**
-     * 释放由 [acquire] 获取的锁。
+     * Release the lock acquired by [acquire].
      *
-     * 实现类应校验 [DistributedLock.token]，仅释放当前持有者持有的锁。
-     * 释放失败（如锁已超时）不应抛出异常，仅记录日志。
+     * Implementations should verify [DistributedLock.token] and only release
+     * locks held by the current holder.
+     * Release failure (e.g. lock already expired) should not throw, only log.
      */
     fun release(lock: DistributedLock)
 
     /**
-     * 在分布式锁保护下执行 [action]。
+     * Execute [action] under distributed lock protection.
      *
-     * 默认实现基于 [acquire] / [release] 封装，调用方无需手动管理锁生命周期。
-     * 实现类可覆盖此方法以利用底层客户端的原生能力（如 Redisson 的 lock.lock() / tryLock()）。
+     * Default implementation wraps [acquire] / [release]; callers don't need
+     * to manage the lock lifecycle manually.
+     * Implementations may override to leverage the underlying client's native
+     * capabilities (e.g. Redisson's lock.lock() / tryLock()).
      *
-     * @param params 锁参数（含失败策略 [LockParams.failOnLocked]）
+     * @param params Lock parameters (includes failure strategy [LockParams.failOnLocked]).
      */
     fun <T> lock(
         lockKey: String,
@@ -104,13 +110,14 @@ interface DistributedLockProvider {
             try {
                 release(lock)
             } catch (_: Exception) {
-                // 释放失败不应当影响业务结果，由具体实现自行记录日志
+                // release failure should not affect business result;
+                // implementations log on their own
             }
         }
     }
 
     /**
-     * 无操作实现 — 用于未配置分布式锁的场景。
+     * No-op implementation -- for scenarios where distributed lock is not configured.
      */
     companion object {
         @JvmField
@@ -130,10 +137,10 @@ interface DistributedLockProvider {
 }
 
 /**
- * [DistributedLockProvider.lock] 的 suspend 版本。
+ * Suspend version of [DistributedLockProvider.lock].
  *
- * 锁的获取与释放在 [Dispatchers.IO] 中执行；[action] 在调用方协程调度器中执行，
- * 不强制绑定 IO 线程。
+ * Lock acquire and release run on [Dispatchers.IO]; [action] runs on the
+ * caller's coroutine dispatcher (not forced to IO thread).
  */
 suspend fun <T> DistributedLockProvider.lockSuspending(
     lockKey: String,
@@ -163,7 +170,8 @@ suspend fun <T> DistributedLockProvider.lockSuspending(
             try {
                 release(lock)
             } catch (_: Exception) {
-                // 释放失败不应当影响业务结果，由具体实现自行记录日志
+                // release failure should not affect business result;
+                // implementations log on their own
             }
         }
     }

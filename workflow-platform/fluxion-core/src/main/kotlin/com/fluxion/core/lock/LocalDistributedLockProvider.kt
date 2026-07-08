@@ -4,14 +4,15 @@ import org.slf4j.*
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * 本地（单 JVM）分布式锁实现。
+ * Local (single JVM) distributed lock implementation.
  *
- * 基于 [ConcurrentHashMap] 实现同 JVM 内的互斥，适用于：
- * - 本地开发
- * - 单节点部署且无外部 Redis/ZooKeeper 等分布式协调服务的场景
+ * Based on [ConcurrentHashMap] for intra-JVM mutual exclusion, suitable for:
+ * - Local development
+ * - Single-node deployments without external Redis/ZooKeeper coordination services
  *
- * 注意：该实现无法跨 JVM 互斥，多实例部署时请注入 [RedissonDistributedLockProvider]
- * 等真正的分布式实现。
+ * Note: This implementation cannot provide cross-JVM mutual exclusion.
+ * For multi-instance deployments, inject [RedissonDistributedLockProvider]
+ * or other true distributed implementations.
  */
 class LocalDistributedLockProvider : DistributedLockProvider {
 
@@ -35,7 +36,7 @@ class LocalDistributedLockProvider : DistributedLockProvider {
             }
 
             if (sync) {
-                // 同步阻塞：忙等（仅适用于极端单节点场景）
+                // synchronous blocking: busy-wait (only for extreme single-node scenarios)
                 while (locks.containsKey(lockKey)) {
                     Thread.sleep(retryIntervalMillis.coerceAtLeast(10))
                 }

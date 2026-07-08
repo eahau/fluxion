@@ -9,7 +9,16 @@ import com.fasterxml.jackson.module.kotlin.KotlinFeature
 import com.fasterxml.jackson.module.kotlin.KotlinModule
 
 /**
- * JSON 序列化工具类 — workflow-core 层统一序列化入口
+ * Shared JSON utilities backed by a single configured Jackson
+ * [ObjectMapper] instance.
+ *
+ * Centralised here so that:
+ *  - The engine serialises consistently across admin, runtime, and
+ *    persistence layers (no drifting per-module ObjectMapper configs).
+ *  - Kotlin data classes and default parameters work out of the box
+ *    via `KotlinFeature.NullIsSameAsDefault`.
+ *  - Unknown properties are ignored (forwards-compatible with newer
+ *    admin payloads running on older runtimes).
  */
 object JsonUtil {
 
@@ -25,17 +34,15 @@ object JsonUtil {
         configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false)
     }
 
-    /** 获取共享的 ObjectMapper 实例（只读配置） */
+    /** Shared immutable mapper; mutating the returned instance is UB. */
     @JvmStatic
     fun getMapper(): ObjectMapper = SHARED_MAPPER
 
-    /** 创建自定义配置的 ObjectMapper 实例 */
+    /** Fresh mapper with identical config; for callers that need to tweak settings. */
     @JvmStatic
     fun createCustomMapper(): ObjectMapper = createDefaultMapper()
 
-    // ─── 序列化方法 ──────────────────────────────────────────────
-
-    /** 序列化为 JSON 字符串 */
+    /** Serialise `source` to a compact JSON string. */
     @JvmStatic
     fun serialize(source: Any?): String = try {
         SHARED_MAPPER.writeValueAsString(source)
@@ -43,7 +50,7 @@ object JsonUtil {
         throw RuntimeException("JSON serialize failed: ${ex.message}", ex)
     }
 
-    /** 序列化为格式化的 JSON 字符串 */
+    /** Serialise `source` to a pretty-printed JSON string (dev/debug only). */
     @JvmStatic
     fun serializePretty(source: Any?): String = try {
         SHARED_MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(source)
@@ -51,7 +58,7 @@ object JsonUtil {
         throw RuntimeException("JSON serialize pretty failed: ${ex.message}", ex)
     }
 
-    /** 序列化为 JSON 字节数组 */
+    /** Serialise `source` to a UTF-8 byte array. */
     @JvmStatic
     fun serializeToBytes(source: Any?): ByteArray = try {
         SHARED_MAPPER.writeValueAsBytes(source)
@@ -59,9 +66,7 @@ object JsonUtil {
         throw RuntimeException("JSON serialize to bytes failed: ${ex.message}", ex)
     }
 
-    // ─── 反序列化方法 ────────────────────────────────────────────
-
-    /** 从 JSON 字符串反序列化为指定类型 */
+    /** Deserialise a JSON string into a concrete `Class<T>`. */
     @JvmStatic
     fun <T> deserialize(json: String, clazz: Class<T>): T = try {
         SHARED_MAPPER.readValue(json, clazz)
@@ -69,7 +74,7 @@ object JsonUtil {
         throw RuntimeException("JSON deserialize failed: ${ex.message}", ex)
     }
 
-    /** 从 JSON 字符串反序列化（通过 TypeReference 支持泛型） */
+    /** Deserialise using a Jackson [TypeReference] for generic shapes. */
     @JvmStatic
     fun <T> deserialize(json: String, typeReference: TypeReference<T>): T = try {
         SHARED_MAPPER.readValue(json, typeReference)
@@ -77,7 +82,7 @@ object JsonUtil {
         throw RuntimeException("JSON deserialize with type reference failed: ${ex.message}", ex)
     }
 
-    /** 从字节数组反序列化为指定类型 */
+    /** Deserialise from a UTF-8 byte array into a concrete `Class<T>`. */
     @JvmStatic
     fun <T> deserialize(bytes: ByteArray, clazz: Class<T>): T = try {
         SHARED_MAPPER.readValue(bytes, clazz)
@@ -85,24 +90,26 @@ object JsonUtil {
         throw RuntimeException("JSON deserialize from bytes failed: ${ex.message}", ex)
     }
 
-    /** JSON 字符串 → Map（通用类型） */
+    /** Parse a JSON object into a `Map<String, Any>`. */
     @JvmStatic
     fun toMap(json: String): Map<String, Any> =
         deserialize(json, object : TypeReference<Map<String, Any>>() {})
 
-    /** 任意对象 → Map（通过 convertValue） */
+    /** Convert any bean-ish `source` into a `Map<String, Any>` via convertValue. */
     @JvmStatic
     fun toMap(source: Any): Map<String, Any> =
         SHARED_MAPPER.convertValue(source, object : TypeReference<Map<String, Any>>() {})
 
-    /** JSON 字符串 → List（通用类型） */
+    /** Parse a JSON array into a `List<Any>`. */
     @JvmStatic
     fun toList(json: String): List<Any> =
         deserialize(json, object : TypeReference<List<Any>>() {})
 
-    // ─── 工具方法 ────────────────────────────────────────────────
-
-    /** 判断字符串是否为合法 JSON */
+    /**
+     * True iff `json` parses as valid JSON (not blank, not a partial
+     * document, no unterminated strings / brackets).  Used by the
+     * schema / admin validators to short-circuit without throwing.
+     */
     @JvmStatic
     fun isValidJson(json: String?): Boolean {
         if (json.isNullOrBlank()) return false
@@ -114,16 +121,21 @@ object JsonUtil {
         }
     }
 
-    /** 深拷贝（通过 JSON 序列化/反序列化） */
+    /**
+     * Round-trip deep-copy via serialise → deserialise.
+     *
+     * Cheaper than reflection-based copiers for values that already
+     * have clean JSON mappings; also the canonical way to "detach" a
+     * bean from lazy-loading proxies before handing it across module
+     * boundaries.
+     */
     @JvmStatic
     fun <T> deepCopy(source: T, clazz: Class<T>): T {
         val json = serialize(source)
         return deserialize(json, clazz)
     }
 
-    // ─── 类型转换 ────────────────────────────────────────────────
-
-    /** 对象类型转换（类似 BeanUtils，但支持嵌套泛型） */
+    /** Typed `convertValue` using a target Class. */
     @JvmStatic
     fun <T> convertValue(source: Any?, clazz: Class<T>): T = try {
         SHARED_MAPPER.convertValue(source, clazz)
@@ -131,7 +143,7 @@ object JsonUtil {
         throw RuntimeException("JSON convertValue failed: ${ex.message}", ex)
     }
 
-    /** 对象类型转换（通过 TypeReference 支持泛型） */
+    /** Typed `convertValue` using a `TypeReference` for generics. */
     @JvmStatic
     fun <T> convertValue(source: Any?, typeReference: TypeReference<T>): T = try {
         SHARED_MAPPER.convertValue(source, typeReference)
@@ -139,7 +151,7 @@ object JsonUtil {
         throw RuntimeException("JSON convertValue with type reference failed: ${ex.message}", ex)
     }
 
-    /** 将值转换为 JsonNode 树结构 */
+    /** Convert a value to a Jackson tree (`JsonNode`) for inspection. */
     @JvmStatic
     fun valueToTree(value: Any?): JsonNode = try {
         SHARED_MAPPER.valueToTree(value)
@@ -147,9 +159,7 @@ object JsonUtil {
         throw RuntimeException("JSON valueToTree failed: ${ex.message}", ex)
     }
 
-    // ─── 集合反序列化 ─────────────────────────────────────────────
-
-    /** 反序列化为 List（元素类型安全） */
+    /** Deserialise a JSON array into a typed `List<T>` (element class supplied). */
     @JvmStatic
     fun <T> deserializeList(json: String, elementClass: Class<T>): List<T> = try {
         SHARED_MAPPER.readValue(
@@ -160,7 +170,7 @@ object JsonUtil {
         throw RuntimeException("JSON deserialize list failed: ${ex.message}", ex)
     }
 
-    /** 反序列化为 Set（元素类型安全） */
+    /** Deserialise a JSON array into a typed `Set<T>` (element class supplied). */
     @JvmStatic
     fun <T> deserializeSet(json: String, elementClass: Class<T>): Set<T> = try {
         SHARED_MAPPER.readValue(
@@ -171,11 +181,13 @@ object JsonUtil {
         throw RuntimeException("JSON deserialize set failed: ${ex.message}", ex)
     }
 
-    // ─── Kotlin 扩展 ─────────────────────────────────────────────
-
     /**
-     * 将任意对象按 reified 类型转换，转换失败或 source 为 null 时返回 null。
-     * 通过 TypeReference 支持嵌套泛型（如 List<Map<String, Any>>），避免 unchecked cast。
+     * `convertValue` that returns null instead of throwing on failure,
+     * and additionally passes through `null` source as `null`.
+     *
+     * Convenience wrapper for decorator / function config maps where a
+     * bad shape should degrade gracefully rather than blow up the
+     * whole workflow.
      */
     inline fun <reified T> convertValueOrNull(source: Any?): T? = try {
         source?.let { convertValue(it, object : TypeReference<T>() {}) }
@@ -183,6 +195,6 @@ object JsonUtil {
         null
     }
 
-    /** 反序列化为 reified 类型（Kotlin 内联扩展） */
+    /** Reified `deserialize` so Kotlin callers can skip the Class arg. */
     inline fun <reified T> deserialize(json: String): T = deserialize(json, T::class.java)
 }

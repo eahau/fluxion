@@ -1,11 +1,16 @@
 package com.fluxion.core.enums
 
-/** 函数执行结果状态 */
+/**
+ * Terminal result status of a single function invocation.
+ *
+ * Recorded in [com.fluxion.core.value.NodeExecutionRecord] and persisted by
+ * [com.fluxion.core.log.ExecutionLogStore] for audit and replay.
+ */
 enum class FunctionStatus {
-    /** 正常返回输出 */
+    /** Function completed without throwing. */
     SUCCESS,
-    /** 函数执行失败（抛出异常） */
+    /** Function threw — retry/fallback also exhausted or not configured. */
     FAILED,
-    /** 函数主动跳过（如前置条件不满足） */
+    /** Execution was deliberately skipped (e.g. error strategy SKIP). */
     SKIPPED
 }

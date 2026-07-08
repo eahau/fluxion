@@ -5,38 +5,46 @@ import com.fluxion.core.value.SqlWithParams
 import java.util.Collections
 
 /**
- * SQL 条件构建器。
+ * Safe dynamic SQL generator for admin-console queries.
  *
- * 完整操作符集合，防 SQL 注入：所有值通过 JDBC PreparedStatement 参数化，
- * 表名/字段名经 [validateIdentifier] 白名单校验。
+ * Produces JDBC-compatible SQL fragments with `?` placeholders. Column
+ * identifiers are validated against a strict alphanumeric+underscore regex
+ * via [validateIdentifier] to prevent SQL injection; values are *never*
+ * interpolated into the SQL string and are always passed through the
+ * bind-parameter array.
  *
- * 配合 [SqlCondition] / [SqlWithParams] 使用，支持单条件、组合条件、IN/NOT IN/BETWEEN 等。
+ * Pair with [SqlCondition] / [SqlWithParams] for a fluent, type-safe
+ * predicate DSL that supports IN / NOT IN / BETWEEN and LIKE variants.
  */
 class DynamicSqlGenerator {
 
-    /** SQL 操作符枚举 */
+    /** Supported WHERE-clause comparison operators. */
     enum class Operator {
-        EQ,          // field = ?
-        NEQ,         // field != ?
-        GT,          // field > ?
-        GTE,         // field >= ?
-        LT,          // field < ?
-        LTE,         // field <= ?
-        IN,          // field IN (?, ?, ?)
-        NOT_IN,      // field NOT IN (?, ?, ?)
-        LIKE,        // field LIKE ?
-        LIKE_PREFIX, // field LIKE '?%'
-        LIKE_SUFFIX, // field LIKE '%?'
-        IS_NULL,     // field IS NULL
-        IS_NOT_NULL, // field IS NOT NULL
-        BETWEEN,     // field BETWEEN ? AND ?
+        EQ,
+        NEQ,
+        GT,
+        GTE,
+        LT,
+        LTE,
+        IN,
+        NOT_IN,
+        LIKE,
+        LIKE_PREFIX,
+        LIKE_SUFFIX,
+        IS_NULL,
+        IS_NOT_NULL,
+        BETWEEN,
     }
 
     /**
-     * 根据单条条件构建 SQL 片段 + 绑定参数。
+     * Compile a single [SqlCondition] into a `(sql, params)` pair.
      *
-     * @param condition SQL 条件（字段 + 操作符 + 值）
-     * @return SQL 片段与对应的 PreparedStatement 参数
+     * Validates the column identifier and routes to the correct operator
+     * handler. Operators that take collections or ranges (IN, BETWEEN)
+     * expand into the appropriate number of `?` placeholders.
+     *
+     * @param condition validated column + operator + right-hand-side value.
+     * @return compiled SQL text paired with ordered bind parameters.
      */
     fun buildCondition(condition: SqlCondition): SqlWithParams = when (condition.op) {
         Operator.EQ          -> sql("${condition.field} = ?", condition.value)
@@ -68,14 +76,17 @@ class DynamicSqlGenerator {
     }
 
     /**
-     * 生成完整 SELECT 语句。
+     * Build a complete SELECT statement with AND-combined WHERE predicates.
      *
-     * 多条件通过 AND 连接，表名/字段名经白名单校验。
+     * The table name and every selected column are run through
+     * [validateIdentifier] so that callers cannot inject arbitrary SQL
+     * fragments even when identifiers come from user-controlled input.
+     * When [conditions] is empty the WHERE clause is omitted entirely.
      *
-     * @param table      表名（经 validateIdentifier 校验）
-     * @param columns    查询列（空则 SELECT *）
-     * @param conditions WHERE 条件列表
-     * @return 完整 SQL + 绑定参数
+     * @param table      validated table identifier.
+     * @param columns    validated column list; empty means `SELECT *`.
+     * @param conditions predicates combined with AND.
+     * @return compiled SQL text paired with ordered bind parameters.
      */
     fun generateSelect(table: String, columns: List<String>, conditions: List<SqlCondition>): SqlWithParams {
         validateIdentifier(table)
@@ -101,7 +112,13 @@ class DynamicSqlGenerator {
         return SqlWithParams(sql, emptyArray())
     }
 
-    /** 防止表名/字段名注入（白名单：字母数字下划线） */
+    /**
+     * Strict identifier validation — throws on anything that is not a
+     * simple `[a-zA-Z_][a-zA-Z0-9_]*` token.
+     *
+     * This is the primary defence against SQL-injection through
+     * attacker-controlled table / column names in dynamic admin queries.
+     */
     private fun validateIdentifier(identifier: String) {
         if (!identifier.matches(Regex("[a-zA-Z_][a-zA-Z0-9_]*"))) {
             throw InvalidSqlIdentifierException(identifier)

@@ -3,27 +3,30 @@ package com.fluxion.core.value
 import com.fluxion.core.model.ImmutableExecutionState
 
 /**
- * 工作流引擎执行结果。
+ * Result envelope returned to callers of the workflow engine.
  *
- * 包含执行成功/失败状态、最终输出数据、执行轨迹、不可变状态快照。
- * 由 [WorkflowEngine] / [DagExecutor] 产出，经 [UnifiedResponse] 转换后返回给适配器层。
+ * [WorkflowEngine] and [DagExecutor] always return an `EngineResult`; adapter
+ * layers (HTTP, Dubbo, gRPC, ...) translate it into their native response
+ * shape.  Both success and failure paths are represented uniformly so that
+ * tracing metadata ([executionId], [trace], [finalState]) is available in
+ * every outcome.
  */
 data class EngineResult(
-    /** 是否执行成功 */
+    /** True when the workflow completed without propagating an error. */
     val success: Boolean,
-    /** 最终输出数据（工作流末尾节点输出） */
+    /** Terminal output of the workflow (last node's output).  null on failure. */
     val data: Any? = null,
-    /** 执行唯一 ID（UUID，用于链路追踪和快照关联） */
+    /** Unique execution id for correlation / admin-console lookup. */
     val executionId: String? = null,
-    /** 错误信息（失败时填充） */
+    /** Human-readable error description; non-null iff [success] == false. */
     val errorMsg: String? = null,
-    /** 执行轨迹（按完成顺序记录的节点执行记录） */
+    /** Chronological trace of every node execution (populated in dev / audit mode). */
     val trace: MutableList<NodeExecutionRecord> = mutableListOf(),
-    /** 最终不可变状态快照（供调试/重放使用） */
+    /** Snapshot of the final execution state for inspection / replay. */
     val finalState: ImmutableExecutionState? = null
 ) {
     companion object {
-        /** 创建成功结果（从状态快照提取 executionId） */
+        /** Build a success result from the terminal execution state. */
         @JvmStatic
         fun success(data: Any?, state: ImmutableExecutionState) = EngineResult(
             success = true,
@@ -32,7 +35,7 @@ data class EngineResult(
             finalState = state
         )
 
-        /** 创建失败结果 */
+        /** Build a failure result with an optional execution id (may be absent on early errors). */
         @JvmStatic
         fun failure(errorMsg: String?, executionId: String?) = EngineResult(
             success = false,
@@ -40,12 +43,12 @@ data class EngineResult(
             executionId = executionId
         )
 
-        /** 创建 Builder（流式构建） */
+        /** Fluent builder used by execution paths that accumulate trace incrementally. */
         @JvmStatic
         fun builder() = Builder()
     }
 
-    /** 流式构建器 */
+    /** Fluent builder for [EngineResult]. */
     class Builder {
         var success: Boolean = false
         var data: Any? = null

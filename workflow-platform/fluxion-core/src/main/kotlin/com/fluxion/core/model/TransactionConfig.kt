@@ -1,27 +1,36 @@
 package com.fluxion.core.model
 
 /**
- * 事务配置 — 零框架依赖，使用 java.sql.Connection 中的隔离级别常量
+ * Configuration for JDBC / Spring transaction wrapping applied to an
+ * entire workflow or an individual node.
+ *
+ * Mirrors the relevant subset of Spring's `TransactionDefinition` so
+ * that the decorator layer can drive `PlatformTransactionManager`
+ * without introducing a compile-time Spring dependency on the core
+ * module (numbers are the exact Spring Propagation / Isolation ints).
  */
 data class TransactionConfig(
     var workflowId: String? = null,
     var executionId: String? = null,
-    /** 事务名称（用于日志） */
+    /** Human-readable tx name; surfaces in logging and monitoring. */
     var transactionName: String? = null,
     /**
-     * 隔离级别（使用 java.sql.Connection 常量）
-     * 默认：READ_COMMITTED = 2
+     * JDBC isolation level passed to `Connection.setTransactionIsolation`.
+     *
+     * Defaults to `TRANSACTION_READ_COMMITTED` (the safest broadly
+     * portable level).
      */
     var isolationLevel: Int = java.sql.Connection.TRANSACTION_READ_COMMITTED,
     /**
-     * 传播行为（语义定义，不依赖 Spring）
-     * 0 = REQUIRED, 3 = REQUIRES_NEW, 6 = NESTED
+     * Spring propagation behaviour integer.
+     *
+     * 0 = REQUIRED, 3 = REQUIRES_NEW, 6 = NESTED (see PropagationBehavior).
      */
     var propagationBehavior: Int = PropagationBehavior.REQUIRED,
-    /** 超时时间（ms，0=无限制） */
+    /** Transaction timeout in milliseconds; 30_000 (30s) default. */
     var timeoutMs: Int = 30_000
 ) {
-    /** 传播行为常量（对应 Spring TransactionDefinition，但不依赖 Spring） */
+    /** Copies of Spring's `TransactionDefinition` propagation ints. */
     object PropagationBehavior {
         const val REQUIRED = 0
         const val SUPPORTS = 1

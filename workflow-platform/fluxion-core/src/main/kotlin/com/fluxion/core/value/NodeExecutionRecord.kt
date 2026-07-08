@@ -4,33 +4,39 @@ import com.fluxion.core.enums.NodeStatus
 import com.fluxion.core.model.WorkflowNode
 
 /**
- * 节点执行记录 — 执行轨迹的基本单元（类比调用栈帧快照）
+ * Persistent/audit record of a single node execution.
+ *
+ * A new record is produced every time a node is attempted (including retries).
+ * Records are appended to [EngineResult.trace] and optionally persisted by
+ * [ExecutionLogStore.save].  All fields are nullable where appropriate so that
+ * partial records can be created early in the execution lifecycle and then
+ * enriched.
  */
 data class NodeExecutionRecord(
-    /** 节点 ID */
+    /** Node id (matches [WorkflowNode.id]). */
     val nodeId: String,
-    /** 节点名称（日志/调试显示用） */
+    /** Human-readable node name (matches [WorkflowNode.name]). */
     val nodeName: String,
-    /** 执行状态（SUCCESS / FAILED / SKIPPED / FALLBACK） */
+    /** Final status of this particular attempt. */
     val status: NodeStatus,
-    /** 节点输出（下一节点的 directInput） */
+    /** Value produced; may be null even on SUCCESS when the function has no output. */
     val output: Any?,
-    /** 节点输入（调试/重放用，默认 null） */
+    /** Snapshot of the node's input; null unless explicitly captured for audit. */
     val input: Any?,
-    /** 声明的副作用列表（供 Saga 回滚使用） */
+    /** Side effects announced by the function; used for Saga compensation. */
     val sideEffects: List<SideEffect>,
-    /** 失败时的异常（成功时为 null） */
+    /** Exception captured on failure; null on successful paths. */
     val error: Throwable?,
-    /** 执行耗时（毫秒） */
+    /** Wall-clock duration of this attempt in milliseconds. */
     val durationMs: Long,
-    /** 重试次数（0 = 首次执行） */
+    /** 0-based attempt index (0 = first try, 1 = first retry, ...). */
     val retryAttempt: Int
 ) {
-    /** 异常消息快捷访问 */
+    /** Convenience getter for error message (null-safe). */
     val errorMessage: String? get() = error?.message
 
     companion object {
-        /** 创建成功记录 */
+        /** Build a SUCCESS record without input capture. */
         @JvmStatic
         fun success(node: WorkflowNode, output: Any?, durationMs: Long) = NodeExecutionRecord(
             nodeId = node.id, nodeName = node.name, status = NodeStatus.SUCCESS,
@@ -38,7 +44,7 @@ data class NodeExecutionRecord(
             error = null, durationMs = durationMs, retryAttempt = 0
         )
 
-        /** 创建成功记录（含输入快照，用于调试回放） */
+        /** Build a SUCCESS record with the input captured (for replay / audit). */
         @JvmStatic
         fun successWithInput(node: WorkflowNode, output: Any?, input: Any?, durationMs: Long) = NodeExecutionRecord(
             nodeId = node.id, nodeName = node.name, status = NodeStatus.SUCCESS,
@@ -46,7 +52,7 @@ data class NodeExecutionRecord(
             error = null, durationMs = durationMs, retryAttempt = 0
         )
 
-        /** 创建失败记录 */
+        /** Build a FAILED record capturing the underlying cause. */
         @JvmStatic
         fun failed(node: WorkflowNode, error: Throwable?, durationMs: Long) = NodeExecutionRecord(
             nodeId = node.id, nodeName = node.name, status = NodeStatus.FAILED,
@@ -54,7 +60,7 @@ data class NodeExecutionRecord(
             error = error, durationMs = durationMs, retryAttempt = 0
         )
 
-        /** 创建跳过记录 */
+        /** Build a SKIPPED record (error strategy SKIP). */
         @JvmStatic
         fun skipped(node: WorkflowNode, durationMs: Long) = NodeExecutionRecord(
             nodeId = node.id, nodeName = node.name, status = NodeStatus.SKIPPED,
@@ -62,7 +68,7 @@ data class NodeExecutionRecord(
             error = null, durationMs = durationMs, retryAttempt = 0
         )
 
-        /** 创建降级成功记录 */
+        /** Build a FALLBACK record (fallback function succeeded). */
         @JvmStatic
         fun fallback(node: WorkflowNode, output: Any?, durationMs: Long) = NodeExecutionRecord(
             nodeId = node.id, nodeName = node.name, status = NodeStatus.FALLBACK,

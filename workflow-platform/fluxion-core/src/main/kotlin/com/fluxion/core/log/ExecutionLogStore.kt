@@ -4,23 +4,35 @@ import com.fluxion.core.value.ExecutionMeta
 import com.fluxion.core.value.NodeExecutionRecord
 
 /**
- * 执行日志存储 SPI — 解耦引擎与存储介质
+ * Persistence SPI for the per-node audit trace.
  *
- * 默认实现：LoggingExecutionLogStore（结构化 JSON 日志，在 workflow-admin 中提供）
- * 可选实现：DbExecutionLogStore（DB 持久化，需建 wf_execution_log 表）
+ * The engine calls [save] for every completed (or failed) node *after* the
+ * execution has been processed by error handlers.  Implementations decide
+ * what to persist, how to batch writes, and which fields to index.
+ *
+ * Two reference implementations exist:
+ *  - A no-op / logging-only default is auto-configured in
+ *    `FluxionCoreAutoConfiguration` when no store bean is present.
+ *  - `DbExecutionLogStore` (in the admin/runtime modules) writes to the
+ *    `wf_execution_log` table for full lifecycle replay.
  */
 interface ExecutionLogStore {
 
-    /** 是否启用（false 时 WorkflowEngine 跳过 save 调用） */
+    /**
+     * Whether saves should be attempted at all.
+     *
+     * Returning `false` lets the engine skip the overhead of materialising
+     * records in hot paths (when disabled globally, per-tenant, etc.).
+     */
     fun enabled(): Boolean
 
-    /** 保存单个节点执行记录 */
+    /** Persist (or batch) a single node record alongside its execution metadata. */
     fun save(record: NodeExecutionRecord, meta: ExecutionMeta)
 
     /**
-     * 按 executionId 加载完整执行轨迹（调试/重放用）
-     * LoggingExecutionLogStore 不支持此操作，返回空列表；
-     * 需要精确重放时必须启用 DbExecutionLogStore
+     * Load the chronological trace for a past execution (admin console /
+     * replay API).  Default returns empty list because the logging-only
+     * default store has no query capability.
      */
     fun loadTrace(executionId: String): List<NodeExecutionRecord> = emptyList()
 }

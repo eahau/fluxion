@@ -1,13 +1,21 @@
 package com.fluxion.core.value
 
-/** 副作用描述（用于 Saga 补偿） */
+/**
+ * A side effect produced during function execution that must be reversed if
+ * the enclosing Saga aborts.
+ *
+ * Functions declare side effects by returning them inside [FunctionResult].
+ * The Saga executor collects side effects in order and, on failure, walks
+ * them in reverse invoking the referenced [compensateFunctionRef] with the
+ * stored payload.
+ */
 data class SideEffect(
-    /** 副作用类型："DB_UPDATE", "MQ_SEND", "RPC_CALL" */
+    /** Effect category, e.g. `DB_UPDATE`, `MQ_SEND`, `RPC_CALL`. */
     val type: String,
-    /** 作用目标：表名/topic/服务名 */
+    /** Business target (DB table, MQ topic, RPC service method, ...). */
     val target: String,
-    /** 写入的数据（序列化为 JSON 存储） */
+    /** Opaque payload passed verbatim to the compensator; typically JSON-serialised. */
     val payload: Any?,
-    /** 补偿函数引用（如 "builtin:dbRollback"） */
+    /** Function ref invoked during compensation; null when reversal is not supported. */
     val compensateFunctionRef: String?
 )

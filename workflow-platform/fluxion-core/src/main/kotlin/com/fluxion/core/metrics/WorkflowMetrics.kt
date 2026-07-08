@@ -1,29 +1,41 @@
 package com.fluxion.core.metrics
 
 /**
- * 工作流 Metrics SPI — 零依赖接口
+ * Observability SPI for the Fluxion engine.
  *
- * workflow-core 只定义接口，不引入任何 Metrics 框架。
- * 具体实现由 workflow-decorator-impl 提供：
- *   - MicrometerWorkflowMetrics（Micrometer，接入 Prometheus/OTel）
- *   - noOp()            （默认，不上报，测试/轻量部署使用）
+ * Core calls the recorder methods at well-defined points (node completion,
+ * workflow end, retry).  The module intentionally exposes *no* framework
+ * dependency so implementations can plug any backend.
+ *
+ * Out-of-the-box variants:
+ *  - [WorkflowMetrics.noOp] — default used when no metrics module is on
+ *    the classpath; zero-allocation, does nothing.
+ *  - `MicrometerWorkflowMetrics` (in `fluxion-decorator`) — bridges to
+ *    Micrometer, surfacing counters and timers to Prometheus / OTel / etc.
  */
 interface WorkflowMetrics {
 
-    /** 计数器递增 */
+    /**
+     * Generic counter increment for ad-hoc metrics emitted by decorators
+     * or extensions.  Tag map is pass-through; implementations normalise
+     * to their backend's tag/cardinality model.
+     */
     fun increment(metricName: String, tags: Map<String, String>)
 
-    /** 节点执行成功上报（计数 + 耗时） */
+    /** A node completed successfully with the given wall-clock duration. */
     fun recordNodeSuccess(nodeId: String, workflowId: String, durationMs: Long)
 
-    /** 工作流整体完成上报（成功/失败 + 总耗时） */
+    /** A whole workflow finished; `success` distinguishes normal vs error termination. */
     fun recordWorkflowComplete(workflowId: String, success: Boolean, durationMs: Long)
 
-    /** 重试次数上报 */
+    /** A retry has been scheduled for a failing node. */
     fun recordRetry(nodeId: String, workflowId: String)
 
     companion object {
-        /** No-Op 实现：所有方法空操作，不引入任何外部依赖 */
+        /**
+         * Zero-allocation no-op recorder returned by the core auto-config
+         * when no Micrometer-backed implementation is wired in.
+         */
         @JvmStatic
         fun noOp(): WorkflowMetrics = NoOpWorkflowMetrics
     }

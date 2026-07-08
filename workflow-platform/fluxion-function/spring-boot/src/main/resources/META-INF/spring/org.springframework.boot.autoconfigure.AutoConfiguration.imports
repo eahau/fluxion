@@ -1,0 +1,3 @@
+com.fluxion.function.spring.boot.FunctionComponentAutoConfiguration
+com.fluxion.functionmeta.spring.boot.FunctionMetaAutoConfiguration
+com.fluxion.functionmeta.spring.boot.FunctionMetaConfigCenterAutoConfiguration

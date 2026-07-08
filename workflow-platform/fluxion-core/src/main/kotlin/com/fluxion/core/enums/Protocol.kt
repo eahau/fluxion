@@ -1,6 +1,13 @@
 package com.fluxion.core.enums
 
-/** 适配器协议类型（对应 UnifiedRequest.protocol 前缀） */
+/**
+ * Communication protocol used to trigger a workflow.
+ *
+ * Stored in [com.fluxion.core.model.WorkflowDefinition.protocol] and mirrored
+ * in the unified runtime request (`UnifiedRequest.protocol`). Each adapter
+ * module (HTTP / Dubbo / gRPC / Kafka) maps its native transport to one of
+ * these values.
+ */
 enum class Protocol {
     /** HTTP REST API */
     HTTP,
@@ -8,8 +15,8 @@ enum class Protocol {
     DUBBO,
     /** gRPC (HTTP/2 + Protobuf) */
     GRPC,
-    /** Apache Kafka 消息 */
+    /** Apache Kafka message listener */
     KAFKA,
-    /** 内部直接调用（跳过路由） */
+    /** Internal in-process direct call (no network transport) */
     INTERNAL
 }

@@ -1,37 +1,44 @@
 package com.fluxion.core.model
 
 /**
- * 触发器类型
+ * Mechanism by which a workflow is triggered.
+ *
+ * Used by the admin console and the runtime trigger router to classify
+ * inbound requests and attach the correct payload adapter.
  */
 enum class TriggerType {
-    /** 手动执行（用户点击触发） */
+    /** Human-initiated via the admin console Run button or equivalent. */
     MANUAL,
-    /** Webhook（HTTP POST 触发） */
+    /** Inbound HTTP POST delivered through a webhook endpoint. */
     WEBHOOK,
-    /** 应用事件（内置事件 / 第三方事件） */
+    /** Event-driven (message bus, CDC, notification system). */
     EVENT,
-    /** API 调用（同步 HTTP 请求，返回工作流执行结果） */
+    /** Programmatic API call (HTTP, Dubbo, gRPC, INTERNAL). */
     API
 }
 
 /**
- * 工作流触发器 — 定义工作流的启动方式
+ * Trigger configuration attached to a [WorkflowDefinition].
  *
- * 一个工作流可以有多个触发器，每个触发器定义一种启动方式。
+ * Each definition may expose multiple triggers (e.g. one API endpoint
+ * and one event subscription). The runtime multiplexes inbound requests
+ * by matching against `type` and [config].
  */
 data class WorkflowTrigger(
-    /** 触发器 ID（同一工作流内不重复） */
+    /** Stable trigger id (primary key in the admin console). */
     val id: String = "",
-    /** 触发器类型 */
+    /** Trigger classification — drives adapter selection. */
     val type: TriggerType = TriggerType.MANUAL,
     /**
-     * 触发器配置（按类型不同结构不同）：
-     * - EVENT: { "eventType": "user.created", "source": "authing" }
-     * - WEBHOOK: { "path": "/hooks/my-workflow" }
-     * - API: { "path": "/api/workflows/{id}/execute" }
-     * - MANUAL: null
+     * Free-form adapter-specific configuration.
+     *
+     * Typical layouts:
+     * - EVENT: `{ "eventType": "user.created", "source": "authing" }`
+     * - WEBHOOK: `{ "path": "/hooks/my-workflow" }`
+     * - API: `{ "path": "/api/workflows/{id}/execute" }`
+     * - MANUAL: `null`
      */
     val config: Map<String, Any>? = null,
-    /** 是否启用 */
+    /** Whether the trigger is currently wired up at runtime. */
     val enabled: Boolean = true
 )

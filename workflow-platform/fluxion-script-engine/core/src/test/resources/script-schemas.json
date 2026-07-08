@@ -1,0 +1,3 @@
+{
+  "builtin:groovyScript:param": "{\"type\":\"object\",\"properties\":{\"script\":{\"type\":\"string\",\"description\":\"Groovy 脚本代码（inline 模式）\"},\"scriptRef\":{\"type\":\"string\",\"description\":\"脚本引用 ID（initScript 模式）\"}}}"
+}

@@ -3,50 +3,78 @@ package com.fluxion.core.exception
 import com.fluxion.core.value.SideEffect
 
 /**
- * 工作流异常基类
+ * Exception hierarchy for the Fluxion workflow engine.
  *
- * errorCode 格式：WF-{分类}-{序号}，例如 WF-VALIDATION-001、WF-NODE-001
+ * Every public exception carries a stable `errorCode` of the form
+ * `WF-CATEGORY-NNN` which is:
+ *  - Logged and attached to error responses for easier operator lookup.
+ *  - Cross-referenced in the admin console error code reference.
+ *  - Used by the HTTP/RPC adapter layers to map to the correct HTTP status /
+ *    RPC error code.
  *
- * ── 设计原则 ──────────────────────────────────────────────────────
- * 引擎只抛出携带 errorCode 的 WorkflowException；
- * 如何将 errorCode 转换为 HTTP/RPC 响应格式，由适配器层通过配置的
- * errorHandlerRef 函数完成 — 不在 core 中硬编码任何 HTTP 状态码映射。
+ * Categories currently defined:
+ *  - `WF-VALIDATION-NNN`  — request / definition validation failures
+ *  - `WF-NODE-NNN`        — per-node execution errors
+ *  - `WF-DAG-NNN`         — graph topology / dependency errors
+ *  - `WF-REGISTRY-NNN`    — function / workflow / decorator lookup failures
+ *  - `WF-SAGA-NNN`        — Saga compensation and transaction errors
+ *  - `WF-TX-NNN`          — local transaction errors
+ *  - `WF-EXTERNAL-NNN`    — external function gateway errors
+ *  - `WF-DECORATOR-NNN`   — decorator (rate-limit, lock, tracing) errors
+ *  - `WF-500-NNN`         — meta-workflow / bootstrap-level internal errors
  */
 open class WorkflowException(
-    /** 结构化错误码，供适配器路由到对应的错误处理函数 */
+    /** Stable error identifier (e.g. `WF-VALIDATION-001`). */
     val errorCode: String,
     message: String,
     cause: Throwable? = null
 ) : RuntimeException(message, cause)
 
-// ─── Validation ─────────────────────────────────────────────────
-
-/** WF-VALIDATION-001 入参校验失败 */
+/**
+ * WF-VALIDATION-001 — invalid request parameters.
+ *
+ * Thrown when the caller-supplied arguments fail basic structural checks
+ * (missing required field, wrong type, out of range, etc.).
+ */
 class InvalidParamException : WorkflowException {
     constructor(message: String) : super("WF-VALIDATION-001", message)
-    constructor(errors: List<String>) : super("WF-VALIDATION-001", "Invalid parameters: $errors")
+    constructor(errors: List<String>) : super("WF-VALIDATION-001", "Invalid parameters: `$errors")
 }
 
-/** WF-VALIDATION-002 JSON Schema 校验失败 */
+/**
+ * WF-VALIDATION-002 — input/output does not match the declared JSON / Protobuf / Avro schema.
+ *
+ * @property validationErrors machine-readable list of validation error details.
+ */
 class SchemaValidationException(
     message: String,
     val validationErrors: List<String> = listOf(message)
 ) : WorkflowException("WF-VALIDATION-002", message)
 
-/** WF-400-003 工作流定义无效 */
+/**
+ * WF-VALIDATION-003 — [WorkflowDefinition] is structurally invalid (missing nodes,
+ * bad references, etc.).
+ */
 class InvalidWorkflowDefinitionException(message: String) :
     WorkflowException("WF-VALIDATION-003", message)
 
-// ─── Node ───────────────────────────────────────────────────────
-
-/** WF-NODE-001 节点执行异常 */
+/**
+ * WF-NODE-001 — node execution failed.
+ *
+ * The primary constructor is private; callers must use the secondary constructor
+ * which ensures the node name is embedded in the message, or [timeout] for
+ * timeout-originated errors.
+ *
+ * @property nodeName id/name of the failing node; null for timeouts that fire
+ *                    before node resolution completes.
+ */
 class WorkflowNodeException private constructor(
     val nodeName: String?,
     message: String,
     cause: Throwable?
 ) : WorkflowException("WF-NODE-001", message, cause) {
 
-    /** 节点执行失败（含节点名，引擎 handleNodeError 路径） */
+    /** Wrap a cause thrown during node execution; used by `handleNodeError`. */
     constructor(nodeName: String, cause: Throwable?) : this(
         nodeName,
         "Node [$nodeName] execution failed: ${cause?.message ?: "unknown"}",
@@ -54,14 +82,19 @@ class WorkflowNodeException private constructor(
     )
 
     companion object {
-        /** 超时 / 中断等纯消息场景 */
+        /** Build a timeout variant (node may not yet be resolved). */
         @JvmStatic
         fun timeout(message: String, cause: Throwable?): WorkflowNodeException =
             WorkflowNodeException(null, message, cause)
     }
 }
 
-/** WF-NODE-002 重试耗尽 */
+/**
+ * WF-NODE-002 — maximum retries exhausted for a failing node.
+ *
+ * The engine sets [lastCause] to the most recent throwable so that operators
+ * can see the underlying reason in logs/traces.
+ */
 class RetryExhaustedException(nodeName: String, maxRetries: Int, lastCause: Throwable?) :
     WorkflowException(
         "WF-NODE-002",
@@ -69,7 +102,9 @@ class RetryExhaustedException(nodeName: String, maxRetries: Int, lastCause: Thro
         lastCause
     )
 
-/** WF-NODE-003 降级函数执行失败 */
+/**
+ * WF-NODE-003 — the user-configured fallback function itself threw.
+ */
 class FallbackFailedException(nodeName: String, cause: Throwable?) :
     WorkflowException(
         "WF-NODE-003",
@@ -77,41 +112,62 @@ class FallbackFailedException(nodeName: String, cause: Throwable?) :
         cause
     )
 
-/** WF-NODE-004 节点执行超时 */
+/**
+ * WF-NODE-004 — node timed out after [timeoutMs] milliseconds.
+ */
 class NodeTimeoutException(nodeName: String, timeoutMs: Int) :
     WorkflowException("WF-NODE-004", "Node [$nodeName] timed out after ${timeoutMs}ms")
 
-// ─── DAG ────────────────────────────────────────────────────────
-
-/** WF-DAG-001 DAG 存在循环依赖 */
+/**
+ * WF-DAG-001 — DAG contains a cycle; topological sort is impossible.
+ */
 class CyclicDependencyException(workflowId: String) :
-    WorkflowException("WF-DAG-001", "Cyclic dependency detected in workflow: $workflowId")
+    WorkflowException("WF-DAG-001", "Cyclic dependency detected in workflow: `$workflowId")
 
-/** WF-DAG-002 依赖节点输出未就绪 */
+/**
+ * WF-DAG-002 — a node could not run because a declared dependency's output
+ * was not yet produced.
+ *
+ * This normally indicates a race or a graph construction bug.
+ */
 class DependencyNotReadyException(nodeId: String, depNodeId: String) :
     WorkflowException("WF-DAG-002", "Node [$nodeId] dependency [$depNodeId] output not ready")
 
-/** WF-DAG-003 重复节点 ID */
+/**
+ * WF-DAG-003 — the same node id appears more than once in the definition.
+ */
 class DuplicateNodeIdException(nodeId: String) :
-    WorkflowException("WF-DAG-003", "Duplicate node id: $nodeId")
+    WorkflowException("WF-DAG-003", "Duplicate node id: `$nodeId")
 
-// ─── Registry ───────────────────────────────────────────────────
-
-/** WF-REGISTRY-001 函数未找到 */
+/**
+ * WF-REGISTRY-001 — requested function ref is not registered.
+ */
 class FunctionNotFoundException(functionRef: String) :
-    WorkflowException("WF-REGISTRY-001", "Function not found: $functionRef")
+    WorkflowException("WF-REGISTRY-001", "Function not found: `$functionRef")
 
-/** WF-REGISTRY-002 工作流定义未找到 */
+/**
+ * WF-REGISTRY-002 — requested workflow id does not exist in the store.
+ */
 class WorkflowNotFoundException(workflowId: String) :
-    WorkflowException("WF-REGISTRY-002", "Workflow not found: $workflowId")
+    WorkflowException("WF-REGISTRY-002", "Workflow not found: `$workflowId")
 
-/** WF-REGISTRY-003 装饰器未找到 */
+/**
+ * WF-REGISTRY-003 — a decorator referenced from the node definition was not
+ * registered in the decorator registry.
+ */
 class DecoratorNotFoundException(decoratorRef: String) :
-    WorkflowException("WF-REGISTRY-003", "Decorator not found: $decoratorRef")
+    WorkflowException("WF-REGISTRY-003", "Decorator not found: `$decoratorRef")
 
-// ─── Saga / Transaction ─────────────────────────────────────────
-
-/** WF-SAGA-001 Saga 补偿执行失败 */
+/**
+ * WF-SAGA-001 — Saga pattern execution (forward or compensation) failed.
+ *
+ * When pending side-effects are available (i.e. forward phase produced
+ * effects before the failure) they are attached via [pendingSideEffects]
+ * so the caller can decide whether to perform out-of-band compensation.
+ *
+ * @property pendingSideEffects side effects generated before the failure;
+ *                              empty if the cause is from compensation itself.
+ */
 class SagaExecutionException : WorkflowException {
     val pendingSideEffects: List<SideEffect>
 
@@ -124,15 +180,18 @@ class SagaExecutionException : WorkflowException {
     }
 }
 
-/** WF-TX-001 事务异常 */
+/**
+ * WF-TX-001 — local JDBC/Spring-managed transaction rolled back or could not start.
+ */
 class WorkflowTransactionException : WorkflowException {
     constructor(message: String, cause: Throwable?) : super("WF-TX-001", message, cause)
     constructor(message: String) : super("WF-TX-001", message)
 }
 
-// ─── External ───────────────────────────────────────────────────
-
-/** WF-EXTERNAL-001 外部函数网关调用失败 */
+/**
+ * WF-EXTERNAL-001 — call through the external function gateway failed
+ * (network error, non-2xx status, protocol error, etc.).
+ */
 class ExternalFunctionException(functionRef: String, cause: Throwable?) :
     WorkflowException(
         "WF-EXTERNAL-001",
@@ -140,17 +199,30 @@ class ExternalFunctionException(functionRef: String, cause: Throwable?) :
         cause
     )
 
-// ─── Decorator ──────────────────────────────────────────────────
-
-/** WF-DECORATOR-001 限流：请求过多 */
+/**
+ * WF-DECORATOR-001 — rate limiter rejected the invocation.
+ *
+ * Thrown from the rate-limit decorator when the quota is exhausted and
+ * `failOnBlocked` is enabled.
+ */
 class RateLimitExceededException(message: String) : WorkflowException("WF-DECORATOR-001", message)
 
-/** WF-DECORATOR-002 分布式锁获取失败 */
+/**
+ * WF-DECORATOR-002 — distributed lock acquisition failed.
+ *
+ * Thrown from the distributed-lock decorator (or programmatic lock helpers)
+ * when the lock cannot be acquired within `waitMillis` and
+ * `LockParams.failOnLocked` is true.
+ */
 class LockAcquisitionException(message: String) : WorkflowException("WF-DECORATOR-002", message)
 
-// ─── Bootstrap ──────────────────────────────────────────────────
-
-/** WF-500-012 元工作流自举失败 */
+/**
+ * WF-500-012 — admin meta-workflow bootstrap failure.
+ *
+ * Reserved for scenarios where the admin console's internal workflows (used
+ * for schema publishing, function approval, etc.) fail to start — generally
+ * a deployment / configuration problem rather than a user-visible issue.
+ */
 class MetaWorkflowBootstrapException : WorkflowException {
     constructor(message: String) : super("WF-500-012", message)
     constructor(message: String, cause: Throwable?) : super("WF-500-012", message, cause)
