@@ -11,8 +11,6 @@ build/
 **/src/test/**/build/
 # 仅保留wrapper配置文件，忽略jar包
 gradle/wrapper/gradle-wrapper.jar
-!gradle/wrapper/
-!gradle/wrapper/gradle-wrapper.properties
 
 # ============ Kotlin ============
 .kotlin/
