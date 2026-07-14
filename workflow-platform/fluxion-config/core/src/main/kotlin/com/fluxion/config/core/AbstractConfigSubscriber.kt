@@ -1,4 +1,4 @@
-package com.fluxion.config.core
+﻿package com.fluxion.config.core
 
 import org.slf4j.*
 import java.util.concurrent.CopyOnWriteArrayList

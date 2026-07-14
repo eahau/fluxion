@@ -1,13 +1,14 @@
-package com.fluxion.script.config
+﻿package com.fluxion.script.config
 
-import com.fluxion.adapter.spi.config.ChangeType
-import com.fluxion.adapter.spi.config.FunctionChangeListener
-import com.fluxion.adapter.spi.config.FunctionConfigSnapshot
-import com.fluxion.adapter.spi.config.FunctionConfigSubscriber
+import com.fluxion.config.core.ChangeType
+import com.fluxion.config.core.FunctionChangeListener
+import com.fluxion.config.core.FunctionConfigSnapshot
+import com.fluxion.config.core.FunctionConfigSubscriber
 import com.fluxion.core.function.FunctionRegistry
-import com.fluxion.core.function.external.ExternalFunctionConfigParser
-import com.fluxion.core.function.external.ExternalFunctionTransportRegistry
 import com.fluxion.core.value.FunctionMeta
+import com.fluxion.outbound.OutboundConfig
+import com.fluxion.outbound.OutboundConfigParser
+import com.fluxion.outbound.OutboundTransportRegistry
 import com.fluxion.script.function.ExternalWorkflowFunction
 import com.fluxion.script.function.ScriptWorkflowFunction
 import com.fluxion.script.groovy.GroovyScriptFunction
@@ -23,7 +24,7 @@ import org.slf4j.*
  * 3. Each snapshot is converted to a concrete `WorkflowFunction` + `FunctionMeta`
  *    and registered with [registry] keyed by `version` so hot-redeploy
  *    retains previous versions for in-flight workflows.
- * 4. After the initial load, `ExternalFunctionTransportRegistry.prepare` is
+ * 4. After the initial load, `OutboundTransportRegistry.prepare` is
  *    called with all external configs so HTTP/Dubbo/gRPC transport
  *    implementations can pre-build connection pools / stubs.
  * 5. We then call [FunctionConfigSubscriber.watch] and any subsequent
@@ -33,7 +34,7 @@ import org.slf4j.*
  * - `SCRIPT_GROOVY` / `GROOVY` → wraps as [ScriptWorkflowFunction] (delegates
  *   to the single shared [GroovyScriptFunction] engine at execution time).
  * - `EXTERNAL` → wraps as [ExternalWorkflowFunction] (delegates to the
- *   transport-specific `ExternalFunctionTransport` resolved by protocol).
+ *   transport-specific `OutboundTransport` resolved by protocol).
  * - Unknown values are logged and skipped (keeps old clients from breaking
  *   when future function types are introduced).
  *
@@ -47,7 +48,7 @@ class FunctionConfigApplier(
     private val registry: FunctionRegistry,
     private val groovyEngine: GroovyScriptFunction? = null,
     private val appGroup: String? = null,
-    private val transportRegistry: ExternalFunctionTransportRegistry = ExternalFunctionTransportRegistry()
+    private val transportRegistry: OutboundTransportRegistry = OutboundTransportRegistry()
 ) : FunctionChangeListener {
 
     private val log = LoggerFactory.getLogger(javaClass)
@@ -62,7 +63,7 @@ class FunctionConfigApplier(
      */
     fun init() {
         val snapshots = subscriber.loadAll()
-        val externalConfigs = mutableListOf<com.fluxion.core.function.external.ExternalFunctionConfig>()
+        val externalConfigs = mutableListOf<OutboundConfig>()
         for (snap in snapshots) {
             applySnapshot(snap, ChangeType.PUBLISH, externalConfigs)
         }
@@ -83,7 +84,7 @@ class FunctionConfigApplier(
     override fun onChange(functionName: String, snapshot: FunctionConfigSnapshot, changeType: ChangeType) {
         when (changeType) {
             ChangeType.PUBLISH, ChangeType.UPDATE -> {
-                val externalConfigs = mutableListOf<com.fluxion.core.function.external.ExternalFunctionConfig>()
+                val externalConfigs = mutableListOf<OutboundConfig>()
                 applySnapshot(snapshot, changeType, externalConfigs)
                 transportRegistry.prepare(externalConfigs)
             }
@@ -114,7 +115,7 @@ class FunctionConfigApplier(
     private fun applySnapshot(
         snapshot: FunctionConfigSnapshot,
         changeType: ChangeType,
-        externalConfigs: MutableList<com.fluxion.core.function.external.ExternalFunctionConfig> = mutableListOf()
+        externalConfigs: MutableList<OutboundConfig> = mutableListOf()
     ) {
         // Skip when worker's app-group is not in the snapshot's target set.
         if (appGroup != null && !snapshot.isGlobal()) {
@@ -156,7 +157,7 @@ class FunctionConfigApplier(
                 )
             }
             "EXTERNAL" -> {
-                val externalConfig = ExternalFunctionConfigParser.parse(snapshot.config)
+                val externalConfig = OutboundConfigParser.parse(snapshot.config)
                 externalConfigs.add(externalConfig)
                 ExternalWorkflowFunction(
                     name = functionName,

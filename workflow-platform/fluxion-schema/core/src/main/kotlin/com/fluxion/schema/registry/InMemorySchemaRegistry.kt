@@ -1,4 +1,4 @@
-/**
+﻿/**
  * In-memory [SchemaRegistry] implementation used on worker instances.
  *
  * Supports idempotent registration (same-name overwrites guarantee the

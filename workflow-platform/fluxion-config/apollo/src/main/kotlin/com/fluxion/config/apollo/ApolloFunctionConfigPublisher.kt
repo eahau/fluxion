@@ -1,14 +1,14 @@
-package com.fluxion.config.apollo
+﻿package com.fluxion.config.apollo
 
 import com.ctrip.framework.apollo.openapi.client.ApolloOpenApiClient
-import com.fluxion.adapter.spi.config.FunctionConfigPublisher
-import com.fluxion.adapter.spi.config.FunctionConfigSnapshot
-import com.fluxion.adapter.spi.registry.PublishTarget
+import com.fluxion.config.core.FunctionConfigPublisher
+import com.fluxion.config.core.FunctionConfigSnapshot
+import com.fluxion.config.core.PublishTarget
 import com.fluxion.core.util.JsonUtil
 import org.slf4j.*
 
 /**
- * Apollo 瀹炵幇 鈥?鍑芥暟閰嶇疆鍙戝竷鍣紙Admin 渚э級
+ * Apollo implementation - function config publisher (Admin side).
  */
 class ApolloFunctionConfigPublisher(
     private val openApiClient: ApolloOpenApiClient,

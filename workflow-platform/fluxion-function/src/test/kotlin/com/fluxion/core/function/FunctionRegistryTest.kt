@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Tests covering [FunctionRegistry] lookup semantics, version hot-swap,
  * in-flight retention, and namespace-prefix fallback behaviour.
  *

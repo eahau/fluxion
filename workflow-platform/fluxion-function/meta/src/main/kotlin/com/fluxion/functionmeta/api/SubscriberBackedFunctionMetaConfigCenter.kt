@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Adapter that converts a low-level `FunctionConfigSubscriber` into the
  * richer `FunctionMetaConfigCenter` surface.
  *
@@ -16,9 +16,9 @@
  */
 package com.fluxion.functionmeta.api
 
-import com.fluxion.adapter.spi.config.ChangeType
-import com.fluxion.adapter.spi.config.FunctionConfigSnapshot
-import com.fluxion.adapter.spi.config.FunctionConfigSubscriber
+import com.fluxion.config.core.ChangeType
+import com.fluxion.config.core.FunctionConfigSnapshot
+import com.fluxion.config.core.FunctionConfigSubscriber
 import com.fluxion.core.value.FunctionMeta
 
 /**

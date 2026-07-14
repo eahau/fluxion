@@ -13,7 +13,7 @@ dependencies {
 
     // Adapter SPI: SchemaConfigSubscriber / SchemaChangeListener interfaces (compileOnly to avoid
     // forcing adapter-spi as required runtime when consumers don't use adapter features).
-    compileOnly(project(":fluxion-adapter-spi"))
+    compileOnly(project(":fluxion-config:core"))
 
     // Spring Boot AutoConfigure mechanism + metadata processor.
     implementation("org.springframework.boot:spring-boot-autoconfigure")

@@ -1,4 +1,4 @@
-package com.fluxion.script.meta
+﻿package com.fluxion.script.meta
 
 import com.fluxion.core.value.FunctionMeta
 

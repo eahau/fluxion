@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Worker-side function config subscriber that pulls [FunctionConfigSnapshot]
  * entries from the Admin server over HTTP and handles typed push deltas.
  *
@@ -10,8 +10,8 @@
 package com.fluxion.config.http
 
 import com.fluxion.core.util.JsonUtil
-import com.fluxion.adapter.spi.config.ChangeType
-import com.fluxion.adapter.spi.config.FunctionConfigSnapshot
+import com.fluxion.config.core.ChangeType
+import com.fluxion.config.core.FunctionConfigSnapshot
 import com.fluxion.config.core.AbstractKeyedConfigSubscriber
 import org.slf4j.*
 import java.net.URI

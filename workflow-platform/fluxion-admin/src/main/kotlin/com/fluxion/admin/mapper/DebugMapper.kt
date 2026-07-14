@@ -1,4 +1,4 @@
-package com.fluxion.admin.mapper
+﻿package com.fluxion.admin.mapper
 
 import com.fluxion.admin.entity.WfExecutionSnapshot
 import com.fluxion.admin.generated.model.DebugExecutionRecord

@@ -100,14 +100,16 @@ dependencies {
     implementation(project(":fluxion-schema:spring-boot"))
     // Spring Boot auto-configuration for cross-cutting decorators (metrics/tracing/cache).
     implementation(project(":fluxion-decorator:spring-boot"))
-    // Adapter SPI (router/request/unified abstractions for capability domains).
-    implementation(project(":fluxion-adapter-spi"))
+    // Config core (InstanceRegistry, DefinitionConfigSubscriber, etc.).
+    implementation(project(":fluxion-config:core"))
+    // Inbound SPI (InboundRouter, UnifiedRequest, UnifiedResponse).
+    implementation(project(":fluxion-inbound:spi"))
     // Runtime core - DAG executor and workflow orchestration primitives.
     implementation(project(":fluxion-runtime:core"))
     // HTTP adapter core abstractions (request processing, route registry SPI).
-    implementation(project(":fluxion-adapter-http:core"))
+    implementation(project(":fluxion-inbound:http:core"))
     // Spring MVC HTTP adapter Spring Boot starter (full auto-configuration).
-    implementation(project(":fluxion-adapter-http:springmvc:spring-boot"))
+    implementation(project(":fluxion-inbound:http:springmvc:spring-boot"))
     // Built-in workflow functions + Spring Boot function registry auto-configuration.
     implementation(project(":fluxion-function:spring-boot"))
     // Built-in function implementations (DbExecuteWorkflowCompiler, DataSourceProvider).
@@ -120,6 +122,12 @@ dependencies {
     implementation(project(":fluxion-redis:lettuce"))
     // Groovy script engine Spring Boot auto-configuration + dynamic evaluation.
     implementation(project(":fluxion-script-engine:spring-boot"))
+    // Config center core.
+    implementation(project(":fluxion-config:core"))
+    // Debug module - DebugService and DebugSnapshot for admin debugger UI.
+    implementation(project(":fluxion-debug"))
+    // Outbound module - OutboundTransportRegistry for external function management.
+    implementation(project(":fluxion-outbound"))
     // Config center Spring Boot auto-configuration (binds Apollo/Nacos/HTTP backends).
     implementation(project(":fluxion-config:spring-boot"))
     // HTTP bootstrap config backend - activated when workflow.config.type=http.
@@ -179,6 +187,10 @@ dependencies {
     implementation("io.jsonwebtoken:jjwt-api")
     runtimeOnly("io.jsonwebtoken:jjwt-impl")
     runtimeOnly("io.jsonwebtoken:jjwt-jackson")
+
+    // ===== Encryption =====
+    // Jasypt string encryption library for sensitive config encryption.
+    implementation("org.jasypt:jasypt:1.9.3")
 
     // ===== Testing =====
     // Spring Boot Test starter (integration test context bootstrap, @SpringBootTest).

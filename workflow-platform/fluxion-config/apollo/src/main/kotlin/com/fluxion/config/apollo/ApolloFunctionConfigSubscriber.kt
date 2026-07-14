@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Apollo-backed function-config subscriber (Worker side).
  *
  * Kept as a thin subclass instead of instantiating [ApolloKeyedConfigSubscriber]
@@ -12,7 +12,7 @@
  */
 package com.fluxion.config.apollo
 
-import com.fluxion.adapter.spi.config.FunctionConfigSnapshot
+import com.fluxion.config.core.FunctionConfigSnapshot
 import com.fluxion.config.core.SnapshotParser
 import org.slf4j.LoggerFactory
 import org.slf4j.*

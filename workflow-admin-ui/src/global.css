@@ -28,6 +28,66 @@
   --fluxion-primary-hover: #4f46e5;
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   文字复制（Ctrl+C）规则：默认全可复制，仅拖拽/交互元素禁止
+   ═══════════════════════════════════════════════════════════════ */
+html,
+body,
+.ant-typography,
+.ant-table,
+.ant-form,
+.ant-descriptions,
+.ant-card-body,
+.ant-drawer-body,
+.ant-modal-body,
+.ant-tag,
+.ant-list,
+pre,
+code,
+textarea,
+input,
+select {
+  user-select: auto !important;
+  -webkit-user-select: auto !important;
+}
+/* 禁止复制：按钮/画布节点/拖拽交互项/侧边栏菜单/标签页/图标按钮 */
+button,
+.ant-btn,
+.ant-btn-icon,
+.react-flow__node,
+.react-flow__controls,
+.react-flow__minimap,
+.react-flow__edge,
+.react-flow__handle,
+.ant-menu-item,
+.ant-menu-submenu-title,
+.ant-tabs-tab,
+.ant-pagination-item,
+.ant-pagination-item-link,
+.ant-steps-item,
+.ant-avatar,
+.ant-badge,
+.ant-spin-container::before,
+.ant-upload-list-item,
+.ant-tree-draggable-icon,
+.ant-page-header-heading-extra,
+[draggable='true'],
+[role='tab'],
+[role='button'],
+[class*='-draggable'] {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+/* 代码编辑/复制区：强制开启（即使里面有按钮子元素也要能复制文字） */
+pre,
+code,
+.ant-typography code,
+.ant-descriptions-item-content code,
+.mermaid {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+
 .fluxion-dark {
   --fluxion-bg: #0f172a;
   --fluxion-bg-elevated: #1e293b;
@@ -116,6 +176,67 @@
 }
 .fluxion-dark .fluxion-content {
   background: #0f172a !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Schema 管理页卡片：hover 阴影 + 冻结态视觉区分
+   所有 inline style 的 fallback，负责深色模式和 hover 增强
+   ═══════════════════════════════════════════════════════════════ */
+.schema-card {
+  cursor: pointer;
+}
+.schema-card:hover {
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.12);
+  transform: translateY(-2px);
+  border-color: var(--fluxion-primary, #6366f1) !important;
+}
+.schema-card .ant-card-actions {
+  border-top: 1px dashed var(--fluxion-border-light, #f0f0f0);
+  background: transparent;
+}
+.schema-card .ant-card-actions > li {
+  margin: 4px 0;
+}
+/* 冻结卡片：橙色警示边 + 禁用 hover 上浮（提醒不可操作） */
+.schema-card-frozen {
+  cursor: default !important;
+}
+.schema-card-frozen:hover {
+  transform: none !important;
+  box-shadow: 0 2px 8px rgba(250, 140, 22, 0.12);
+  border-color: rgba(250, 140, 22, 0.45) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   函数详情编辑器：响应式栅格 + 只读类别 Tag 视觉
+   ═══════════════════════════════════════════════════════════════ */
+.function-editor-category-readonly {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 13px;
+  border: 1px solid transparent;
+}
+/* 栅格响应式：<768px 单列，768~1200 双列，>1200 三列 */
+.function-editor-form-row .ant-form-item {
+  margin-bottom: 12px;
+}
+/* 等宽表单：每个字段最小宽度 280，超出自动换行 */
+.function-editor-form-grid .ant-col {
+  min-width: 280px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   函数测试面板：条件过滤的 Schema 下拉视觉
+   ═══════════════════════════════════════════════════════════════ */
+.function-test-schema-option-builtin-hint {
+  color: #94a3b8;
+  font-size: 11px;
+  margin-left: auto;
+  padding-left: 8px;
 }
 
 /* ── 侧边栏菜单 ── */
@@ -1528,4 +1649,137 @@
 }
 .fluxion-dark ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.25);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Schema / Workflow 卡片冻结「冰块」效果
+   应用：当 record.frozen 为 true 时给卡片加上冷色渐变 + 冰晶纹路
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ░░░░░░░░ 浅色模式 ░░░░░░░░ */
+.schema-card-frozen {
+  position: relative !important;
+  overflow: hidden !important;
+  background: linear-gradient(145deg,
+    #f0f8ff 0%,
+    #e3f2ff 25%,
+    #d5ecff 50%,
+    #e8f4ff 75%,
+    #f3faff 100%) !important;
+  border: 1px solid #91caff !important;
+  box-shadow:
+    0 0 0 1px rgba(145, 202, 255, 0.25) inset,
+    0 4px 18px rgba(145, 202, 255, 0.18) !important;
+  cursor: default !important;
+}
+/* 冰晶纹路（斜向霜花条纹 + 高光反射） */
+.schema-card-frozen::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(115deg,
+      transparent 20%,
+      rgba(255, 255, 255, 0.55) 28%,
+      rgba(220, 240, 255, 0.35) 32%,
+      transparent 40%),
+    linear-gradient(-65deg,
+      transparent 55%,
+      rgba(200, 230, 255, 0.35) 60%,
+      rgba(255, 255, 255, 0.45) 63%,
+      transparent 70%),
+    radial-gradient(circle at 85% 10%,
+      rgba(255, 255, 255, 0.35) 0,
+      transparent 40%),
+    radial-gradient(circle at 15% 90%,
+      rgba(200, 230, 255, 0.25) 0,
+      transparent 35%);
+  background-size: 100% 100%, 100% 100%, 100% 100%, 100% 100%;
+  z-index: 1;
+  mix-blend-mode: screen;
+}
+/* 右上角雪花角标（❄ + 已冻结小标签） */
+.schema-card-frozen::after {
+  content: "❄ 已冻结";
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #0958d9;
+  background: linear-gradient(90deg, rgba(145,202,255,0.9), rgba(24,144,255,0.82));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.6);
+  letter-spacing: 0.5px;
+  z-index: 2;
+  pointer-events: none;
+}
+/* 卡片内部内容在冰层下略微虚化并降饱和，保持可读 */
+.schema-card-frozen > .ant-card-body,
+.schema-card-frozen > .ant-card-head,
+.schema-card-frozen > .ant-card-actions {
+  position: relative;
+  z-index: 0;
+  filter: saturate(0.85) contrast(0.97);
+}
+
+/* ░░░░░░░░ 深色模式 ░░░░░░░░ */
+.fluxion-dark .schema-card-frozen {
+  background: linear-gradient(145deg,
+    #0a1628 0%,
+    #0f1f3a 25%,
+    #142847 50%,
+    #10223d 75%,
+    #0c1c33 100%) !important;
+  border-color: rgba(96, 165, 250, 0.35) !important;
+  box-shadow:
+    0 0 0 1px rgba(96, 165, 250, 0.15) inset,
+    0 4px 18px rgba(37, 99, 235, 0.3) !important;
+}
+.fluxion-dark .schema-card-frozen::before {
+  background:
+    linear-gradient(115deg,
+      transparent 20%,
+      rgba(180, 220, 255, 0.18) 28%,
+      rgba(120, 180, 255, 0.12) 32%,
+      transparent 40%),
+    linear-gradient(-65deg,
+      transparent 55%,
+      rgba(140, 200, 255, 0.14) 60%,
+      rgba(200, 230, 255, 0.22) 63%,
+      transparent 70%),
+    radial-gradient(circle at 85% 10%,
+      rgba(180, 220, 255, 0.2) 0,
+      transparent 45%);
+  mix-blend-mode: lighten;
+}
+.fluxion-dark .schema-card-frozen::after {
+  background: linear-gradient(90deg, rgba(145,202,255,1), rgba(129,140,248,1));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: none;
+}
+
+/* ░░░░░░░░ 表格视图的冻结行（冷色底 + 雪花前缀） ░░░░░░░░ */
+.schema-table-row-frozen {
+  position: relative;
+  background: linear-gradient(90deg,
+    rgba(240, 248, 255, 0.85) 0%,
+    rgba(227, 242, 255, 0.7) 50%,
+    rgba(243, 250, 255, 0.85) 100%) !important;
+  border-color: #91caff !important;
+  box-shadow: inset 3px 0 0 #1677ff;
+}
+.fluxion-dark .schema-table-row-frozen {
+  background: linear-gradient(90deg,
+    rgba(14, 31, 58, 0.85) 0%,
+    rgba(20, 40, 71, 0.7) 50%,
+    rgba(16, 34, 61, 0.85) 100%) !important;
+  border-color: rgba(96, 165, 250, 0.35) !important;
+  box-shadow: inset 3px 0 0 #60a5fa;
 }

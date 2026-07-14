@@ -1,4 +1,4 @@
-package com.fluxion.builtin.db.function
+﻿package com.fluxion.builtin.db.function
 
 import com.fluxion.core.model.NodeInput
 import com.fluxion.core.util.uncheckedCast

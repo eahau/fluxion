@@ -1,4 +1,4 @@
-package com.fluxion.admin.security
+﻿package com.fluxion.admin.security
 
 import com.fasterxml.jackson.core.type.TypeReference
 import com.fluxion.core.util.JsonUtil

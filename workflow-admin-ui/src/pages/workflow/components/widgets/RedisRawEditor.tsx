@@ -10,7 +10,7 @@ import { NODE_PARAM_SCHEMAS } from '@/constants/nodeParamSchemas';
 /**
  * 从本地 nodeParamSchemas.ts 提取 Redis 命令枚举，作为 raw 模式自动补全的数据源。
  */
-const REDIS_COMMANDS: string[] =
+export const REDIS_COMMANDS: string[] =
   (NODE_PARAM_SCHEMAS['builtin:redisCommand']?.properties?.command?.enum as string[]) || [];
 
 interface RedisRawModeState {

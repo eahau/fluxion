@@ -9,6 +9,7 @@ import ParallelNode from './ParallelNode';
 import SubWorkflowNode from './SubWorkflowNode';
 import EipRouterNode from './EipRouterNode';
 import StickyNote from './StickyNote';
+import TriggerNode from './TriggerNode';
 
 export const nodeTypes = {
   validateNode: ValidateNode,
@@ -22,4 +23,5 @@ export const nodeTypes = {
   subWorkflowNode: SubWorkflowNode,
   eipRouterNode: EipRouterNode,
   stickyNote: StickyNote,
+  triggerNode: TriggerNode,
 };

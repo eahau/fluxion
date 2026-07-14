@@ -1,0 +1,119 @@
+# ============================================================
+# Spring Profile: product
+# 商品 Worker 启动方式（二选一）：
+#   1. 源码启动: gradlew :fluxion-runtime:bootRun
+#                 --args='--spring.profiles.active=product'
+#   2.  二进制:   java -jar fluxion-runtime-*.jar
+#                 --spring.profiles.active=product
+#
+# 启动后 workflow.instance.app-group=product-worker，
+# ConfigBackedDefinitionProvider 仅拉取 target_groups 包含
+# "product-worker" 的 wf_definition，实现商品域和订单域的隔离。
+# ============================================================
+
+spring:
+  application:
+    name: fluxion-runtime-product
+
+  servlet:
+    encoding:
+      enabled: true
+      charset: UTF-8
+      force: true
+
+  datasource:
+    # 与 fluxion-admin 同库共用：product / order_main / order_item 表均在 fluxion 库内。
+    # 如需拆分为独立库，修改此处 jdbc-url 并在 product-xxx 工作流的 builtin:dbExecute
+    # 节点 params 中显式指定 dataSource="product" 并在此处配置多数据源。
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/workflow_platform?useSSL=false&allowPublicKeyRetrieval=true&useUnicode=true&characterEncoding=utf8mb4&serverTimezone=Asia/Shanghai
+    username: root
+    password: password
+    hikari:
+      minimum-idle: 2
+      maximum-pool-size: 10
+      idle-timeout: 60000
+
+  data:
+    redis:
+      # 与 fluxion-admin、order-worker 共用本地同一个 Redis 实例。
+      # 多实例数据隔离靠 `RedisKey.wrapIfNeeded` 的前缀策略：
+      #   {workflow.instance.app-group}:{workflowId}:{业务主键}
+      # 不强制拆分不同 DB index。
+      host: localhost
+      port: 6379
+      database: 0
+      timeout: 2000ms
+      lettuce:
+        pool:
+          min-idle: 2
+          max-active: 8
+          max-idle: 8
+
+  kafka:
+    # 与 fluxion-admin、product-worker、order-worker 共用本地同一个 Kafka Broker。
+    # order-create-kafka 消费 topic: workflow.order.created 时，
+    # consumer group 写在 wf_definition.triggers_config[0].groupId 中。
+    bootstrap-servers: localhost:9092
+    consumer:
+      enable-auto-commit: false
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      retries: 3
+
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration
+
+server:
+  port: 8082
+  shutdown: graceful
+
+workflow:
+  instance:
+    role: worker
+    # ── 关键：将该 Worker 实例归入商品域 ────────────────────
+    # ConfigBackedDefinitionProvider 会过滤 target_groups 包含
+    # "product-worker" 的 wf_definition。
+    app-group: product-worker
+
+  config:
+    type: http
+    http:
+      # 必须指向 fluxion-admin（server.port=7070）。
+      # HTTP 配置中心通过 /internal/definitions、/internal/functions
+      # 两个接口把最新的 wf_definition + wf_function 拉到本地内存。
+      admin-url: http://localhost:7070
+
+  execution-log:
+    store: log
+
+  node:
+    default-timeout-ms: 30000
+
+  retry:
+    wheel-tick-duration-ms: 100
+    wheel-buckets-per-wheel: 512
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    root: INFO
+    com.fluxion.builtin: INFO
+    com.fluxion.inbound.mq.kafka: INFO
+  pattern:
+    console: '%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36}[product-worker] - %msg%n'
+  file:
+    path: ${user.home}/.fluxion/fluxion-worker/product-worker/logs

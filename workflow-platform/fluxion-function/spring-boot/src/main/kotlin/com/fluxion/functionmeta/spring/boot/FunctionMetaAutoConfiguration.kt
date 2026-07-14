@@ -1,7 +1,7 @@
-package com.fluxion.functionmeta.spring.boot
+﻿package com.fluxion.functionmeta.spring.boot
 
-import com.fluxion.adapter.spi.config.FunctionConfigSubscriber
-import com.fluxion.adapter.spi.config.KeyedConfigSubscriber
+import com.fluxion.config.core.FunctionConfigSubscriber
+import com.fluxion.config.core.KeyedConfigSubscriber
 import com.fluxion.functionmeta.DefaultFunctionMetaManager
 import com.fluxion.functionmeta.api.FunctionMetaManager
 import com.fluxion.functionmeta.api.FunctionMetaRegistry

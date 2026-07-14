@@ -1,14 +1,14 @@
-package com.fluxion.config.nacos
+﻿package com.fluxion.config.nacos
 
 import com.alibaba.nacos.api.config.ConfigService
-import com.fluxion.adapter.spi.config.FunctionConfigPublisher
+import com.fluxion.config.core.FunctionConfigPublisher
 import com.fluxion.core.util.JsonUtil
-import com.fluxion.adapter.spi.config.FunctionConfigSnapshot
-import com.fluxion.adapter.spi.registry.PublishTarget
+import com.fluxion.config.core.FunctionConfigSnapshot
+import com.fluxion.config.core.PublishTarget
 import org.slf4j.*
 
 /**
- * Nacos 瀹炵幇 鈥?鍑芥暟閰嶇疆鍙戝竷鍣紙Admin 渚э級
+ * Nacos implementation - function config publisher (Admin side).
  */
 class NacosFunctionConfigPublisher(
     private val configService: ConfigService
@@ -23,10 +23,10 @@ class NacosFunctionConfigPublisher(
     }
 
     /**
-     * 绱㈠紩鏇存柊閿?鈥?闃叉骞跺彂 publish/unpublish 瀵艰嚧 read-modify-write 绔炴€併€?
+     * Index update lock — prevents concurrent publish/unpublish from causing read-modify-write conflicts.
      *
-     * 鍏稿瀷鍦烘櫙锛氫袱涓嚎绋嬪悓鏃惰鍙栫储寮?鈫?鍚勮嚜娣诲姞涓嶅悓鍑芥暟 鈫?鍚庡啓鑰呰鐩栧墠鑰咃紝
-     * 瀵艰嚧鏌愪釜鍑芥暟浠庣储寮曚腑涓㈠け銆?
+     * Typical scenario: two threads simultaneously fetch index → each adds different functions →
+     * the later writer overwrites the earlier one, causing certain functions to disappear from the index.
      */
     private val indexLock = Any()
 

@@ -1,4 +1,4 @@
-package com.fluxion.core.engine
+﻿package com.fluxion.core.engine
 
 import com.fluxion.decorator.decorator.WorkflowDecorator
 import com.fluxion.decorator.decorator.WorkflowDecoratorRegistry
@@ -6,7 +6,7 @@ import com.fluxion.core.function.FunctionRegistry
 import com.fluxion.core.metrics.WorkflowMetrics
 import com.fluxion.core.model.WorkflowDefinition
 import com.fluxion.core.retry.RetryScheduler
-import com.fluxion.core.schema.SchemaValidator
+import com.fluxion.schema.json.SchemaValidator
 import com.fluxion.core.value.EngineResult
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals

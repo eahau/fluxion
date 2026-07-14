@@ -1,8 +1,8 @@
-package com.fluxion.runtime.spring.boot
+﻿package com.fluxion.runtime.spring.boot
 
-import com.fluxion.adapter.spi.WorkflowRouter
-import com.fluxion.adapter.spi.config.DefinitionConfigSubscriber
-import com.fluxion.adapter.spi.registry.InstanceRegistry
+import com.fluxion.inbound.spi.InboundRouter
+import com.fluxion.config.core.DefinitionConfigSubscriber
+import com.fluxion.config.core.InstanceRegistry
 import com.fluxion.core.engine.DagExecutor
 import com.fluxion.core.engine.IdempotencyStore
 import com.fluxion.core.lock.DistributedLockProvider
@@ -10,7 +10,7 @@ import com.fluxion.runtime.core.provider.ConfigBackedDefinitionProvider
 import com.fluxion.runtime.core.provider.DefinitionProvider
 import com.fluxion.runtime.core.router.DistributedLockRouter
 import com.fluxion.runtime.core.router.IdempotencyRouter
-import com.fluxion.runtime.core.router.RuntimeWorkflowRouter
+import com.fluxion.runtime.core.router.RuntimeInboundRouter
 import com.fluxion.runtime.core.spi.ExecutionSnapshotStore
 import com.fluxion.runtime.spring.boot.registry.RuntimeInstanceRegistrar
 import com.fluxion.runtime.spring.boot.store.LoggingExecutionSnapshotStore
@@ -73,11 +73,11 @@ class FluxionRuntimeAutoConfiguration {
     }
 
     /**
-     * Assemble the canonical [WorkflowRouter] bean consumed by every
+     * Assemble the canonical [InboundRouter] bean consumed by every
      * transport adapter (HTTP, Dubbo, gRPC, Kafka).
      *
      * Decorator stacking order is INNER → OUTER:
-     * 1. `RuntimeWorkflowRouter` (DAG engine — innermost, always present).
+     * 1. `RuntimeInboundRouter` (DAG engine — innermost, always present).
      * 2. `IdempotencyRouter` (if store is wired, result cache BEFORE locking).
      * 3. `DistributedLockRouter` (if provider wired, cluster serialization — outermost).
      *
@@ -85,18 +85,18 @@ class FluxionRuntimeAutoConfiguration {
      * cluster lock; the lock protects only cache-miss executions.
      */
     @Bean
-    @ConditionalOnMissingBean(WorkflowRouter::class)
+    @ConditionalOnMissingBean(InboundRouter::class)
     fun runtimeWorkflowRouter(
         definitionProvider: DefinitionProvider,
         dagExecutor: DagExecutor,
         snapshotStore: ExecutionSnapshotStore?,
         @Autowired(required = false) idempotencyStore: IdempotencyStore?,
         @Autowired(required = false) lockProvider: DistributedLockProvider?
-    ): WorkflowRouter {
-        var router: WorkflowRouter = RuntimeWorkflowRouter(definitionProvider, dagExecutor, snapshotStore)
+    ): InboundRouter {
+        var router: InboundRouter = RuntimeInboundRouter(definitionProvider, dagExecutor, snapshotStore)
 
         if (idempotencyStore != null && idempotencyStore != IdempotencyStore.NOOP) {
-            log.info { "IdempotencyRouter enabled, wrapping RuntimeWorkflowRouter" }
+            log.info { "IdempotencyRouter enabled, wrapping RuntimeInboundRouter" }
             router = IdempotencyRouter(router, idempotencyStore)
         }
 

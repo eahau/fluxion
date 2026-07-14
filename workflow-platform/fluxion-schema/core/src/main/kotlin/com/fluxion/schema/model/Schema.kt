@@ -1,4 +1,4 @@
-package com.fluxion.schema.model
+﻿package com.fluxion.schema.model
 
 /**
  * Unified schema envelope shared across every schema format (JSON Schema,

@@ -1,4 +1,4 @@
-package com.fluxion.schema.api
+﻿package com.fluxion.schema.api
 
 import com.fluxion.schema.exception.SchemaValidationException
 import com.fluxion.schema.model.Schema

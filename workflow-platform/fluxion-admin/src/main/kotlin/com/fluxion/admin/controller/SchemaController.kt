@@ -1,4 +1,4 @@
-package com.fluxion.admin.controller
+﻿package com.fluxion.admin.controller
 
 import com.fluxion.admin.generated.api.SchemasApi
 import com.fluxion.admin.generated.model.ForeignKeyInfo
@@ -48,11 +48,17 @@ class SchemaController(
     override fun listSchemas(
         keyword: String?,
         schemaType: String?,
+        domain: String?,
+        frozen: Boolean?,
+        appGroup: String?,
+        sortField: String,
+        sortDirection: String,
         page: Int,
         pageSize: Int
     ): ResponseEntity<PageResponseSchemaDefinition> {
         val size = pageSize.coerceAtMost(100)
-        val pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "updatedAt"))
+        val direction = if (sortDirection.equals("asc", ignoreCase = true)) Sort.Direction.ASC else Sort.Direction.DESC
+        val pageable = PageRequest.of(page, size, Sort.by(direction, sortField))
         val result = service.searchSummaries(keyword, schemaType, pageable)
         return ResponseEntity.ok(PageResponseSchemaDefinition().apply {
             total = result.totalElements

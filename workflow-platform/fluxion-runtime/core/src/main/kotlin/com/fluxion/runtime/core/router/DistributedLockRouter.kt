@@ -1,14 +1,14 @@
-package com.fluxion.runtime.core.router
+﻿package com.fluxion.runtime.core.router
 
-import com.fluxion.adapter.spi.UnifiedRequest
-import com.fluxion.adapter.spi.UnifiedResponse
-import com.fluxion.adapter.spi.WorkflowRouter
+import com.fluxion.inbound.spi.UnifiedRequest
+import com.fluxion.inbound.spi.UnifiedResponse
+import com.fluxion.inbound.spi.InboundRouter
 import com.fluxion.core.exception.LockAcquisitionException
 import com.fluxion.core.lock.DistributedLockProvider
 import kotlinx.coroutines.runBlocking
 import org.slf4j.*
 /**
- * Distributed-lock guarding [WorkflowRouter] decorator.
+ * Distributed-lock guarding [InboundRouter] decorator.
  *
  * Serializes concurrent requests that share the same lock key, guaranteeing
  * at most one in-flight workflow execution per key across the entire cluster.
@@ -37,14 +37,14 @@ import org.slf4j.*
  * @param sync                 If true, use sync (fair) acquire variant where supported
  */
 class DistributedLockRouter(
-    private val delegate: WorkflowRouter,
+    private val delegate: InboundRouter,
     private val lockProvider: DistributedLockProvider,
     private val waitMillis: Long = 0L,
     private val leaseMillis: Long = 30_000L,
     private val retry: Int = 0,
     private val retryIntervalMillis: Long = 100L,
     private val sync: Boolean = false
-) : WorkflowRouter {
+) : InboundRouter {
 
     private val log = LoggerFactory.getLogger(javaClass)
 

@@ -1,4 +1,4 @@
-package com.fluxion.schema.model
+﻿package com.fluxion.schema.model
 
 /**
  * Opaque schema-format identifier — wraps a raw string code so the core

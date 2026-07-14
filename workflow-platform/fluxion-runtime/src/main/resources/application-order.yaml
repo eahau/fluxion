@@ -1,0 +1,110 @@
+# ============================================================
+# Spring Profile: order
+# 订单 Worker 启动方式（二选一）：
+#   1. 源码启动: gradlew :fluxion-runtime:bootRun
+#                 --args='--spring.profiles.active=order'
+#   2.  二进制:   java -jar fluxion-runtime-*.jar
+#                 --spring.profiles.active=order
+#
+# workflow.instance.app-group=order-worker
+# ConfigBackedDefinitionProvider 仅拉取 target_groups 包含
+# "order-worker" 的 wf_definition。
+# ============================================================
+
+spring:
+  application:
+    name: fluxion-runtime-order
+
+  datasource:
+    # 与 fluxion-admin、product-worker 共用同一个 fluxion 库。
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/workflow_platform?useSSL=false&allowPublicKeyRetrieval=true&useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    username: root
+    password: password
+    hikari:
+      minimum-idle: 2
+      maximum-pool-size: 12
+      idle-timeout: 60000
+
+  data:
+    redis:
+      # 与其它服务共用本地同一个 Redis（localhost:6379, DB 0）。
+      # 缓存 key 自动带 order-worker:xxx 前缀，避免与商品域冲突。
+      host: localhost
+      port: 6379
+      database: 0
+      timeout: 2000ms
+      lettuce:
+        pool:
+          min-idle: 2
+          max-active: 10
+          max-idle: 10
+
+  kafka:
+    # 与 product-worker 共用本地同一个 Kafka Broker。
+    # order-create-kafka 消费 workflow.order.created topic，
+    # 失败重试 3 次后投递 workflow.order.created.DLT 死信 Topic。
+    bootstrap-servers: localhost:9092
+    consumer:
+      enable-auto-commit: false
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      max-poll-records: 200
+      properties:
+        allow.auto.create.topics: true
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      retries: 3
+      properties:
+        acks: all
+
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration
+
+server:
+  port: 8083
+  shutdown: graceful
+
+workflow:
+  instance:
+    role: worker
+    # ── 关键：将该 Worker 实例归入订单域 ────────────────────
+    app-group: order-worker
+
+  config:
+    type: http
+    http:
+      # 指向 fluxion-admin（端口 7070）。
+      admin-url: http://localhost:7070
+
+  execution-log:
+    store: log
+
+  node:
+    default-timeout-ms: 45000
+
+  retry:
+    wheel-tick-duration-ms: 100
+    wheel-buckets-per-wheel: 512
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    root: INFO
+    com.fluxion.builtin: INFO
+    com.fluxion.inbound.mq.kafka: INFO
+  pattern:
+    console: '%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36}[order-worker] - %msg%n'
+  file:
+    path: ${user.home}/.fluxion/fluxion-worker/order-worker/logs

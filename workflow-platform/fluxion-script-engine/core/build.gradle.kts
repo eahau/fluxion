@@ -8,12 +8,12 @@ plugins {
 dependencies {
     // Core base types: NodeInput, FunctionResult, WorkflowContext.
     implementation(project(":fluxion-core"))
-    // Debug module: FunctionInstanceProvider + DependencyResolver for script bean resolution.
-    implementation(project(":fluxion-debug"))
+    // DI module: FunctionInstanceProvider + DependencyResolver for script bean resolution.
+    implementation(project(":fluxion-di"))
     // Adapter SPI: ScriptConfigSubscriber / dynamic script refresh change events.
-    implementation(project(":fluxion-adapter-spi"))
+    implementation(project(":fluxion-config:core"))
     // External function SPI: scripts may invoke other external functions.
-    implementation(project(":fluxion-function:external"))
+    implementation(project(":fluxion-outbound"))
 
     // Apache Groovy - Groovy language runtime + GroovyClassLoader compilation engine.
     implementation("org.apache.groovy:groovy")

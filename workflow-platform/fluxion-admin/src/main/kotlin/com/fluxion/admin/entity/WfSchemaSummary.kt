@@ -1,4 +1,4 @@
-package com.fluxion.admin.entity
+﻿package com.fluxion.admin.entity
 
 import java.time.LocalDateTime
 

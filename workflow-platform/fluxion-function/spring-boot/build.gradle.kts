@@ -11,14 +11,14 @@ plugins {
 dependencies {
     // Function core SPI: FunctionComponent / FunctionRegistry / WorkflowFunction / FunctionInstanceProvider.
     api(project(":fluxion-function"))
-    // Debug module: dependency resolver implementations.
-    implementation(project(":fluxion-debug"))
+    // DI module: dependency resolver implementations.
+    implementation(project(":fluxion-di"))
     // Function metadata SPI: FunctionMetaManager / FunctionMetaRegistry (merged into this starter).
     api(project(":fluxion-function:meta"))
 
     // Adapter SPI: FunctionConfigSubscriber / FunctionChangeListener (compileOnly;
     // only required when adapter-spi is present on consumer classpath).
-    compileOnly(project(":fluxion-adapter-spi"))
+    compileOnly(project(":fluxion-config:core"))
 
     // Spring Boot AutoConfigure mechanism + metadata processor.
     implementation("org.springframework.boot:spring-boot-autoconfigure")

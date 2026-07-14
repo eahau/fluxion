@@ -1,4 +1,4 @@
-package com.fluxion.admin.repository
+﻿package com.fluxion.admin.repository
 
 import com.fluxion.admin.entity.WfDefinition
 import org.springframework.data.jpa.repository.JpaRepository
@@ -47,4 +47,11 @@ interface WfDefinitionRepository : JpaRepository<WfDefinition, Long> {
     /** Engine cold-start bootstrap: every ACTIVE definition regardless of scope. */
     @Query("SELECT d FROM WfDefinition d WHERE d.status = 'ACTIVE'")
     fun findAllActive(): List<WfDefinition>
+
+    /** Find all definitions published as function sets. */
+    @Query("SELECT d FROM WfDefinition d WHERE d.isPublishedSet = true")
+    fun findAllPublishedSets(): List<WfDefinition>
+
+    /** Look up a definition by its function-set reference name. */
+    fun findBySetRefName(setRefName: String): Optional<WfDefinition>
 }

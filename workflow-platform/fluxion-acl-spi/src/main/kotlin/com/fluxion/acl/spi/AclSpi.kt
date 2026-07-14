@@ -1,4 +1,4 @@
-package com.fluxion.acl.spi
+﻿package com.fluxion.acl.spi
 
 import com.fluxion.acl.spi.model.AuthResult
 import com.fluxion.acl.spi.model.TokenClaims

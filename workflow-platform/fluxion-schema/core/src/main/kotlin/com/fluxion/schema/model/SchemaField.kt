@@ -1,4 +1,4 @@
-package com.fluxion.schema.model
+﻿package com.fluxion.schema.model
 
 /**
  * Format-agnostic schema field descriptor — every format-specific extractor

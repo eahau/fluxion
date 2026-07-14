@@ -1,4 +1,4 @@
-package com.fluxion.script.meta
+﻿package com.fluxion.script.meta
 
 import com.fasterxml.jackson.core.type.TypeReference
 import com.networknt.schema.JsonSchemaFactory

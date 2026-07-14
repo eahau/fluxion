@@ -1,4 +1,4 @@
-package com.fluxion.schema.model
+﻿package com.fluxion.schema.model
 
 /**
  * Canonical logical field type enum — the least-common-denominator union of

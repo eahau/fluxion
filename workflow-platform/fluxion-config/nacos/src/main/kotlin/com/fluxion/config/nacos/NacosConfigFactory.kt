@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Factory for building Nacos-backed [KeyedConfigPublisher] and
  * [KeyedConfigSubscriber] instances with a consistent [group] prefix.
  *
@@ -15,9 +15,9 @@
 package com.fluxion.config.nacos
 
 import com.alibaba.nacos.api.config.ConfigService
-import com.fluxion.adapter.spi.config.ConfigSubscriber
-import com.fluxion.adapter.spi.config.KeyedConfigPublisher
-import com.fluxion.adapter.spi.config.KeyedConfigSubscriber
+import com.fluxion.config.core.ConfigSubscriber
+import com.fluxion.config.core.KeyedConfigPublisher
+import com.fluxion.config.core.KeyedConfigSubscriber
 import com.fluxion.core.util.JsonUtil
 
 /**

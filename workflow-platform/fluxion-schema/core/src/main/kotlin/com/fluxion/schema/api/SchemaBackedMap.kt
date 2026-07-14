@@ -1,4 +1,4 @@
-package com.fluxion.schema.api
+﻿package com.fluxion.schema.api
 
 /**
  * Schema-aware read-only [Map] view over arbitrary data objects — wraps a

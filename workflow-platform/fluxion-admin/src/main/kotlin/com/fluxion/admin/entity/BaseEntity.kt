@@ -1,4 +1,4 @@
-package com.fluxion.admin.entity
+﻿package com.fluxion.admin.entity
 
 import jakarta.persistence.Column
 import jakarta.persistence.GeneratedValue

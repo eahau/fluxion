@@ -1,7 +1,7 @@
-package com.fluxion.config.http
+﻿package com.fluxion.config.http
 
 /**
- * HTTP 宸ヤ綔娴佸畾涔夋帹閫佺殑 payload 缁撴瀯锛圓dmin 鈫?Worker锛?
+ * HTTP workflow definition push payload structure (Admin → Worker).
  */
 data class HttpDefinitionPushPayload(
     val workflowId: String,

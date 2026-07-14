@@ -262,7 +262,7 @@ package com.fluxion.adapter.websocket.spring.boot
 
 import com.fluxion.adapter.longconnection.core.ActorManager
 import com.fluxion.adapter.longconnection.core.SessionManager
-import com.fluxion.adapter.spi.WorkflowRouter
+import com.fluxion.adapter.spi.InboundRouter
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
@@ -278,11 +278,11 @@ class WebSocketAdapterAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     fun webSocketConnectionHandler(
-        workflowRouter: WorkflowRouter,
+        inboundRouter: WorkflowRouter,
         sessionManager: SessionManager<WebSocketSession>,
         actorManager: ActorManager
     ): WebSocketConnectionHandler = WebSocketConnectionHandler(
-        workflowRouter, sessionManager, actorManager
+        inboundRouter, sessionManager, actorManager
     )
 
     @Bean
@@ -353,11 +353,11 @@ class TcpWorkflowServer(
 package com.fluxion.adapter.longconnection.core
 
 import com.fluxion.adapter.spi.UnifiedRequest
-import com.fluxion.adapter.spi.WorkflowRouter
+import com.fluxion.adapter.spi.InboundRouter
 import com.fluxion.core.enums.Protocol
 
 class LongConnectionHandler(
-    private val workflowRouter: WorkflowRouter,
+    private val inboundRouter: WorkflowRouter,
     private val sessionManager: SessionManager<Any>,
     private val actorManager: ActorManager,
     private val routeResolver: LongConnectionRouteResolver
@@ -880,12 +880,12 @@ workflow.websocket.routes:
 
 ```kotlin
 // HTTP
-val httpResult = workflowRouter.executeSuspend(
+val httpResult = inboundRouter.executeSuspend(
     UnifiedRequest("HTTP", workflowId, headers, params)
 )
 
 // WebSocket
-val wsResult = workflowRouter.executeSuspend(
+val wsResult = inboundRouter.executeSuspend(
     UnifiedRequest("WEBSOCKET", workflowId, headers, params)
 )
 ```

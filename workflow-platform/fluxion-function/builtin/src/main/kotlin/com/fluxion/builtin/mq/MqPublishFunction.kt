@@ -1,7 +1,7 @@
-package com.fluxion.builtin.mq
+﻿package com.fluxion.builtin.mq
 
 import com.fluxion.builtin.BuiltinFunction
-import com.fluxion.adapter.spi.mq.MqPublisher
+import com.fluxion.outbound.mq.spi.MqPublisher
 import com.fluxion.builtin.json.JsonSerializeFunction
 import com.fluxion.core.exception.WorkflowNodeException
 import com.fluxion.core.function.WorkflowFunction

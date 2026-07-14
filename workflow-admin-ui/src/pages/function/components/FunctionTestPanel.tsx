@@ -36,6 +36,7 @@ import {
   type FieldSchemaMeta,
 } from '@/utils/conditionSchema';
 import { useClickDebounce } from '@/utils/useClickDebounce';
+import { filterOutBuiltinSchemas } from '@/utils/schemaFilter';
 import { NODE_PARAM_SCHEMAS } from '@/constants/nodeParamSchemas';
 import type { FunctionDefinition } from '@/types/function';
 import type { SchemaDefinition } from '@/types/schema';
@@ -875,15 +876,19 @@ const FunctionTestPanel: React.FC<FunctionTestPanelProps> = ({ functionId, funct
   }, [functionId]);
 
   // 加载全量 schema 列表（条件函数的 rules + 三上下文的 Schema Select 都要用到）
+  // —— 函数测试输入 Schema 过滤规则：builtin:* 的系统 Schema 不展示（由系统自动注入，
+  //    只允许用户选择自定义 / 平台通用 Schema，避免测试输入脏数据
   useEffect(() => {
     getSchemas({ pageSize: 1000 })
       .then((res) => {
-        const list = res?.list || [];
+        const rawList = res?.list || [];
+        // 过滤 builtin:*，且保留 scope=PLATFORM 的用户自定义冻结 Schema
+        const list: SchemaDefinition[] = filterOutBuiltinSchemas(rawList);
         // DEBUG: 打印返回的 schemas 结构，定位 UI 中显示 undefined 的原因
         // 在控制台查看：长度、前 5 项属性快照
         try {
           // eslint-disable-next-line no-console
-          console.debug('getSchemas.result.count=', list.length, 'sample=', list.slice(0, 5));
+          console.debug('getSchemas.result.count=', list.length, 'sample=', list.slice(0, 5), 'builtin filtered=', rawList.length - list.length);
         } catch (_e) {}
         setSchemas(list);
         // 条件模式才维护条件 schema 的测试数据 / fields 映射
@@ -893,10 +898,19 @@ const FunctionTestPanel: React.FC<FunctionTestPanelProps> = ({ functionId, funct
           setSchemaFields([]);
           setSchemaFieldTypes({});
           setSchemaFieldMeta({});
+        } else {
+          // 条件模式下如果当前选中的 schema 是 builtin（比如从路由历史中带过来），清掉
+          if (selectedSchemaName && list.every((s) => s.schemaName !== selectedSchemaName && s.name !== selectedSchemaName)) {
+            setSelectedSchemaName(undefined);
+            setTestData({});
+            setSchemaFields([]);
+            setSchemaFieldTypes({});
+            setSchemaFieldMeta({});
+          }
         }
         const inputSchema = (functionDefinition?.config as any)?.inputSchema as string | undefined;
         if (inputSchema && !ctxWorkflowSchema) {
-          const exists = list.some((s) => s.name === inputSchema);
+          const exists = list.some((s) => s.name === inputSchema || s.schemaName === inputSchema);
           if (exists) setCtxWorkflowSchema(inputSchema);
         }
       })
@@ -1203,23 +1217,8 @@ const FunctionTestPanel: React.FC<FunctionTestPanelProps> = ({ functionId, funct
 
     if (isDbDomain) {
       return (
-        <div
-          style={{
-            border: '2px solid #52c41a',
-            borderRadius: 8,
-            padding: '8px 10px',
-            marginTop: 4,
-            marginBottom: 4,
-            background: '#f6ffed',
-          }}
-        >
-          <Typography.Text
-            type="secondary"
-            style={{ fontSize: 11, color: '#52c41a', fontWeight: 600 }}
-          >
-            🟢 分支2: isDbDomain → DbSqlEditor（绿色边框=这条分支被命中）
-          </Typography.Text>
-          <Space direction="vertical" size={6} style={{ width: '100%', marginTop: 6 }}>
+        <div style={{ marginTop: 4, marginBottom: 4 }}>
+          <Space direction="vertical" size={6} style={{ width: '100%' }}>
             {sqlHistory.length > 0 && (
               <Select
                 value={input.sql || undefined}
@@ -1249,23 +1248,8 @@ const FunctionTestPanel: React.FC<FunctionTestPanelProps> = ({ functionId, funct
     }
 
     return (
-      <div
-        style={{
-          border: '2px solid #fa8c16',
-          borderRadius: 8,
-          padding: '8px 10px',
-          marginTop: 4,
-          marginBottom: 4,
-          background: '#fff7e6',
-        }}
-      >
-        <Typography.Text
-          type="secondary"
-          style={{ fontSize: 11, color: '#fa8c16', fontWeight: 600 }}
-        >
-          🟠 分支3: 兜底 JSON 输入（橙色边框=这条分支被命中，说明paramSchema=null且不是DbDomain）
-        </Typography.Text>
-        <Space direction="vertical" size={6} style={{ width: '100%', marginTop: 6 }}>
+      <div style={{ marginTop: 4, marginBottom: 4 }}>
+        <Space direction="vertical" size={6} style={{ width: '100%' }}>
           {!functionDefinition?.config?.paramSchema && (
             <Alert
               type="info"

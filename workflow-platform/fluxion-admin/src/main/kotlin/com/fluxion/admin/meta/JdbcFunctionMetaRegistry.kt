@@ -1,4 +1,4 @@
-package com.fluxion.admin.meta
+﻿package com.fluxion.admin.meta
 
 import com.fluxion.core.value.FunctionMeta
 import com.fluxion.functionmeta.api.FunctionMetaRegistry

@@ -1,7 +1,7 @@
-package com.fluxion.redis.config
+﻿package com.fluxion.redis.config
 
 import com.fluxion.core.function.FunctionRegistry
-import com.fluxion.decorator.ratelimit.RateLimitStore
+import com.fluxion.core.ratelimit.RateLimitStore
 import com.fluxion.redis.function.RedisCommandFunction
 import com.fluxion.redis.lettuce.LettuceWorkflowAutoConfiguration
 import com.fluxion.redis.ratelimit.RedisRateLimitStore

@@ -1,7 +1,10 @@
-package com.fluxion.admin.entity
+﻿package com.fluxion.admin.entity
 
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
+import jakarta.persistence.FetchType
+import jakarta.persistence.JoinColumn
+import jakarta.persistence.ManyToOne
 import jakarta.persistence.Table
 
 /**
@@ -123,4 +126,19 @@ class WfDefinition : BaseEntity() {
     /** Username who created this definition, maps to column `created_by`. */
     @Column(name = "created_by", length = 64)
     var createdBy: String? = null
+
+    /** Owning app, maps to column `app_id`. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "app_id")
+    var app: App? = null
+
+    /** True if this definition has been published as a function set, maps to column `is_published_set`. */
+    @get:JvmName("getIsPublishedSet")
+    @set:JvmName("setIsPublishedSet")
+    @Column(name = "is_published_set", nullable = false)
+    var isPublishedSet: Boolean = false
+
+    /** Function-set reference name (alias), maps to column `set_ref_name`. */
+    @Column(name = "set_ref_name", length = 128)
+    var setRefName: String? = null
 }

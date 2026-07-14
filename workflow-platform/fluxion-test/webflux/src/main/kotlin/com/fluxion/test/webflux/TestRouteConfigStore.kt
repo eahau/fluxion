@@ -1,8 +1,8 @@
-package com.fluxion.test.webflux
+﻿package com.fluxion.test.webflux
 
 import com.alibaba.nacos.api.config.ConfigService
-import com.fluxion.adapter.http.core.RouteConfigStore
-import com.fluxion.adapter.http.springmvc.nacos.NacosRouteConfigStore
+import com.fluxion.inbound.http.core.RouteConfigStore
+import com.fluxion.inbound.http.springmvc.nacos.NacosRouteConfigStore
 import org.slf4j.*
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean

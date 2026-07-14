@@ -1,4 +1,4 @@
-package com.fluxion.core.enums
+﻿package com.fluxion.core.enums
 
 /**
  * Terminal result status of a single function invocation.

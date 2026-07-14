@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Aggregates every SPI implementation that exists for a single [SchemaFormat].
  *
  * Each format sub-module (json / avro / protobuf / custom) ships one bundle

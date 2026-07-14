@@ -1,4 +1,4 @@
-/**
+﻿/**
  * JSON-format [SchemaCodec] backed by the shared Jackson [JsonUtil] helper.
  *
  * Serialisation always produces UTF-8 encoded compact JSON; deserialisation

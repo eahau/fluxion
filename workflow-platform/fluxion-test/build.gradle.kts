@@ -10,7 +10,8 @@ plugins {
 dependencies {
     // Core SPI modules that tests commonly exercise and stub.
     api(project(":fluxion-core"))
-    api(project(":fluxion-adapter-spi"))
+    api(project(":fluxion-config:core"))
+    api(project(":fluxion-inbound:spi"))
 
     // JUnit 5 Jupiter (api) so consumers inherit test framework without redeclaration.
     api("org.junit.jupiter:junit-jupiter:5.10.2")

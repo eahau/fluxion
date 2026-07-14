@@ -1,4 +1,4 @@
-package com.fluxion.script.util
+﻿package com.fluxion.script.util
 
 import com.fluxion.di.DependencyResolver
 

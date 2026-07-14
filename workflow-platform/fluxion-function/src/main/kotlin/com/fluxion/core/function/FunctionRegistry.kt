@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Concrete, in-memory implementation of both [FunctionResolver] and
  * [FunctionRegistrar] backing the engine at runtime.
  *

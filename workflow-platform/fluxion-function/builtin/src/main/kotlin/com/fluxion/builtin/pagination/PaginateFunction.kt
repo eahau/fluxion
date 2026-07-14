@@ -1,4 +1,4 @@
-package com.fluxion.builtin.pagination
+﻿package com.fluxion.builtin.pagination
 
 import com.fluxion.builtin.BuiltinFunction
 import com.fluxion.core.function.WorkflowFunction

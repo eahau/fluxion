@@ -1,4 +1,4 @@
-package com.fluxion.core.debug
+﻿package com.fluxion.core.debug
 
 import com.fluxion.core.model.ImmutableExecutionState
 import com.fluxion.core.model.WorkflowDefinition

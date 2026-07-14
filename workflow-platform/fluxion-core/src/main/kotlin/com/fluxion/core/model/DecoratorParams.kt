@@ -1,4 +1,4 @@
-package com.fluxion.core.model
+﻿package com.fluxion.core.model
 
 /**
  * Helpers for extracting typed values from the loosely-typed decorator

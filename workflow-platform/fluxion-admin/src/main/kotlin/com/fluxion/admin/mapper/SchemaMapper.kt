@@ -1,4 +1,4 @@
-package com.fluxion.admin.mapper
+﻿package com.fluxion.admin.mapper
 
 import com.fluxion.admin.entity.WfSchema
 import com.fluxion.admin.entity.WfSchemaSummary

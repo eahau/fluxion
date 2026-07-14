@@ -1,4 +1,4 @@
-package com.fluxion.schema.model
+﻿package com.fluxion.schema.model
 
 /**
  * Structured validation error carrying both a human-readable message and the

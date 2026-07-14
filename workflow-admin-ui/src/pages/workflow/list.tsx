@@ -121,12 +121,12 @@ const WorkflowList: React.FC = () => {
 
   const handleDelete = useClickDebounce((record: WorkflowDefinition) => {
     if (!record.id) {
-      message.warning('该工作流缺少 ID，无法删除');
+      message.warning('该函数集合缺少 ID，无法删除');
       return;
     }
     Modal.confirm({
       title: '确认删除',
-      content: `确定删除工作流「${record.name}」吗？`,
+      content: `确定删除函数集合「${record.name}」吗？`,
       onOk: async () => {
         try {
           await deleteWorkflow(record.id!);
@@ -143,7 +143,7 @@ const WorkflowList: React.FC = () => {
 
   const handlePublish = (record: WorkflowDefinition) => {
     if (!record.id) {
-      message.warning('该工作流缺少 ID，无法发布');
+      message.warning('该函数集合缺少 ID，无法发布');
       return;
     }
     publishForm.setFieldsValue({
@@ -206,7 +206,7 @@ const WorkflowList: React.FC = () => {
       setImportDefinitionFile(file);
       setImportDefinitionData(data);
     } catch (e) {
-      message.error('工作流 JSON 解析失败');
+      message.error('函数集合 JSON 解析失败');
     }
     return false;
   });
@@ -215,12 +215,12 @@ const WorkflowList: React.FC = () => {
     if (!importDefinitionFile) return;
     try {
       await importWorkflowDefinition(importDefinitionFile);
-      message.success('工作流导入成功');
+      message.success('函数集合导入成功');
       setImportDefinitionFile(null);
       setImportDefinitionData(null);
       refresh();
     } catch (e) {
-      console.error('工作流导入失败:', e);
+      console.error('函数集合导入失败:', e);
     }
   });
 
@@ -304,9 +304,9 @@ const WorkflowList: React.FC = () => {
       width: 200,
       render: (_: any, record: WorkflowDefinition) => (
         <Space size={4}>
-          <Button size="small" icon={<EyeOutlined />} onClick={() => history.push(`/workflow/detail/${record.id}`)}>详情</Button>
+          <Button size="small" icon={<EyeOutlined />} onClick={() => history.push(`/workflow/detail/${record.workflowId || record.id}`)}>详情</Button>
           {access.canEditWorkflow && (
-            <Button size="small" icon={<EditOutlined />} onClick={() => history.push(`/workflow/designer/${record.id}`)}>编辑</Button>
+            <Button size="small" icon={<EditOutlined />} onClick={() => history.push(`/workflow/designer/${record.workflowId || record.id}`)}>编辑</Button>
           )}
           <Button
             size="small"
@@ -335,12 +335,12 @@ const WorkflowList: React.FC = () => {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Space>
             <PartitionOutlined style={{ fontSize: 20, color: '#6366f1' }} />
-            <Text strong style={{ fontSize: 16 }}>工作流管理</Text>
+            <Text strong style={{ fontSize: 16 }}>函数集合</Text>
             <Tag style={{ borderRadius: 4, marginLeft: 8 }}>{allWorkflows.length} 个</Tag>
           </Space>
           <Space>
             <Input.Search
-              placeholder="搜索工作流"
+              placeholder="搜索函数集合"
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
               onSearch={refresh}
@@ -355,7 +355,7 @@ const WorkflowList: React.FC = () => {
             <Button icon={<ExportOutlined />} onClick={() => setExportVisible(true)}>导出</Button>
             {access.canEditWorkflow && (
               <Button type="primary" icon={<PlusOutlined />} onClick={() => history.push('/workflow/designer')}>
-                新建工作流
+                新建函数集合
               </Button>
             )}
             <Segmented
@@ -400,7 +400,7 @@ const WorkflowList: React.FC = () => {
         {viewMode === 'card' && (
           <>
             {workflows.length === 0 && !loading ? (
-              <Empty description="暂无工作流" image={Empty.PRESENTED_IMAGE_SIMPLE} style={{ padding: '40px 0' }} />
+              <Empty description="暂无函数集合" image={Empty.PRESENTED_IMAGE_SIMPLE} style={{ padding: '40px 0' }} />
             ) : (
               <Row gutter={[16, 16]}>
                 {workflows.map((record: WorkflowDefinition) => {
@@ -412,7 +412,7 @@ const WorkflowList: React.FC = () => {
                         hoverable
                         size="small"
                         className="workflow-list-card"
-                        onClick={() => history.push(`/workflow/detail/${record.id}`)}
+                        onClick={() => history.push(`/workflow/detail/${record.workflowId || record.id}`)}
                         style={{ borderRadius: 12, border: '1px solid #f0f0f0' }}
                         title={
                           <Tooltip title={record.name} placement="topLeft">
@@ -432,7 +432,7 @@ const WorkflowList: React.FC = () => {
                         actions={[
                           ...(access.canEditWorkflow ? [
                             <Button key="edit" type="text" size="small" icon={<EditOutlined />}
-                              onClick={(e) => { e.stopPropagation(); history.push(`/workflow/designer/${record.id}`); }}>
+                              onClick={(e) => { e.stopPropagation(); history.push(`/workflow/designer/${record.workflowId || record.id}`); }}>
                               编辑
                             </Button>,
                           ] : []),
@@ -511,9 +511,9 @@ const WorkflowList: React.FC = () => {
         ))}
       </Modal>
 
-      {/* 导入工作流 JSON 预览 */}
+      {/* 导入函数集合 JSON 预览 */}
       <Modal
-        title="导入工作流 JSON 预览"
+        title="导入函数集合 JSON 预览"
         open={!!importDefinitionData}
         onCancel={() => { setImportDefinitionFile(null); setImportDefinitionData(null); }}
         onOk={confirmImportDefinition}
@@ -534,7 +534,7 @@ const WorkflowList: React.FC = () => {
 
       {/* 发布弹窗 */}
       <Modal
-        title={`发布工作流：${publishRecord?.name}`}
+        title={`发布函数集合：${publishRecord?.name}`}
         open={!!publishRecord}
         onCancel={() => setPublishRecord(null)}
         onOk={handlePublishConfirm}

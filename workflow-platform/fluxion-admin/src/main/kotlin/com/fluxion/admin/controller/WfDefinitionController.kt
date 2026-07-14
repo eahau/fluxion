@@ -1,4 +1,4 @@
-package com.fluxion.admin.controller
+﻿package com.fluxion.admin.controller
 
 import com.fluxion.runtime.core.provider.DefinitionProvider
 import com.fluxion.admin.exception.WorkflowAdminException
@@ -317,7 +317,7 @@ class WfDefinitionController(
                             protocol = "HTTP",
                             nodes = mutableListOf()
                         ).apply {
-                            id = operationId
+                            workflowId = operationId
                             this.method = method.uppercase()
                             this.path = path
                             status = WorkflowStatus.DRAFT
@@ -388,8 +388,8 @@ class WfDefinitionController(
         val routeConflicts = mutableListOf<String>()
         items.forEach { dto ->
             val id = dto.id
-            if (!id.isNullOrBlank() && service.getEntity(id) != null) {
-                duplicateIds.add(id)
+            if (id != null && service.getEntityById(id) != null) {
+                duplicateIds.add(id.toString())
             }
             try {
                 val entity = workflowMapper.toEntity(dto)
@@ -400,7 +400,7 @@ class WfDefinitionController(
                         bindKey = entity.bindKey,
                         scope = entity.scope,
                         appGroup = entity.appGroup,
-                        excludeWorkflowId = id
+                        excludeWorkflowId = dto.workflowId
                     )?.let { conflict ->
                             routeConflicts.add("${entity.protocol} ${entity.method ?: ""} ${entity.bindKey} → occupied by [${conflict.workflowId}]")
                         }

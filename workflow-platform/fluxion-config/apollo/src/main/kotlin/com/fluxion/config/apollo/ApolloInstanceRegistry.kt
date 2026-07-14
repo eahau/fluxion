@@ -1,13 +1,13 @@
-package com.fluxion.config.apollo
+﻿package com.fluxion.config.apollo
 
 import com.ctrip.framework.apollo.openapi.client.ApolloOpenApiClient
-import com.fluxion.adapter.spi.registry.InstanceInfo
-import com.fluxion.adapter.spi.registry.InstanceRegistry
+import com.fluxion.config.core.InstanceInfo
+import com.fluxion.config.core.InstanceRegistry
 import com.fluxion.core.util.JsonUtil
 import org.slf4j.*
 
 /**
- * Apollo 瀹炵幇 鈥?瀹炰緥娉ㄥ唽锛堜笟鍔″疄渚嬩晶锛?
+ * Apollo implementation - instance registry (Worker side).
  */
 class ApolloInstanceRegistry(
     private val openApiClient: ApolloOpenApiClient,

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Shared JSON helpers internal to the `fluxion-schema` module family.
  *
  * Centralises a Jackson [ObjectMapper] pre-configured with:

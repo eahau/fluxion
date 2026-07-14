@@ -1,4 +1,4 @@
-package com.fluxion.schema.protobuf.spring.boot
+﻿package com.fluxion.schema.protobuf.spring.boot
 
 import com.fluxion.schema.api.SchemaFormatBundle
 import com.fluxion.schema.model.SchemaFormat

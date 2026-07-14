@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Immutable descriptor plus lifecycle tracking for one specific revision of
  * a registered [WorkflowFunction].
  *

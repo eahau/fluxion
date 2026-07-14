@@ -1,4 +1,4 @@
-package com.fluxion.admin.exception
+﻿package com.fluxion.admin.exception
 
 import com.fasterxml.jackson.databind.JsonMappingException
 import org.slf4j.*

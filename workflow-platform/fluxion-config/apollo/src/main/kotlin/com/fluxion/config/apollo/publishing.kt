@@ -1,15 +1,15 @@
-package com.fluxion.config.apollo
+﻿package com.fluxion.config.apollo
 
 import com.ctrip.framework.apollo.openapi.client.ApolloOpenApiClient
 import com.ctrip.framework.apollo.openapi.dto.NamespaceReleaseDTO
 import com.ctrip.framework.apollo.openapi.dto.OpenItemDTO
 
 /**
- * Apollo 鍙戝竷鍣ㄥ唴閮ㄥ叡浜伐鍏?鈥?娑堥櫎 OpenItemDTO / NamespaceReleaseDTO 鏋勫缓閲嶅
+ * Apollo publisher internal shared utilities - eliminate OpenItemDTO/NamespaceReleaseDTO construction duplication.
  *
- * 涓変釜 Apollo 鍙戝竷鍣紙DefinitionPublisher銆丗unctionPublisher銆両nstanceRegistry锛?
- * 鍏变韩鐩稿悓鐨?createOrUpdateItem + publishNamespace 妯″紡銆?
- * 杩欎簺 internal 鍑芥暟灏?DTO 鏋勫缓鍜?API 璋冪敤鏀舵暃鍒颁竴澶勩€?
+ * The three Apollo publishers (DefinitionPublisher, FunctionPublisher, InstanceRegistry)
+ * all follow the same createOrUpdateItem + publishNamespace pattern.
+ * These internal functions consolidate DTO construction and API calls into one place.
  */
 
 internal fun buildItem(
@@ -34,10 +34,10 @@ internal fun buildRelease(
 }
 
 /**
- * 瀹屾暣鐨?item 鍐欏叆 + namespace 鍙戝竷绠＄嚎銆?
+ * Complete item write + namespace release pipeline.
  *
- * 灏?createOrUpdateItem 鈫?publishNamespace 鐨勪袱姝ユ搷浣滃皝瑁呬负鍗曚竴鍑芥暟锛?
- * 渚涙墍鏈?Apollo 鍙戝竷鍣ㄧ殑 publish/unpublish 鏂规硶澶嶇敤銆?
+ * Combines the two-step createOrUpdateItem -> publishNamespace operation into a single function,
+ * reused by all Apollo publishers' publish/unpublish methods.
  */
 internal fun publishItemToApollo(
     client: ApolloOpenApiClient,
@@ -58,7 +58,7 @@ internal fun publishItemToApollo(
 }
 
 /**
- * 瀹屾暣鐨?item 鍒犻櫎 + namespace 鍙戝竷绠＄嚎銆?
+ * Complete item removal + namespace release pipeline.
  */
 internal fun unpublishItemFromApollo(
     client: ApolloOpenApiClient,

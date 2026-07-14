@@ -11,7 +11,7 @@ dependencies {
 
     // Adapter SPI: FunctionConfigSubscriber / ChangeType / FunctionConfigSnapshot (compileOnly -
     // avoids forcing adapter-spi onto consumers that do not require config subscriber bridge).
-    compileOnly(project(":fluxion-adapter-spi"))
+    compileOnly(project(":fluxion-config:core"))
 
     // Unified logging extensions.
     implementation(project(":fluxion-log"))

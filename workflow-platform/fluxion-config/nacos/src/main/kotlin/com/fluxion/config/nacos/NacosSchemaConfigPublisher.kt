@@ -1,14 +1,14 @@
-package com.fluxion.config.nacos
+﻿package com.fluxion.config.nacos
 
 import com.alibaba.nacos.api.config.ConfigService
-import com.fluxion.adapter.spi.config.SchemaConfigPublisher
-import com.fluxion.adapter.spi.config.SchemaConfigSnapshot
-import com.fluxion.adapter.spi.registry.PublishTarget
+import com.fluxion.config.core.SchemaConfigPublisher
+import com.fluxion.config.core.SchemaConfigSnapshot
+import com.fluxion.config.core.PublishTarget
 import com.fluxion.core.util.JsonUtil
 import org.slf4j.*
 
 /**
- * Nacos 瀹炵幇 鈥?Schema 閰嶇疆鍙戝竷鍣紙Admin 渚э級
+ * Nacos implementation - schema config publisher (Admin side).
  */
 class NacosSchemaConfigPublisher(
     private val configService: ConfigService
@@ -22,7 +22,7 @@ class NacosSchemaConfigPublisher(
         const val INDEX_DATA_ID = "workflow.schema.__index__"
     }
 
-    /** 绱㈠紩鏇存柊閿?鈥?闃叉骞跺彂 publish/unpublish 瀵艰嚧 read-modify-write 绔炴€?*/
+    /** Index update lock — prevents concurrent publish/unpublish from causing read-modify-write conflicts. */
     private val indexLock = Any()
 
     override fun publish(snapshot: SchemaConfigSnapshot) {

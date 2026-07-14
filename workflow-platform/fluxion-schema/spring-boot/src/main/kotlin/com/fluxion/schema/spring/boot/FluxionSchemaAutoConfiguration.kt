@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Spring Boot auto-configuration for `fluxion-schema:core`.
  *
  * Always registers the JSON-Schema format bundle plus the core
@@ -19,7 +19,7 @@
  */
 package com.fluxion.schema.spring.boot
 
-import com.fluxion.adapter.spi.config.SchemaConfigSubscriber
+import com.fluxion.config.core.SchemaConfigSubscriber
 import com.fluxion.schema.DefaultSchemaManager
 import com.fluxion.schema.api.SchemaDataProviderRegistry
 import com.fluxion.schema.api.SchemaFormatBundle

@@ -1,4 +1,4 @@
-package com.fluxion.core.enums
+﻿package com.fluxion.core.enums
 
 /**
  * Core enumeration types used across the Fluxion workflow engine.

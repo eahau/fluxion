@@ -3,7 +3,7 @@ package com.fluxion.admin.controller
 import com.fluxion.admin.generated.api.InstancesApi
 import com.fluxion.admin.generated.model.AppGroup
 import com.fluxion.admin.generated.model.InstanceInfo
-import com.fluxion.adapter.spi.registry.InstanceDiscovery
+import com.fluxion.config.core.InstanceDiscovery
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.RestController
@@ -48,7 +48,7 @@ class InstanceController(
 
     // Flatten the adapter InstanceInfo SPI record into the generated OpenAPI DTO;
     // fields map 1:1, kept explicit so DTO changes surface compile errors.
-    private fun toDto(info: com.fluxion.adapter.spi.registry.InstanceInfo): InstanceInfo = InstanceInfo().apply {
+    private fun toDto(info: com.fluxion.config.core.InstanceInfo): InstanceInfo = InstanceInfo().apply {
         instanceId = info.instanceId
         appGroup = info.appGroup
         host = info.host

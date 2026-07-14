@@ -1,9 +1,9 @@
-package com.fluxion.runtime.core.provider
+﻿package com.fluxion.runtime.core.provider
 
-import com.fluxion.adapter.spi.config.ChangeType
-import com.fluxion.adapter.spi.config.DefinitionChangeListener
-import com.fluxion.adapter.spi.config.KeyedConfigSubscriber
-import com.fluxion.adapter.spi.config.WorkflowDefinitionSnapshot
+import com.fluxion.config.core.ChangeType
+import com.fluxion.config.core.DefinitionChangeListener
+import com.fluxion.config.core.KeyedConfigSubscriber
+import com.fluxion.config.core.WorkflowDefinitionSnapshot
 import com.fluxion.core.enums.NodeType
 import com.fluxion.core.model.WorkflowDefinition
 import com.fluxion.core.model.WorkflowNode

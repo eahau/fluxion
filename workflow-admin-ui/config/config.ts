@@ -29,20 +29,27 @@ export default defineConfig({
   theme: {
     'primary-color': '#6366f1',
   },
+  mfsu: {
+    strategy: 'eager',
+    esbuild: true,
+  },
   chainWebpack(config) {
     config.watchOptions({
+      aggregateTimeout: 300,
+      poll: false,
       ignored: [
         '**/node_modules/**',
         '**/.umi/**',
         '**/.git/**',
         '**/dist/**',
         '**/build/**',
+        '**/node_modules/.cache/**',
         '**/pagefile.sys',
         '**/DumpStack.log.tmp',
         '**/System Volume Information/**',
       ],
     });
   },
-  devtool: process.env.NODE_ENV === 'development' ? 'source-map' : false,
+  devtool: process.env.NODE_ENV === 'development' ? 'eval-cheap-module-source-map' : false,
   esbuildMinifyIIFE: true,
 });

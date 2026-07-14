@@ -1,7 +1,10 @@
 import { Link, Outlet, useLocation, history } from '@umijs/max';
 import {
+  AppstoreOutlined,
   ClusterOutlined,
   DashboardOutlined,
+  DatabaseOutlined,
+  ExperimentOutlined,
   FileTextOutlined,
   FunctionOutlined,
   HomeOutlined,
@@ -21,25 +24,45 @@ import React, { useState, useMemo, useEffect } from 'react';
 const { Header, Sider, Content } = Layout;
 const { Title, Text } = Typography;
 
+const COLOR = {
+  home: '#52c41a',
+  workflow: '#13c2c2',
+  function: '#2f54eb',
+  schema: '#eb2f96',
+  app: '#1677ff',
+  resource: '#fa8c16',
+  sandbox: '#722ed1',
+  monitor: '#fa541c',
+  instance: '#597ef7',
+  marketplace: '#a0d911',
+  system: '#8c8c8c',
+} as const;
+
 const menuItems = [
-  { key: '/', icon: <HomeOutlined />, label: <Link to="/">首页总览</Link> },
-  { key: '/workflow', icon: <PartitionOutlined />, label: <Link to="/workflow">工作流</Link> },
-  { key: '/function', icon: <FunctionOutlined />, label: <Link to="/function">函数</Link> },
-  { key: '/schema', icon: <FileTextOutlined />, label: <Link to="/schema">Schema</Link> },
-  { key: '/monitor', icon: <DashboardOutlined />, label: <Link to="/monitor">监控</Link> },
-  { key: '/instance', icon: <ClusterOutlined />, label: <Link to="/instance">实例</Link> },
-  { key: '/marketplace', icon: <ShopOutlined />, label: <Link to="/marketplace">市场</Link> },
-  { key: '/system', icon: <SettingOutlined />, label: <Link to="/system/user">系统</Link> },
+  { key: '/', icon: <span style={{ color: COLOR.home }}><HomeOutlined /></span>, label: <Link to="/">首页总览</Link> },
+  { key: '/workflow', icon: <span style={{ color: COLOR.workflow }}><PartitionOutlined /></span>, label: <Link to="/workflow">函数集合</Link> },
+  { key: '/function', icon: <span style={{ color: COLOR.function }}><FunctionOutlined /></span>, label: <Link to="/function">函数</Link> },
+  { key: '/schema', icon: <span style={{ color: COLOR.schema }}><FileTextOutlined /></span>, label: <Link to="/schema">Schema</Link> },
+  { key: '/app', icon: <span style={{ color: COLOR.app }}><AppstoreOutlined /></span>, label: <Link to="/app">应用</Link> },
+  { key: '/resource', icon: <span style={{ color: COLOR.resource }}><DatabaseOutlined /></span>, label: <Link to="/resource">资源中心</Link> },
+  { key: '/sandbox', icon: <span style={{ color: COLOR.sandbox }}><ExperimentOutlined /></span>, label: <Link to="/sandbox">沙盒</Link> },
+  { key: '/monitor', icon: <span style={{ color: COLOR.monitor }}><DashboardOutlined /></span>, label: <Link to="/monitor">监控</Link> },
+  { key: '/instance', icon: <span style={{ color: COLOR.instance }}><ClusterOutlined /></span>, label: <Link to="/instance">实例</Link> },
+  { key: '/marketplace', icon: <span style={{ color: COLOR.marketplace }}><ShopOutlined /></span>, label: <Link to="/marketplace">市场</Link> },
+  { key: '/system', icon: <span style={{ color: COLOR.system }}><SettingOutlined /></span>, label: <Link to="/system/user">系统</Link> },
 ];
 
 const breadcrumbMap: Record<string, string> = {
   '/': '首页',
   '/schema': 'Schema 管理',
-  '/workflow': '工作流',
-  '/function': '函数',
-  '/monitor': '监控',
-  '/instance': '实例',
-  '/marketplace': '市场',
+  '/workflow': '函数集合',
+  '/function': '函数管理',
+  '/app': '应用管理',
+  '/resource': '资源中心',
+  '/sandbox': '沙盒管理',
+  '/monitor': '监控面板',
+  '/instance': '运行面实例',
+  '/marketplace': '工作流市场',
   '/system': '系统管理',
   '/designer': '设计器',
   '/detail': '详情',
@@ -48,6 +71,7 @@ const breadcrumbMap: Record<string, string> = {
   '/trace': '链路追踪',
   '/dashboard': '仪表盘',
   '/list': '列表',
+  '/versions': '版本历史',
   '/user': '用户',
   '/role': '角色',
   '/audit': '审计',
@@ -127,7 +151,7 @@ const BasicLayout: React.FC = () => {
   }, []);
 
   const quickLinks = [
-    { label: '新建工作流', path: '/workflow/designer', icon: <PartitionOutlined /> },
+    { label: '新建函数集合', path: '/workflow/designer', icon: <PartitionOutlined /> },
     { label: '注册函数', path: '/function/editor', icon: <FunctionOutlined /> },
     { label: '新建 Schema', path: '/schema/editor', icon: <FileTextOutlined /> },
     { label: '监控面板', path: '/monitor', icon: <DashboardOutlined /> },
@@ -333,7 +357,7 @@ const BasicLayout: React.FC = () => {
             <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--fluxion-border)' }}>
               <Input
                 size="large"
-                placeholder="搜索工作流、函数、Schema..."
+                placeholder="搜索函数集合、函数、Schema..."
                 prefix={<SearchOutlined style={{ color: 'var(--fluxion-text-muted)' }} />}
                 autoFocus
                 suffix={<Tag style={{ fontSize: 10 }} onClick={() => setSearchOpen(false)}>ESC</Tag>}

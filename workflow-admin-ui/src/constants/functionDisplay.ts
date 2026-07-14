@@ -14,6 +14,13 @@ export interface FunctionGroupMeta {
 
 export const FUNCTION_GROUPS: FunctionGroupMeta[] = [
   {
+    key: 'trigger',
+    label: '触发器函数',
+    icon: '⚡',
+    color: '#0ea5e9',
+    description: 'HTTP / Kafka / Dubbo / gRPC 等入站事件触发',
+  },
+  {
     key: 'flow-control',
     label: '流程控制',
     icon: '🔀',
@@ -166,11 +173,16 @@ function splitCamelCase(str: string): string {
  * 3. 对 code 名称做美化
  */
 export function getFunctionDisplayName(fn: FunctionDefinition): string {
-  const { name, config } = fn;
+  const { name, config, category } = fn;
   if (!name) return '未命名函数';
 
   if (BUILTIN_DISPLAY_NAMES[name]) {
     return BUILTIN_DISPLAY_NAMES[name];
+  }
+
+  if (category === 'TRIGGER') {
+    const label = config?.label;
+    if (typeof label === 'string' && label.trim()) return label.trim();
   }
 
   const displayName = config?.displayName || config?.title;
@@ -193,6 +205,7 @@ export function getFunctionDisplayName(fn: FunctionDefinition): string {
 export function getFunctionGroupKey(fn: FunctionDefinition): string {
   const { category, name } = fn;
 
+  if (category === 'TRIGGER') return 'trigger';
   if (category === 'EXTERNAL') return 'external';
   if (category === 'CUSTOM') return 'custom';
   if (category === 'SCRIPT') return 'script';

@@ -1,11 +1,11 @@
-package com.fluxion.config.apollo
+﻿package com.fluxion.config.apollo
 
 import com.ctrip.framework.apollo.openapi.client.ApolloOpenApiClient
-import com.fluxion.adapter.spi.config.DefinitionConfigPublisher
+import com.fluxion.config.core.DefinitionConfigPublisher
 import org.slf4j.*
 
 /**
- * Apollo 瀹炵幇 鈥?宸ヤ綔娴佸畾涔夊彂甯冨櫒锛圓dmin 渚э級
+ * Apollo implementation - workflow definition publisher (Admin side).
  */
 class ApolloDefinitionConfigPublisher(
     private val openApiClient: ApolloOpenApiClient,

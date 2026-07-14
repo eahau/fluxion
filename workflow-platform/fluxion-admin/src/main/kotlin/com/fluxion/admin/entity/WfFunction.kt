@@ -1,10 +1,13 @@
-package com.fluxion.admin.entity
+﻿package com.fluxion.admin.entity
 
 import com.fluxion.admin.generated.model.FunctionStatus
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.EnumType
 import jakarta.persistence.Enumerated
+import jakarta.persistence.FetchType
+import jakarta.persistence.JoinColumn
+import jakarta.persistence.ManyToOne
 import jakarta.persistence.Table
 import jakarta.persistence.UniqueConstraint
 
@@ -63,4 +66,9 @@ class WfFunction : BaseEntity() {
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 16)
     var status: FunctionStatus = FunctionStatus.ACTIVE
+
+    /** Owning app, maps to column `app_id`. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "app_id")
+    var app: App? = null
 }

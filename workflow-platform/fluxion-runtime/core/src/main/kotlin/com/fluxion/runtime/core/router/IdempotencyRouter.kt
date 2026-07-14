@@ -1,15 +1,15 @@
-package com.fluxion.runtime.core.router
+﻿package com.fluxion.runtime.core.router
 
-import com.fluxion.adapter.spi.UnifiedRequest
-import com.fluxion.adapter.spi.UnifiedResponse
-import com.fluxion.adapter.spi.WorkflowRouter
+import com.fluxion.inbound.spi.UnifiedRequest
+import com.fluxion.inbound.spi.UnifiedResponse
+import com.fluxion.inbound.spi.InboundRouter
 import com.fluxion.core.engine.CachedExecution
 import com.fluxion.core.engine.IdempotencyStore
 import com.fluxion.core.value.EngineResult
 import kotlinx.coroutines.runBlocking
 import org.slf4j.*
 /**
- * Idempotency-aware [WorkflowRouter] decorator.
+ * Idempotency-aware [InboundRouter] decorator.
  *
  * Adds at-most-once semantics on top of any inner router by keying results
  * against a caller-supplied idempotency key. Supports three outcomes for
@@ -28,9 +28,9 @@ import org.slf4j.*
  * @param store    Idempotency cache backend (Redis, DB, in-memory… up to impl)
  */
 class IdempotencyRouter(
-    private val delegate: WorkflowRouter,
+    private val delegate: InboundRouter,
     private val store: IdempotencyStore
-) : WorkflowRouter {
+) : InboundRouter {
 
     private val log = LoggerFactory.getLogger(javaClass)
 

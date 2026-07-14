@@ -1,4 +1,4 @@
-package com.fluxion.core.mock
+﻿package com.fluxion.core.mock
 
 import com.fluxion.core.function.WorkflowFunction
 import com.fluxion.core.model.NodeInput

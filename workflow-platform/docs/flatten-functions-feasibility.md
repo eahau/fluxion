@@ -70,11 +70,11 @@
 **`fluxion-adapter-spi` + `fluxion-runtime`（路由接缝）**
 
 - `fluxion-adapter-spi/.../AdapterSpi.kt`：`WorkflowRouter` 接口（协议无关桥）
-- `fluxion-runtime/.../router/RuntimeWorkflowRouter.kt`：**核心改造点**，内部 `resolveDefinition + dagExecutor.execute` 改为直接调用触发器函数 + `FunctionInvoker`
+- `fluxion-runtime/.../router/RuntimeInboundRouter.kt`：**核心改造点**，内部 `resolveDefinition + dagExecutor.execute` 改为直接调用触发器函数 + `FunctionInvoker`
 
 **四个协议适配器入口（改造极小，仅依赖 `WorkflowRouter`）**
 
-- `fluxion-adapter-http/webflux/.../WebFluxWorkflowHandler.kt`（已 `workflowRouter.executeSuspend(unifiedRequest)`）
+- `fluxion-adapter-http/webflux/.../WebFluxWorkflowHandler.kt`（已 `inboundRouter.executeSuspend(unifiedRequest)`）
 - `fluxion-adapter-http/springmvc/.../MvcWorkflowHandler.kt`
 - `fluxion-adapter-rpc/grpc/.../GrpcWorkflowServiceImpl.kt`
 - `fluxion-adapter-rpc/dubbo/.../DubboWorkflowServiceImpl.kt`

@@ -1,4 +1,4 @@
-package com.fluxion.admin.config
+﻿package com.fluxion.admin.config
 
 import com.fluxion.core.function.FunctionComponent
 import com.fluxion.core.function.FunctionRegistry

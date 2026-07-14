@@ -13,7 +13,11 @@ dependencies {
     // Core engine Spring Boot starter (assembles all capability domain beans).
     implementation(project(":fluxion-core:spring-boot"))
     // Adapter SPI (api - downstream consumers get router / definition provider types transitively).
-    api(project(":fluxion-adapter-spi"))
+    api(project(":fluxion-inbound:spi"))
+    // HTTP adapter core (RouteConfigStore, HttpRouteDefinition, RouteChangeListener).
+    api(project(":fluxion-inbound:http:core"))
+    // Config core (api - provides DefinitionConfigSubscriber, WorkflowDefinitionSnapshot, ChangeType).
+    api(project(":fluxion-config:core"))
     // Config center Spring Boot starter (runtimeOnly - pulled in automatically but not required for compile).
     runtimeOnly(project(":fluxion-config:spring-boot"))
 

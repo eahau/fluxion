@@ -199,7 +199,7 @@ export function getConditionalNexts(
 }
 
 export function definitionToFlow(def: WorkflowDefinition): { nodes: Node[]; edges: Edge[] } {
-  const nodes = def.nodes.map((node, index) => ({
+  let nodes = def.nodes.map((node, index) => ({
     id: node.id,
     type: mapNodeTypeToFlowType(node.type, node.functionRef),
     position: {
@@ -221,8 +221,78 @@ export function definitionToFlow(def: WorkflowDefinition): { nodes: Node[]; edge
     },
   }));
 
-  const edges = buildEdgesFromDependencies(def.nodes);
+  let edges = buildEdgesFromDependencies(def.nodes);
+
+  const protocol = def.protocol?.toUpperCase();
+  if (protocol && protocol !== 'NONE') {
+    const triggerFunctionRef = protocolToTriggerFunctionRef(protocol);
+    const triggerLabel = protocolToTriggerLabel(protocol);
+
+    const triggerNode: Node = {
+      id: `trigger-${def.workflowId || 'root'}`,
+      type: 'triggerNode',
+      position: { x: 300, y: 20 },
+      data: {
+        label: triggerLabel,
+        functionRef: triggerFunctionRef,
+        errorStrategy: 'FAIL' as any,
+        timeoutMs: 3000,
+        params: {
+          method: def.method,
+          path: def.path || def.bindKey,
+          topic: def.path,
+        },
+        decorators: ['logging:default'],
+        decoratorParams: {},
+        type: 'TRIGGER',
+        _isHeadTrigger: true,
+      },
+    };
+
+    const targetIds = new Set(edges.map((e) => e.target));
+    const currentHeadIds = nodes
+      .filter((n) => !targetIds.has(n.id))
+      .map((n) => n.id);
+
+    nodes = nodes.map((n) => ({
+      ...n,
+      position: { ...n.position, y: n.position.y + 120 },
+    }));
+
+    const newEdges: Edge[] = currentHeadIds.map((targetNodeId) => ({
+      id: `e-${triggerNode.id}-${targetNodeId}`,
+      source: triggerNode.id,
+      target: targetNodeId,
+      type: 'smoothstep',
+      style: DEFAULT_EDGE_STYLE,
+      markerEnd: DEFAULT_MARKER_END,
+    }));
+
+    nodes = [triggerNode, ...nodes];
+    edges = [...edges, ...newEdges];
+  }
+
   return { nodes, edges };
+}
+
+function protocolToTriggerFunctionRef(protocol: string): string {
+  return {
+    'HTTP': 'trigger:httpInbound',
+    'HTTPS': 'trigger:httpInbound',
+    'KAFKA': 'trigger:kafkaConsumer',
+    'GRPC': 'trigger:grpcInbound',
+    'DUBBO': 'trigger:dubboProvider',
+  }[protocol] || 'trigger:httpInbound';
+}
+
+function protocolToTriggerLabel(protocol: string): string {
+  return {
+    'HTTP': 'HTTP Inbound',
+    'HTTPS': 'HTTP Inbound',
+    'KAFKA': 'Kafka Consumer',
+    'GRPC': 'gRPC Inbound',
+    'DUBBO': 'Dubbo Provider',
+  }[protocol] || 'HTTP Inbound';
 }
 
 export function flowToDefinition(
@@ -231,19 +301,50 @@ export function flowToDefinition(
   meta: Partial<WorkflowDefinition>,
 ): WorkflowDefinition {
   const { nodes: _metaNodes, ...rest } = meta;
+
+  const triggerNode = nodes.find((n) => n.data._isHeadTrigger);
+
+  const effectiveProtocol = triggerNode ? functionRefToProtocol(triggerNode.data.functionRef) : rest.protocol;
+
+  let filteredEdges = edges;
+  let filteredNodes = nodes;
+  const triggerTargetIds = new Set<string>();
+
+  if (triggerNode) {
+    filteredNodes = nodes.filter((n) => n.id !== triggerNode.id);
+    triggerTargetIds.addAll(edges.filter((e) => e.source === triggerNode.id).map((e) => e.target));
+    filteredEdges = edges.filter((e) => e.source !== triggerNode.id && e.target !== triggerNode.id);
+  }
+
+  const dependsOnMap = new Map<string, string[]>();
+  filteredEdges.forEach((e) => {
+    const list = dependsOnMap.get(e.target) || [];
+    list.push(e.source);
+    dependsOnMap.set(e.target, list);
+  });
+
+  filteredNodes.forEach((node) => {
+    if (triggerTargetIds.has(node.id)) {
+      const existing = dependsOnMap.get(node.id) || [];
+      const cleaned = existing.filter((id) => id !== triggerNode?.id);
+      dependsOnMap.set(node.id, cleaned);
+    }
+  });
+
   return {
     name: rest.name || '',
     category: rest.category || 'BUSINESS',
-    protocol: rest.protocol || 'HTTP',
+    protocol: effectiveProtocol || 'HTTP',
+    method: triggerNode?.data.params?.method || rest.method,
+    path: triggerNode?.data.params?.path || rest.path,
     inputSchemaFormat: rest.inputSchemaFormat || 'json-schema',
     outputSchemaFormat: rest.outputSchemaFormat || 'json-schema',
     ...rest,
-    nodes: nodes.map((node) => {
+    nodes: filteredNodes.map((node) => {
       const conditionalNexts = getConditionalNexts(node.id, edges);
       return {
         id: node.id,
         name: node.data.label,
-        // 发送到后端的 type 必须是核心 NodeType（BUILTIN/CUSTOM/SCRIPT/EXTERNAL），从 functionRef 推导
         type: functionRefToNodeType(node.data.functionRef),
         functionRef: node.data.functionRef,
         errorStrategy: node.data.errorStrategy,
@@ -251,11 +352,21 @@ export function flowToDefinition(
         params: node.data.params,
         decorators: node.data.decorators,
         decoratorParams: node.data.decoratorParams,
-        dependsOn: getIncomingNodes(node.id, edges),
+        dependsOn: dependsOnMap.get(node.id) || [],
         position: node.position,
         asyncExecution: node.data.asyncExecution ?? false,
         ...(conditionalNexts.length ? { conditionalNexts } : {}),
       } as WorkflowNode;
     }),
   };
+}
+
+function functionRefToProtocol(functionRef?: string): string | undefined {
+  if (!functionRef) return undefined;
+  return {
+    'trigger:httpInbound': 'HTTP',
+    'trigger:kafkaConsumer': 'KAFKA',
+    'trigger:grpcInbound': 'GRPC',
+    'trigger:dubboProvider': 'DUBBO',
+  }[functionRef];
 }

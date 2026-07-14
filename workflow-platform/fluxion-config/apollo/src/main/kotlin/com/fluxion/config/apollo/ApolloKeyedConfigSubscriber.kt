@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Apollo-backed multi-key configuration subscriber with dual-path resolution.
  *
  * Provides a concrete, directly-instantiable subscriber implementation for
@@ -17,8 +17,8 @@ import com.ctrip.framework.apollo.Config
 import com.ctrip.framework.apollo.ConfigService
 import com.ctrip.framework.apollo.enums.PropertyChangeType
 import com.ctrip.framework.apollo.model.ConfigChangeEvent
-import com.fluxion.adapter.spi.config.ChangeType
-import com.fluxion.adapter.spi.config.KeyedConfigChangeListener
+import com.fluxion.config.core.ChangeType
+import com.fluxion.config.core.KeyedConfigChangeListener
 import com.fluxion.config.core.AbstractKeyedConfigSubscriber
 import org.slf4j.*
 import java.util.concurrent.atomic.AtomicBoolean

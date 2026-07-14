@@ -1,4 +1,4 @@
-package com.fluxion.admin
+﻿package com.fluxion.admin
 
 import org.springframework.boot.autoconfigure.SpringBootApplication
 import org.springframework.boot.runApplication

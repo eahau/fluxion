@@ -18,11 +18,12 @@ dependencies {
     // Core engine Spring Boot starter (capability domain beans registration).
     implementation(project(":fluxion-core:spring-boot"))
     // Adapter SPI: router / subscriber / definition provider interfaces.
-    implementation(project(":fluxion-adapter-spi"))
+    implementation(project(":fluxion-config:core"))
+    implementation(project(":fluxion-inbound:spi"))
     // HTTP adapter core abstractions (RouteMatch, HttpRequestProcessor, AbstractRouteRegistry).
-    implementation(project(":fluxion-adapter-http:core"))
+    implementation(project(":fluxion-inbound:http:core"))
     // WebFlux reactive HTTP adapter implementation (RouterFunction-based).
-    implementation(project(":fluxion-adapter-http:webflux"))
+    implementation(project(":fluxion-inbound:http:webflux"))
     // Built-in workflow functions + registry auto-configuration.
     implementation(project(":fluxion-function:spring-boot"))
     // Spring DI bridge: ApplicationContext-backed FunctionInstanceProvider.
@@ -40,7 +41,7 @@ dependencies {
     // HTTP-based service registry (bootstrap mode discovery).
     implementation(project(":fluxion-config:registry-http"))
     // Nacos route configuration store (reuses springmvc:nacos implementation for shared Nacos storage).
-    implementation(project(":fluxion-adapter-http:springmvc:nacos"))
+    implementation(project(":fluxion-inbound:http:springmvc:nacos"))
     // Nacos Client SDK - required for Nacos mode runtime operation.
     implementation("com.alibaba.nacos:nacos-client")
 

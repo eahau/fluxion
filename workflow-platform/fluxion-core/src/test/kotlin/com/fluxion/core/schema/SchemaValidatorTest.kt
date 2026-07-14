@@ -1,48 +1,39 @@
-package com.fluxion.core.schema
-
+﻿package com.fluxion.core.schema
 import com.fluxion.core.exception.SchemaValidationException
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
-
 class SchemaValidatorTest {
-
     private val validator = SchemaValidator()
-
-    // 闁冲厜鍋撻柍鍏夊亾闁冲厜鍋?null / 缂?Schema 闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋?
+    
     @Test
     fun `null schema returns valid`() {
         val result = validator.validate(null, "anything")
         assertTrue(result.valid)
         assertTrue(result.errors.isEmpty())
     }
-
     @Test
     fun `empty object schema returns valid`() {
         val result = validator.validate(mapOf<String, Any>(), mapOf("a" to 1))
         assertTrue(result.valid)
     }
-
     @Test
     fun `empty string schema returns valid`() {
         val result = validator.validate("", "anything")
         assertTrue(result.valid)
     }
-
     @Test
     fun `blank string schema returns valid`() {
         val result = validator.validate("  ", "anything")
         assertTrue(result.valid)
     }
-
-    // 闁冲厜鍋撻柍鍏夊亾闁冲厜鍋?缂侇偉顕ч悗鐑藉冀閿熺姷宕?闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋?
+    
     @Test
     fun `string type validation passes`() {
         val schema = """{"type":"object","properties":{"name":{"type":"string"}}}"""
         val data = mapOf("name" to "alice")
         assertTrue(validator.validate(schema, data).valid)
     }
-
     @Test
     fun `string type validation fails for number`() {
         val schema = """{"type":"object","properties":{"name":{"type":"string"}}}"""
@@ -51,14 +42,12 @@ class SchemaValidatorTest {
         assertFalse(result.valid)
         assertTrue(result.errors.isNotEmpty())
     }
-
     @Test
     fun `integer type validation`() {
         val schema = """{"type":"object","properties":{"age":{"type":"integer"}}}"""
         assertTrue(validator.validate(schema, mapOf("age" to 25)).valid)
         assertFalse(validator.validate(schema, mapOf("age" to "young")).valid)
     }
-
     @Test
     fun `required field validation`() {
         val schema = """{"type":"object","required":["id"],"properties":{"id":{"type":"string"}}}"""
@@ -67,14 +56,12 @@ class SchemaValidatorTest {
         assertFalse(result.valid)
         assertTrue(result.errors.any { it.contains("id") })
     }
-
     @Test
     fun `enum validation`() {
         val schema = """{"type":"object","properties":{"status":{"type":"string","enum":["ACTIVE","INACTIVE"]}}}"""
         assertTrue(validator.validate(schema, mapOf("status" to "ACTIVE")).valid)
         assertFalse(validator.validate(schema, mapOf("status" to "UNKNOWN")).valid)
     }
-
     @Test
     fun `nested object validation`() {
         val schema = """
@@ -94,14 +81,12 @@ class SchemaValidatorTest {
         assertTrue(validator.validate(schema, mapOf("user" to mapOf("name" to "bob"))).valid)
         assertFalse(validator.validate(schema, mapOf("user" to emptyMap<String, Any>())).valid)
     }
-
     @Test
     fun `array type validation`() {
         val schema = """{"type":"object","properties":{"tags":{"type":"array","items":{"type":"string"}}}}"""
         assertTrue(validator.validate(schema, mapOf("tags" to listOf("a", "b"))).valid)
     }
-
-    // 闁冲厜鍋撻柍鍏夊亾闁冲厜鍋?Map Schema 閺夊牊鎸搁崣?闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾
+    
 
     @Test
     fun `map schema input works`() {
@@ -113,15 +98,13 @@ class SchemaValidatorTest {
         assertTrue(validator.validate(schema, mapOf("id" to "abc")).valid)
         assertFalse(validator.validate(schema, emptyMap<String, Any>()).valid)
     }
-
-    // 闁冲厜鍋撻柍鍏夊亾闁冲厜鍋?strict mode 闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾
+    
 
     @Test
     fun `validateStrict passes for valid data`() {
         val schema = """{"type":"object","required":["id"],"properties":{"id":{"type":"string"}}}"""
         assertDoesNotThrow { validator.validateStrict(schema, mapOf("id" to "123")) }
     }
-
     @Test
     fun `validateStrict throws for invalid data`() {
         val schema = """{"type":"object","required":["id"],"properties":{"id":{"type":"string"}}}"""
@@ -130,18 +113,15 @@ class SchemaValidatorTest {
         }
         assertTrue(ex.validationErrors.isNotEmpty())
     }
-
     @Test
     fun `validateStrict skips null schema`() {
         assertDoesNotThrow { validator.validateStrict(null, "anything") }
     }
-
     @Test
     fun `validateStrict skips empty schema`() {
         assertDoesNotThrow { validator.validateStrict("{}", mapOf("a" to 1)) }
     }
-
-    // 闁冲厜鍋撻柍鍏夊亾闁冲厜鍋?闁哄啰濮甸弲?Schema 閻庣懓缍婇弫?闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾闁冲厜鍋撻柍鍏夊亾
+    
 
     @Test
     fun `invalid schema JSON returns fail result`() {

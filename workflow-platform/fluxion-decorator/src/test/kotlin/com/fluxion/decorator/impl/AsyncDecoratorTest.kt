@@ -1,4 +1,4 @@
-package com.fluxion.decorator.impl
+﻿package com.fluxion.decorator.impl
 
 import com.fluxion.core.decorator.AsyncCallback
 import com.fluxion.core.decorator.AsyncCallbackContext
@@ -9,6 +9,7 @@ import com.fluxion.core.model.NodeInput
 import com.fluxion.core.model.WorkflowNode
 import com.fluxion.core.value.ExecutionMeta
 import com.fluxion.core.value.FunctionResult
+import com.fluxion.decorator.decorator.AsyncDecorator
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import java.util.concurrent.ConcurrentHashMap

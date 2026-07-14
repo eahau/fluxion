@@ -1,4 +1,4 @@
-package com.fluxion.core.value
+﻿package com.fluxion.core.value
 
 /**
  * A side effect produced during function execution that must be reversed if

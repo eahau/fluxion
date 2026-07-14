@@ -1,4 +1,4 @@
-package com.fluxion.core.mock
+﻿package com.fluxion.core.mock
 
 import com.fluxion.core.model.NodeInput
 import com.googlecode.aviator.AviatorEvaluator
@@ -65,7 +65,7 @@ object MockEngine {
         object : AbstractVariadicFunction() {
             override fun getName(): String = name
             override fun variadicCall(env: MutableMap<String, Any>?, args: Array<out AviatorObject>?): AviatorObject {
-                val javaArgs = args?.map { a -> a?.getValue(env) } ?: emptyList()
+                val javaArgs = args?.map { a -> a.getValue(env) } ?: emptyList()
                 val result = runCatching { body(javaArgs) }.getOrNull()
                 return if (result == null) AviatorNil.NIL else AviatorRuntimeJavaType.valueOf(result)
             }

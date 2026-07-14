@@ -1,4 +1,4 @@
-package com.fluxion.schema.api
+﻿package com.fluxion.schema.api
 
 /**
  * Format-aware data access strategy SPI — provides uniform field-level

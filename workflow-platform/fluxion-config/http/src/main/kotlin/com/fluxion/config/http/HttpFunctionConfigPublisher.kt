@@ -1,15 +1,15 @@
-package com.fluxion.config.http
+﻿package com.fluxion.config.http
 
 import com.fluxion.core.util.JsonUtil
-import com.fluxion.adapter.spi.config.FunctionConfigPublisher
-import com.fluxion.adapter.spi.config.FunctionConfigSnapshot
-import com.fluxion.adapter.spi.registry.InstanceDiscovery
-import com.fluxion.adapter.spi.registry.PublishTarget
+import com.fluxion.config.core.FunctionConfigPublisher
+import com.fluxion.config.core.FunctionConfigSnapshot
+import com.fluxion.config.core.InstanceDiscovery
+import com.fluxion.config.core.PublishTarget
 import com.fluxion.config.core.HttpPushClient
 import org.slf4j.*
 
 /**
- * HTTP 榛樿瀹炵幇 鈥?Admin 渚у嚱鏁伴厤缃彂甯冨櫒
+ * HTTP default implementation - Admin-side function config publisher.
  */
 class HttpFunctionConfigPublisher(
     instanceDiscovery: InstanceDiscovery

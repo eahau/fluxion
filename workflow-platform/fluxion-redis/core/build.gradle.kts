@@ -10,7 +10,6 @@ dependencies {
     // Core SPI modules (api): Lazy logger functions + RedisClientAdapter impl submodules need these types.
     api(project(":fluxion-core"))
     api(project(":fluxion-function"))
-    api(project(":fluxion-decorator"))
 
     // Unified logging extensions.
     implementation(project(":fluxion-log"))

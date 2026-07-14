@@ -1,4 +1,4 @@
-package com.fluxion.core.util
+﻿package com.fluxion.core.util
 
 import com.fluxion.core.exception.CyclicDependencyException
 import com.fluxion.core.exception.DuplicateNodeIdException

@@ -1,8 +1,8 @@
-package com.fluxion.runtime.core.router
+﻿package com.fluxion.runtime.core.router
 
-import com.fluxion.adapter.spi.UnifiedRequest
-import com.fluxion.adapter.spi.UnifiedResponse
-import com.fluxion.adapter.spi.WorkflowRouter
+import com.fluxion.inbound.spi.UnifiedRequest
+import com.fluxion.inbound.spi.UnifiedResponse
+import com.fluxion.inbound.spi.InboundRouter
 import com.fluxion.core.exception.LockAcquisitionException
 import com.fluxion.test.lock.InMemoryDistributedLockProvider
 import kotlinx.coroutines.runBlocking
@@ -130,12 +130,12 @@ class DistributedLockRouterTest {
     }
 
     /**
-     * Test stub [WorkflowRouter] that counts invocations and tracks the
+     * Test stub [InboundRouter] that counts invocations and tracks the
      * maximum number of concurrent in-flight calls it has ever observed.
      *
      * Used to verify that the lock decorator actually serializes execution.
      */
-    class CountingRouter(private val sleepMillis: Long = 0) : WorkflowRouter {
+    class CountingRouter(private val sleepMillis: Long = 0) : InboundRouter {
         val callCount = AtomicInteger(0)
         val maxConcurrent = AtomicInteger(0)
 

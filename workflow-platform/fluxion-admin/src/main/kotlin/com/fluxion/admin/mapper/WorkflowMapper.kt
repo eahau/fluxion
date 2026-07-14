@@ -1,4 +1,4 @@
-package com.fluxion.admin.mapper
+﻿package com.fluxion.admin.mapper
 
 import com.fluxion.admin.entity.WfDefinition
 import com.fluxion.admin.generated.model.WorkflowDefinition
@@ -30,7 +30,8 @@ class WorkflowMapper(
         protocol = entity.protocol,
         nodes = jsonMapperHelper.dagJsonToNodes(entity.dagJson).toMutableList()
     ).apply {
-        id = entity.workflowId
+        id = entity.id
+        workflowId = entity.workflowId
         scope = jsonMapperHelper.scopeToEnum(entity.scope)
         appGroup = entity.appGroup
         sourceRef = entity.sourceRef
@@ -50,13 +51,15 @@ class WorkflowMapper(
             ?: jsonMapperHelper.fallbackPublishTarget(entity.targetGroups)
         version = entity.version
         isProtected = entity.isProtected
+        isPublishedSet = entity.isPublishedSet
+        setRefName = entity.setRefName
     }
 
     /**
      * Create a new `WfDefinition` entity from an incoming create DTO.
      */
     fun toEntity(dto: WorkflowDefinition): WfDefinition = WfDefinition().apply {
-        workflowId = dto.id ?: ""
+        workflowId = dto.workflowId ?: ""
         workflowName = dto.name ?: ""
         protocol = dto.protocol ?: "HTTP"
         method = dto.method
@@ -83,7 +86,7 @@ class WorkflowMapper(
      * Apply update DTO fields onto an existing managed entity.
      */
     fun updateEntity(dto: WorkflowDefinition, entity: WfDefinition) {
-        entity.workflowId = dto.id ?: entity.workflowId
+        entity.workflowId = dto.workflowId ?: entity.workflowId
         entity.workflowName = dto.name ?: entity.workflowName
         entity.protocol = dto.protocol ?: entity.protocol
         entity.method = dto.method ?: entity.method

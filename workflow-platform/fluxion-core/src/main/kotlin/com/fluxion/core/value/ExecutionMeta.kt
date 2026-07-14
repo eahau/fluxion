@@ -1,4 +1,4 @@
-package com.fluxion.core.value
+﻿package com.fluxion.core.value
 
 /**
  * Immutable metadata bag carried through every stage of a single execution.

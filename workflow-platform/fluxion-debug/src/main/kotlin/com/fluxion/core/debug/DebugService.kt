@@ -1,4 +1,4 @@
-package com.fluxion.core.debug
+﻿package com.fluxion.core.debug
 
 import com.fluxion.core.engine.WorkflowEngine
 import com.fluxion.core.function.FunctionResolver

@@ -13,17 +13,17 @@ import NodeConfigPanel from './components/NodeConfigPanel';
 import Toolbar from './components/Toolbar';
 import DebugPanel from './components/DebugPanel';
 import WorkflowMetaPanel from './components/WorkflowMetaPanel';
+import TriggerDrawer from './components/TriggerDrawer';
+import ComponentErrorBoundary from '@/components/error-boundaries/ComponentErrorBoundary';
 import type { WorkflowDefinition } from '@/types/workflow';
 
 const defaultDefinition: WorkflowDefinition = {
-  name: '新建工作流',
+  name: '新建函数集合',
   category: 'BUSINESS',
-  protocol: 'HTTP',
-  method: 'GET',
-  path: '/api/example',
   inputSchemaFormat: 'json-schema',
   outputSchemaFormat: 'json-schema',
   nodes: [],
+  triggers: [],
 };
 
 const WorkflowDesigner: React.FC = () => {
@@ -31,6 +31,7 @@ const WorkflowDesigner: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [debugVisible, setDebugVisible] = useState(false);
   const [metaVisible, setMetaVisible] = useState(false);
+  const [triggerVisible, setTriggerVisible] = useState(false);
   const [darkMode] = useState(() => localStorage.getItem('fluxion-dark-mode') === 'true');
   const [layoutDirection, setLayoutDirection] = useState<'TB' | 'LR'>('TB');
   const { loadDefinition, toDefinition, workflowMeta, setWorkflowMeta } = useWorkflowStore();
@@ -95,10 +96,11 @@ const WorkflowDesigner: React.FC = () => {
           </div>
         )}
         <Toolbar
-          title={workflowMeta.name || '新建工作流'}
+          title={workflowMeta.name || '新建函数集合'}
           onSave={handleSave}
           onDebug={() => setDebugVisible(!debugVisible)}
           debugActive={debugVisible}
+          onOpenTrigger={() => setTriggerVisible(true)}
           onOpenMeta={() => setMetaVisible(true)}
           layoutDirection={layoutDirection}
           onLayoutChange={handleLayout}
@@ -110,11 +112,16 @@ const WorkflowDesigner: React.FC = () => {
             <FlowCanvas darkMode={darkMode} />
           </div>
           <div style={{ height: '100%', flexShrink: 0 }}>
-            <NodeConfigPanel workflowId={id} darkMode={darkMode} />
+            <NodeConfigPanel workflowId={id} darkMode={darkMode} onOpenMeta={() => setMetaVisible(true)} />
           </div>
         </div>
         {debugVisible && id && <DebugPanel workflowId={id} />}
-        <WorkflowMetaPanel visible={metaVisible} onClose={() => setMetaVisible(false)} />
+        <ComponentErrorBoundary title="函数集合配置" onRetry={() => { setMetaVisible(false); setTimeout(() => setMetaVisible(true), 80); }}>
+          <WorkflowMetaPanel visible={metaVisible} onClose={() => setMetaVisible(false)} onOpenTrigger={() => { setMetaVisible(false); setTriggerVisible(true); }} />
+        </ComponentErrorBoundary>
+        <ComponentErrorBoundary title="触发器配置" onRetry={() => { setTriggerVisible(false); setTimeout(() => setTriggerVisible(true), 80); }}>
+          <TriggerDrawer visible={triggerVisible} onClose={() => setTriggerVisible(false)} />
+        </ComponentErrorBoundary>
       </div>
     </ReactFlowProvider>
   );

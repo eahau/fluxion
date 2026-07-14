@@ -1,4 +1,4 @@
-package com.fluxion.core.engine
+﻿package com.fluxion.core.engine
 
 import com.googlecode.aviator.AviatorEvaluator
 import com.googlecode.aviator.AviatorEvaluatorInstance

@@ -1,4 +1,4 @@
-package com.fluxion.admin.compat
+﻿package com.fluxion.admin.compat
 
 import com.fluxion.admin.validator.SchemaCompatibilityResult
 import com.fluxion.admin.validator.SchemaFieldChange

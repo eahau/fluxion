@@ -1,4 +1,4 @@
-package com.fluxion.builtin.json
+﻿package com.fluxion.builtin.json
 
 import com.fasterxml.jackson.core.type.TypeReference
 import com.fluxion.builtin.BuiltinFunction

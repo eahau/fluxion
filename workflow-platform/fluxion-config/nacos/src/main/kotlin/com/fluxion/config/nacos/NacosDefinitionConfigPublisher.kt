@@ -1,11 +1,11 @@
-package com.fluxion.config.nacos
+﻿package com.fluxion.config.nacos
 
 import com.alibaba.nacos.api.config.ConfigService
-import com.fluxion.adapter.spi.config.DefinitionConfigPublisher
+import com.fluxion.config.core.DefinitionConfigPublisher
 import org.slf4j.*
 
 /**
- * Nacos 瀹炵幇 鈥?宸ヤ綔娴佸畾涔夊彂甯冨櫒锛圓dmin 渚э級
+ * Nacos implementation - workflow definition publisher (Admin side).
  */
 class NacosDefinitionConfigPublisher(
     private val configService: ConfigService

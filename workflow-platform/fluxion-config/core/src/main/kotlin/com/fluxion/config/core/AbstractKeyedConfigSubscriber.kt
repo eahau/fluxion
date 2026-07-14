@@ -1,8 +1,8 @@
-package com.fluxion.config.core
+﻿package com.fluxion.config.core
 
-import com.fluxion.adapter.spi.config.ChangeType
-import com.fluxion.adapter.spi.config.KeyedConfigChangeListener
-import com.fluxion.adapter.spi.config.KeyedConfigSubscriber
+import com.fluxion.config.core.ChangeType
+import com.fluxion.config.core.KeyedConfigChangeListener
+import com.fluxion.config.core.KeyedConfigSubscriber
 import org.slf4j.*
 import java.util.concurrent.ConcurrentHashMap
 

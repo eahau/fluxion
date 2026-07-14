@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Protobuf-backed [SchemaDataProvider] enabling transparent field access on
  * [DynamicMessage] payloads via the generic `inputField("name")` workflow API.
  *

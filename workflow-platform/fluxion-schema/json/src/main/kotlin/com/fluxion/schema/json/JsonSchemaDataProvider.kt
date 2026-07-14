@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Built-in [SchemaDataProvider] that operates on generic `Map<String, *>`
  * payloads produced by JSON deserialization.
  *

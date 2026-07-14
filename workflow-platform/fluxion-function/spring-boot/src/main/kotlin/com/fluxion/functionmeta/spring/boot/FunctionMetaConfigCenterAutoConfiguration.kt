@@ -1,4 +1,4 @@
-package com.fluxion.functionmeta.spring.boot
+﻿package com.fluxion.functionmeta.spring.boot
 
 import com.fluxion.core.function.FunctionRegistry
 import com.fluxion.functionmeta.api.FunctionMetaConfigCenter

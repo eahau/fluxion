@@ -23,6 +23,7 @@ dependencies {
     implementation("org.springframework:spring-expression")
     // Unified logging extensions for AsyncDecorator diagnostic output.
     implementation(project(":fluxion-log"))
+    implementation(project(":fluxion-redis:core"))
 
     // ===== Testing Dependencies =====
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")

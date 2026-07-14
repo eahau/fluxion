@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Admin-side [InstanceRegistry] implementation that accepts worker
  * registration / heartbeat / deregistration calls over HTTP.
  *
@@ -9,8 +9,8 @@
  */
 package com.fluxion.registry.http
 
-import com.fluxion.adapter.spi.registry.InstanceInfo
-import com.fluxion.adapter.spi.registry.InstanceRegistry
+import com.fluxion.config.core.InstanceInfo
+import com.fluxion.config.core.InstanceRegistry
 import org.slf4j.LoggerFactory
 import org.slf4j.*
 

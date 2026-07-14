@@ -1,9 +1,9 @@
-package com.fluxion.functionmeta.spring.boot
+﻿package com.fluxion.functionmeta.spring.boot
 
-import com.fluxion.adapter.spi.config.ChangeType
-import com.fluxion.adapter.spi.config.FunctionChangeListener
-import com.fluxion.adapter.spi.config.FunctionConfigSnapshot
-import com.fluxion.adapter.spi.config.FunctionConfigSubscriber
+import com.fluxion.config.core.ChangeType
+import com.fluxion.config.core.FunctionChangeListener
+import com.fluxion.config.core.FunctionConfigSnapshot
+import com.fluxion.config.core.FunctionConfigSubscriber
 import com.fluxion.functionmeta.registry.InMemoryFunctionMetaRegistry
 import org.slf4j.*
 /**

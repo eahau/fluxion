@@ -4,7 +4,15 @@ import type { FunctionDefinition } from '@/types/function';
 import type { RequestOptions } from './request';
 
 export async function getFunctions(
-  params?: { keyword?: string; category?: string; page?: number; pageSize?: number },
+  params?: {
+    keyword?: string;
+    category?: string;
+    page?: number;
+    pageSize?: number;
+    appId?: number;
+    sortBy?: string;
+    sortDir?: string;
+  },
   options?: RequestOptions,
 ) {
   return unwrap(

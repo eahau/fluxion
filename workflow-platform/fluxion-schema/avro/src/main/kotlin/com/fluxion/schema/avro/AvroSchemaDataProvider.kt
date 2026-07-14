@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Avro-backed [SchemaDataProvider] that enables transparent field access on
  * Avro [GenericRecord] payloads through the generic `inputField("name")`
  * workflow API.

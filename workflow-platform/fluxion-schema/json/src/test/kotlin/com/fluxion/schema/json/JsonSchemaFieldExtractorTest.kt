@@ -1,4 +1,4 @@
-package com.fluxion.schema.json
+﻿package com.fluxion.schema.json
 
 import com.fluxion.schema.model.FieldType
 import org.junit.jupiter.api.Assertions.*
@@ -15,21 +15,18 @@ class JsonSchemaFieldExtractorTest {
             {
               "type": "object",
               "properties": {
-                "name": {"type": "string", "description": "鐢ㄦ埛鍚?},
+                "name": {"type": "string", "description": "user name"},
                 "age": {"type": "integer"}
               },
               "required": ["name"]
             }
         """.trimIndent())
-
         val fields = extractor.extractFields(schema)
         assertEquals(2, fields.size)
-
         val nameField = fields.first { it.name == "name" }
         assertEquals(FieldType.STRING, nameField.type)
         assertTrue(nameField.required)
-        assertEquals("鐢ㄦ埛鍚", nameField.description)
-
+        assertEquals("user name", nameField.description)
         val ageField = fields.first { it.name == "age" }
         assertEquals(FieldType.INTEGER, ageField.type)
         assertFalse(ageField.required)
@@ -50,7 +47,6 @@ class JsonSchemaFieldExtractorTest {
               }
             }
         """.trimIndent())
-
         val fields = extractor.extractFields(schema)
         val userField = fields.first { it.name == "user" }
         assertEquals(FieldType.OBJECT, userField.type)
@@ -71,7 +67,6 @@ class JsonSchemaFieldExtractorTest {
               }
             }
         """.trimIndent())
-
         val fields = extractor.extractFields(schema)
         val tagsField = fields.first { it.name == "tags" }
         assertEquals(FieldType.ARRAY, tagsField.type)
@@ -95,11 +90,9 @@ class JsonSchemaFieldExtractorTest {
               }
             }
         """.trimIndent())
-
         val fields = extractor.extractFields(schema)
         val statusField = fields.first { it.name == "status" }
         assertNotNull(statusField.metadata["enum"])
-
         val profileField = fields.first { it.name == "profile" }
         assertEquals("json-schema:ProfileSchema", profileField.metadata["\$ref"])
     }

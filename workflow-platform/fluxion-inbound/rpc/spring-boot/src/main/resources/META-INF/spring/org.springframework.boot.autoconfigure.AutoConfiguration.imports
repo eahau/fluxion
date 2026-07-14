@@ -1,0 +1,3 @@
+com.fluxion.inbound.rpc.spring.boot.RpcAdapterAutoConfiguration
+com.fluxion.inbound.rpc.spring.boot.dubbo.DubboRpcAdapterAutoConfiguration
+com.fluxion.inbound.rpc.spring.boot.grpc.GrpcRpcAdapterAutoConfiguration

@@ -1,4 +1,4 @@
-package com.fluxion.builtin.db.dialect
+﻿package com.fluxion.builtin.db.dialect
 
 /**
  * SQL dialect SPI abstracting vendor-specific syntax differences.

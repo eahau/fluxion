@@ -12,14 +12,14 @@ dependencies {
     // Script engine core module (api - downstream consumers receive ScriptComponent types transitively).
     api(project(":fluxion-script-engine:core"))
 
-    // Debug module (api - downstream consumers get DI resolver types).
-    api(project(":fluxion-debug"))
+    // DI module (api - downstream consumers get DI resolver types).
+    api(project(":fluxion-di"))
     // Adapter SPI: ScriptConfigSubscriber + dynamic script change events.
-    implementation(project(":fluxion-adapter-spi"))
+    implementation(project(":fluxion-config:core"))
     // Function SPI: WorkflowFunction + FunctionComponent base types.
     implementation(project(":fluxion-function"))
     // External function SPI (scripts may call remote functions).
-    implementation(project(":fluxion-function:external"))
+    implementation(project(":fluxion-outbound"))
 
     // Spring Boot AutoConfigure mechanism.
     implementation("org.springframework.boot:spring-boot-autoconfigure")

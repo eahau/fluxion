@@ -1,4 +1,4 @@
-package com.fluxion.admin.repository
+﻿package com.fluxion.admin.repository
 
 import com.fluxion.admin.entity.WfFunction
 import com.fluxion.admin.generated.model.FunctionStatus
@@ -33,4 +33,7 @@ interface WfFunctionRepository : JpaRepository<WfFunction, Long> {
 
     /** Uniqueness pre-check for PRIVATE scope (includes appGroup discriminator). */
     fun findByScopeAndAppGroupAndFunctionName(scope: String, appGroup: String, functionName: String): Optional<WfFunction>
+
+    /** Look up a function by type and name (used for SET_REF function resolution). */
+    fun findByFunctionTypeAndFunctionName(functionType: String, functionName: String): Optional<WfFunction>
 }

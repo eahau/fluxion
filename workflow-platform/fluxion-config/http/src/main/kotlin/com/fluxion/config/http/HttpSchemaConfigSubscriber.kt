@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Worker-side schema config subscriber that pulls snapshots from the Admin
  * server via HTTP endpoints and accepts push notifications.
  *
@@ -10,8 +10,8 @@
  */
 package com.fluxion.config.http
 
-import com.fluxion.adapter.spi.config.ChangeType
-import com.fluxion.adapter.spi.config.SchemaConfigSnapshot
+import com.fluxion.config.core.ChangeType
+import com.fluxion.config.core.SchemaConfigSnapshot
 import com.fluxion.config.core.AbstractKeyedConfigSubscriber
 import com.fluxion.core.util.JsonUtil
 import org.slf4j.*

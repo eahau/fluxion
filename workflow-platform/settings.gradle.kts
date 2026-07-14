@@ -50,13 +50,7 @@ include(
     // auto-configuration for runtime function discovery and invocation.
     "fluxion-function",
     "fluxion-function:builtin",
-    "fluxion-function:external",
-    "fluxion-function:external:dubbo",
-    "fluxion-function:external:dubbo:spring-boot",
-    "fluxion-function:external:grpc",
-    "fluxion-function:external:grpc:spring-boot",
-    "fluxion-function:external:http",
-    "fluxion-function:external:http:spring-boot",
+    
     "fluxion-function:meta",
     "fluxion-function:spring-boot",
 
@@ -81,42 +75,40 @@ include(
     // DependencyResolver, and DI abstractions for pluggable bean resolution strategies.
     "fluxion-debug",
 
-    // === fluxion-adapter-spi ===
-    // Adapter Service Provider Interface defining contracts for protocol adapters (HTTP/RPC/MQ),
-    // configuration subscribers, schema change listeners, and capability domain SPIs.
-    "fluxion-adapter-spi",
-
     // === fluxion-acl-spi ===
     // Access Control List SPI abstraction defining permission, role, and authentication
     // interfaces for pluggable security implementations in admin modules.
     "fluxion-acl-spi",
 
-    // === fluxion-adapter-http group ===
-    // HTTP protocol adapter suite supporting Spring MVC (Servlet stack) and WebFlux (Reactive stack)
-    // with Nacos/Apollo-based dynamic route configuration storage and Spring Boot auto-configuration.
-    "fluxion-adapter-http:core",
-    "fluxion-adapter-http:springmvc",
-    "fluxion-adapter-http:springmvc:nacos",
-    "fluxion-adapter-http:springmvc:apollo",
-    "fluxion-adapter-http:springmvc:spring-boot",
+    // === fluxion-inbound group ===
+    // Inbound protocol adapters for HTTP, RPC (Dubbo/gRPC), and MQ (Kafka) with
+    // Spring Boot auto-configuration for workflow exposure as services.
+    "fluxion-inbound:http:core",
+    "fluxion-inbound:http:springmvc",
+    "fluxion-inbound:http:springmvc:nacos",
+    "fluxion-inbound:http:springmvc:apollo",
+    "fluxion-inbound:http:springmvc:spring-boot",
+    "fluxion-inbound:http:webflux",
+    "fluxion-inbound:http:spring-boot",
+    "fluxion-inbound:rpc:dubbo",
+    "fluxion-inbound:rpc:grpc",
+    "fluxion-inbound:rpc:spring-boot",
+    "fluxion-inbound:mq:kafka",
+    "fluxion-inbound:mq:spring-boot",
+    "fluxion-inbound:spi",
 
-    // === fluxion-adapter-http:webflux ===
-    // Reactive HTTP adapter implementation for Spring WebFlux (RouterFunction-based) supporting
-    // non-blocking workflow invocation with Kotlin coroutines reactive bridge.
-    "fluxion-adapter-http:webflux",
-
-    // === fluxion-adapter-rpc group ===
-    // RPC protocol adapter suite with Apache Dubbo and gRPC transport implementations,
-    // including protobuf codegen tasks and Spring Boot auto-configuration for RPC exposure.
-    "fluxion-adapter-rpc:dubbo",
-    "fluxion-adapter-rpc:grpc",
-    "fluxion-adapter-rpc:spring-boot",
-
-    // === fluxion-adapter-mq group ===
-    // Message Queue protocol adapter with Apache Kafka native client implementation
-    // and Spring Boot auto-configuration for producer/consumer bean registration.
-    "fluxion-adapter-mq:kafka",
-    "fluxion-adapter-mq:spring-boot",
+    // === fluxion-outbound group ===
+    // Outbound transport adapters for HTTP, RPC (Dubbo/gRPC), and MQ with
+    // Spring Boot auto-configuration for workflow external function calls.
+    "fluxion-outbound",
+    "fluxion-outbound:http",
+    "fluxion-outbound:http:spring-boot",
+    "fluxion-outbound:dubbo",
+    "fluxion-outbound:dubbo:spring-boot",
+    "fluxion-outbound:grpc",
+    "fluxion-outbound:grpc:spring-boot",
+    "fluxion-outbound:mq",
+    "fluxion-outbound:mq:spring-boot",
 
     // === fluxion-redis group ===
     // Redis capability domain with core command SPI, client adapter implementations

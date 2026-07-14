@@ -1,4 +1,4 @@
-package com.fluxion.core.engine
+﻿package com.fluxion.core.engine
 
 import com.fluxion.decorator.decorator.DecoratorRegistry
 import com.fluxion.core.enums.ErrorStrategy
@@ -10,7 +10,7 @@ import com.fluxion.core.function.WorkflowFunction
 import com.fluxion.core.metrics.WorkflowMetrics
 import com.fluxion.core.model.*
 import com.fluxion.core.retry.RetryScheduler
-import com.fluxion.core.schema.SchemaValidator
+import com.fluxion.schema.json.SchemaValidator
 import com.fluxion.core.value.*
 import com.fluxion.decorator.engine.TaskInterceptor
 import com.fluxion.schema.api.SchemaBackedMap

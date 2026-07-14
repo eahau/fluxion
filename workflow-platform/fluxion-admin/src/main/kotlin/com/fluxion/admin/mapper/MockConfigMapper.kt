@@ -1,4 +1,4 @@
-package com.fluxion.admin.mapper
+﻿package com.fluxion.admin.mapper
 
 import com.fluxion.core.mock.MockConfig
 import com.fluxion.core.util.JsonUtil

@@ -1,4 +1,4 @@
-package com.fluxion.builtin.signal
+﻿package com.fluxion.builtin.signal
 
 import com.fluxion.builtin.BuiltinFunction
 import com.fluxion.core.function.WorkflowFunction

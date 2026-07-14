@@ -1,9 +1,9 @@
-package com.fluxion.config.apollo
+﻿package com.fluxion.config.apollo
 
 import com.ctrip.framework.apollo.openapi.client.ApolloOpenApiClient
-import com.fluxion.adapter.spi.config.SchemaConfigPublisher
-import com.fluxion.adapter.spi.config.SchemaConfigSnapshot
-import com.fluxion.adapter.spi.registry.PublishTarget
+import com.fluxion.config.core.SchemaConfigPublisher
+import com.fluxion.config.core.SchemaConfigSnapshot
+import com.fluxion.config.core.PublishTarget
 import com.fluxion.core.util.JsonUtil
 import org.slf4j.*
 

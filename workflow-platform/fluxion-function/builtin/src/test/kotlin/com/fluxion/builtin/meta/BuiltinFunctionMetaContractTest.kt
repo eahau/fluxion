@@ -1,4 +1,4 @@
-package com.fluxion.builtin.meta
+﻿package com.fluxion.builtin.meta
 
 import com.fasterxml.jackson.core.type.TypeReference
 import com.fluxion.schema.json.JsonSchemaParser

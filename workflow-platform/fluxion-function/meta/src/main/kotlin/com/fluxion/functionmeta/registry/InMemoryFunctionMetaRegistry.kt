@@ -1,4 +1,4 @@
-/**
+﻿/**
  * In-memory metadata store used on worker instances.
  *
  * Workers never author metadata directly; the admin side is the source of

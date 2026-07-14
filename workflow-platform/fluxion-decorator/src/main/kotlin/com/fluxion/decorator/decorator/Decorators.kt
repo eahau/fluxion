@@ -1,164 +1,291 @@
-@file:Suppress("unused")
+﻿@file:Suppress("unused")
 
 package com.fluxion.decorator.decorator
 
 import com.fluxion.core.exception.DecoratorNotFoundException
 import com.fluxion.core.function.WorkflowFunction
-import com.fluxion.core.model.WorkflowNode
+import com.fluxion.core.model.*
+import com.fluxion.core.ratelimit.RateLimitConfig
+import com.fluxion.core.ratelimit.RateLimitStore
+import com.fluxion.core.value.EngineResult
+import com.fluxion.core.value.FunctionResult
+import com.fluxion.decorator.engine.TaskInterceptor
+import com.fluxion.decorator.ratelimit.LocalRateLimitStore
+import com.fluxion.redis.RedisKey
+import io.micrometer.core.instrument.MeterRegistry
+import io.micrometer.core.instrument.Tags
+import io.micrometer.core.instrument.Timer
 import org.slf4j.*
+import org.springframework.expression.spel.standard.SpelExpressionParser
+import org.springframework.expression.spel.support.StandardEvaluationContext
+import java.util.*
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executor
 import java.util.concurrent.TimeUnit
 
-/**
- * Node-level decorator SPI -- enhances [WorkflowFunction] with cross-cutting concerns.
- *
- * Implementations add behaviour such as metrics collection, distributed tracing,
- * rate limiting, caching, asynchronous execution and structured logging around
- * individual node function invocations.
- *
- * Decorators are looked up by `name()` in [DecoratorRegistry] and applied in the
- * order declared by [WorkflowNode.decorators].
- */
 interface NodeDecorator {
 
-    /**
-     * Unique decorator identifier used in [WorkflowNode.decorators] and
-     * as the key for per-node parameters in [WorkflowNode.decoratorParams].
-     */
     fun name(): String
 
-    /**
-     * Wrap `function` with additional behaviour for the given `node`.
-     *
-     * The returned [WorkflowFunction] **must** eventually delegate to the
-     * original function unless it short-circuits intentionally (e.g. rate
-     * limit or cache hit). Implementations must be exception-safe: any
-     * resources acquired before delegation must be released in a `finally`
-     * block.
-     *
-     * @param function the inner node function to wrap
-     * @param node     the workflow node being executed; access
-     *                 `node.decoratorParams(name())` for typed configuration
-     */
     fun decorate(function: WorkflowFunction<Any>, node: WorkflowNode): WorkflowFunction<Any>
 }
 
-/**
- * Registry for [NodeDecorator] implementations -- thread-safe, backed by a
- * [ConcurrentHashMap].
- *
- * Used by [com.fluxion.core.engine.WorkflowEngine] when resolving the decorator
- * pipeline for a node. Spring auto-configuration collects all [NodeDecorator]
- * beans and calls [registerAll] at startup.
- */
 class DecoratorRegistry {
 
     private val log = LoggerFactory.getLogger(javaClass)
     private val decorators = ConcurrentHashMap<String, NodeDecorator>()
 
-    /** Register a single decorator. Silently overwrites any previous registration. */
     fun register(decorator: NodeDecorator) {
         decorators[decorator.name()] = decorator
         log.debug { "Registered decorator: ${decorator.name()}" }
     }
 
-    /** Register a collection of decorators. Invokes [register] in iteration order. */
     fun registerAll(decoratorList: Collection<NodeDecorator>) {
         decoratorList.forEach(::register)
     }
 
-    /**
-     * Look up a decorator by name.
-     *
-     * @throws DecoratorNotFoundException if no decorator with `name` is registered
-     */
     fun resolve(name: String): NodeDecorator =
         decorators[name] ?: throw DecoratorNotFoundException(name)
 
-    /** Return `true` if a decorator with `name` is currently registered. */
     fun contains(name: String): Boolean = decorators.containsKey(name)
 
-    /** Return a snapshot list of currently registered decorator names. */
     fun listNames(): List<String> = decorators.keys().toList()
 }
 
-/** Terminal status of an asynchronously executed node callback. */
 enum class AsyncCallbackStatus {
-    /** The wrapped function completed normally (output is available). */
     SUCCESS,
-    /** The wrapped function threw an exception (errorMsg is available). */
     FAILED
 }
 
-/**
- * Immutable context object delivered to an [AsyncCallback] subscriber when an
- * `async:ioPool`-decorated node finishes (successfully or with an error).
- *
- * Contains enough information for the admin-console / calling service to
- * correlate the result with the original workflow request via `executionId`,
- * `workflowId` and `asyncId`.
- */
 data class AsyncCallbackContext(
-    /** Opaque unique id returned from the decorated call (PENDING response). */
     val asyncId: String,
-    /** Engine execution id (from [com.fluxion.core.value.ExecutionMeta]). */
     val executionId: String,
-    /** Owning workflow id. */
     val workflowId: String,
-    /** Human-readable workflow name. */
     val workflowName: String,
-    /** Optional application group for multi-tenant deployments. */
     val appGroup: String?,
-    /** Id of the node that executed asynchronously. */
     val nodeId: String,
-    /** Human-readable node name. */
     val nodeName: String,
-    /** Function reference that was invoked. */
     val functionRef: String,
-    /** Final status of the asynchronous invocation. */
     val status: AsyncCallbackStatus,
-    /** Function output on [AsyncCallbackStatus.SUCCESS]; `null` on failure. */
     val output: Any?,
-    /** Exception message on [AsyncCallbackStatus.FAILED]; `null` on success. */
     val errorMsg: String?
 )
 
-/**
- * Asynchronous result delivery SPI used by `AsyncDecorator`.
- *
- * Implementations bridge out of the engine: workflow-admin provides Kafka /
- * HTTP based publishers that forward [AsyncCallbackContext] instances to the
- * caller or admin console.
- */
 interface AsyncCallback {
-    /**
-     * Deliver the result of an asynchronously completed node.
-     *
-     * Implementations must never throw -- the engine does not swallow callback
-     * exceptions and the failure would be surfaced to the worker thread pool.
-     */
     fun publish(context: AsyncCallbackContext)
 }
 
-/**
- * Cache storage SPI used by the `cache:local` node decorator.
- *
- * Fluxion ships a built-in [com.github.benmanes.caffeine.cache.Caffeine]
- * backed implementation; deployments requiring a distributed cache should
- * register a Redis-based bean instead.
- */
 interface CacheStore {
-    /** Return the cached value for `key` or `null` if absent / expired. */
     fun get(key: String): Any?
 
-    /**
-     * Store `value` under `key` with a time-to-live.
-     *
-     * @param ttl  magnitude of the expiry duration
-     * @param unit unit for `ttl`
-     */
     fun put(key: String, value: Any?, ttl: Long, unit: TimeUnit)
 
-    /** Evict the entry under `key` immediately (no-op if absent). */
     fun evict(key: String)
+}
+
+interface WorkflowDecorator {
+
+    fun name(): String
+
+    suspend fun decorate(
+        def: WorkflowDefinition,
+        rawInput: Map<String, Any>,
+        execute: suspend () -> EngineResult
+    ): EngineResult
+}
+
+class WorkflowDecoratorRegistry {
+
+    private val log = LoggerFactory.getLogger(javaClass)
+    private val decorators = ConcurrentHashMap<String, WorkflowDecorator>()
+
+    fun register(decorator: WorkflowDecorator) {
+        decorators[decorator.name()] = decorator
+        log.debug { "Registered workflow decorator: ${decorator.name()}" }
+    }
+
+    fun registerAll(decoratorList: Collection<WorkflowDecorator>) {
+        decoratorList.forEach(::register)
+    }
+
+    fun resolve(name: String): WorkflowDecorator =
+        decorators[name] ?: throw DecoratorNotFoundException(name)
+
+    fun contains(name: String): Boolean = decorators.containsKey(name)
+
+    fun listNames(): List<String> = decorators.keys().toList()
+}
+
+class MetricsDecorator(private val meterRegistry: MeterRegistry) : NodeDecorator {
+
+    override fun name(): String = "metrics:micrometer"
+
+    override fun decorate(function: WorkflowFunction<Any>, node: WorkflowNode): WorkflowFunction<Any> =
+        WorkflowFunction { input ->
+            val start = System.currentTimeMillis()
+            val tags = Tags.of("workflow", node.workflowId, "node", node.id)
+            try {
+                val result = function.apply(input)
+                meterRegistry.counter("workflow.node.success", tags).increment()
+                Timer.builder("workflow.node.duration").tags(tags).register(meterRegistry)
+                    .record(System.currentTimeMillis() - start, TimeUnit.MILLISECONDS)
+                result
+            } catch (e: Exception) {
+                meterRegistry.counter("workflow.node.error", tags.and("error", e.javaClass.simpleName)).increment()
+                throw e
+            }
+        }
+}
+
+class RateLimitDecorator(private val store: RateLimitStore = LocalRateLimitStore()) : NodeDecorator {
+
+    override fun name(): String = "ratelimit:slidingWindow"
+
+    override fun decorate(function: WorkflowFunction<Any>, node: WorkflowNode): WorkflowFunction<Any> {
+        val config = resolveConfig(node)
+        val key = resolveKey(node)
+
+        return WorkflowFunction { input ->
+            if (!store.tryAcquire(key, config)) {
+                throw com.fluxion.core.exception.RateLimitExceededException(
+                    "Node [${node.name}] rate limit exceeded (upLimited=${config.upLimited}, cdSeconds=${config.cdSeconds})"
+                )
+            }
+            function.apply(input)
+        }
+    }
+
+    private fun resolveConfig(node: WorkflowNode): RateLimitConfig {
+        val params = node.decoratorParams(name())
+        val upLimited = params.intParam("upLimited", RateLimitConfig.DEFAULT_UP_LIMITED)
+        val cdSeconds = params.intParam("cdSeconds", RateLimitConfig.DEFAULT_CD_SECONDS)
+        val recoveryPerCd = params.intParam("recoveryPerCd", upLimited)
+        return RateLimitConfig(upLimited, cdSeconds, recoveryPerCd)
+    }
+
+    private fun resolveKey(node: WorkflowNode): String {
+        val params = node.decoratorParams(name())
+        val explicit = params.stringParam("rateLimitKey")
+        val businessKey = if (!explicit.isNullOrBlank()) explicit else "ratelimit:${node.id}"
+        return RedisKey.fromNode(node, businessKey)
+    }
+}
+
+class CacheDecorator(private val cacheStore: CacheStore) : NodeDecorator {
+
+    private val parser = SpelExpressionParser()
+
+    override fun name(): String = "cache:local"
+
+    override fun decorate(function: WorkflowFunction<Any>, node: WorkflowNode): WorkflowFunction<Any> =
+        WorkflowFunction { input ->
+            val params = node.decoratorParams(name())
+            val ttl = params.longParam("ttlSeconds", 60L)
+            val keyExpr = params.stringParam("cacheKeyExpression") ?: "#input"
+            val businessKey = "cache:${node.id}:${evalKey(keyExpr, input.directInput)}"
+            val cacheKey = RedisKey.fromNode(node, businessKey)
+
+            cacheStore.get(cacheKey)?.let { return@WorkflowFunction FunctionResult.success(it) }
+
+            val result = function.apply(input)
+            result.output?.let { cacheStore.put(cacheKey, it, ttl, TimeUnit.SECONDS) }
+            result
+        }
+
+    private fun evalKey(expr: String?, input: Any?): String {
+        if (expr.isNullOrBlank() || expr == "#input") {
+            return input?.toString() ?: "null"
+        }
+        return try {
+            val ctx = StandardEvaluationContext().apply { setVariable("input", input) }
+            parser.parseExpression(expr).getValue(ctx)?.toString() ?: "null"
+        } catch (_: Exception) {
+            input?.toString() ?: "null"
+        }
+    }
+}
+
+class AsyncDecorator(
+    private val executor: Executor,
+    private val callback: AsyncCallback,
+    private val taskInterceptor: TaskInterceptor = TaskInterceptor.NOOP
+) : NodeDecorator {
+
+    private val log = LoggerFactory.getLogger(javaClass)
+
+    override fun name(): String = "async:ioPool"
+
+    override fun decorate(function: WorkflowFunction<Any>, node: WorkflowNode): WorkflowFunction<Any> =
+        WorkflowFunction { input ->
+            val asyncId = UUID.randomUUID().toString()
+            val meta = input.meta
+            val executionId = meta?.executionId ?: ""
+            val workflowId = meta?.workflowId ?: node.workflowId
+            val workflowName = meta?.workflowName ?: ""
+            val appGroup = meta?.appGroup
+
+            taskInterceptor.wrap(executor).execute {
+                val context = { status: AsyncCallbackStatus, output: Any?, errorMsg: String? ->
+                    AsyncCallbackContext(
+                        asyncId = asyncId,
+                        executionId = executionId,
+                        workflowId = workflowId,
+                        workflowName = workflowName,
+                        appGroup = appGroup,
+                        nodeId = node.id,
+                        nodeName = node.name,
+                        functionRef = node.functionRef,
+                        status = status,
+                        output = output,
+                        errorMsg = errorMsg
+                    )
+                }
+                try {
+                    val result = function.apply(input)
+                    callback.publish(context(AsyncCallbackStatus.SUCCESS, result.output, null))
+                } catch (e: Exception) {
+                    log.error(e) { "Async node [${node.name}] execution failed: ${e.message}" }
+                    callback.publish(context(AsyncCallbackStatus.FAILED, null, e.message))
+                }
+            }
+
+            FunctionResult.success(
+                mapOf(
+                    "asyncId" to asyncId,
+                    "status" to "PENDING",
+                    "executionId" to executionId
+                )
+            )
+        }
+}
+
+class LoggingDecorator : NodeDecorator {
+
+    private val log = LoggerFactory.getLogger(javaClass)
+
+    override fun name(): String = "logging:default"
+
+    override fun decorate(function: WorkflowFunction<Any>, node: WorkflowNode): WorkflowFunction<Any> =
+        WorkflowFunction { input ->
+            val start = System.currentTimeMillis()
+            log.info { "[LOG] workflow=${node.workflowId} node=${node.name} function=${node.functionRef} inputs=${input.nodeParams}" }
+            try {
+                val result = function.apply(input)
+                val duration = System.currentTimeMillis() - start
+                log.info {
+                    "[LOG] workflow=${node.workflowId} " +
+                            "node=${node.name} function=${node.functionRef}," +
+                            "success, duration=${duration}ms, output=${result.output}"
+                }
+                result
+            } catch (e: Exception) {
+                val duration = System.currentTimeMillis() - start
+                log.warn {
+                    "[LOG] workflow=${node.workflowId} " +
+                            "node=${node.name} function=${node.functionRef}," +
+                            "failed, duration=${duration}ms, error=${e.message}"
+                }
+                throw e
+            }
+        }
 }

@@ -79,6 +79,25 @@ const DEFAULT_PROTOBUF_SCHEMA = JSON.stringify(
   2,
 );
 
+/** Avro Schema 默认示例 */
+const DEFAULT_AVRO_SCHEMA = JSON.stringify(
+  {
+    type: 'record',
+    name: 'UserRecord',
+    namespace: 'com.example.avro',
+    doc: '示例 Avro Record，包含常见字段类型',
+    fields: [
+      { name: 'id', type: 'long', doc: '用户唯一 ID' },
+      { name: 'username', type: 'string', doc: '用户名' },
+      { name: 'email', type: ['null', 'string'], default: null, doc: '邮箱（可选）' },
+      { name: 'age', type: ['null', 'int'], default: null, doc: '年龄（可选）' },
+      { name: 'tags', type: { type: 'array', items: 'string' }, default: [], doc: '标签数组' },
+    ],
+  },
+  null,
+  2,
+);
+
 /** 合法字段名：字母/下划线开头，只含字母、数字、下划线 */
 const FIELD_NAME_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 
@@ -583,6 +602,7 @@ const SchemaEditor: React.FC = () => {
   });
 
   return (
+    <div style={{ maxWidth: 1240, margin: '0 auto' }}>
     <Spin spinning={loading}>
       <Card
         styles={{ body: { padding: '12px 16px' } }}
@@ -737,6 +757,9 @@ const SchemaEditor: React.FC = () => {
                         if (value === 'protobuf' && !isEdit && jsonValue === '{}') {
                           setJsonValue(DEFAULT_PROTOBUF_SCHEMA);
                         }
+                        if (value === 'avro' && !isEdit && jsonValue === '{}') {
+                          setJsonValue(DEFAULT_AVRO_SCHEMA);
+                        }
                       }}
                     />
                   </Form.Item>
@@ -776,6 +799,37 @@ const SchemaEditor: React.FC = () => {
                 )}
               </Row>
             </Form>
+
+            {mode !== 'view' && schemaFormat !== 'json-schema' && (
+              <Alert
+                type="info"
+                showIcon
+                style={{ marginBottom: 14, borderRadius: 8 }}
+                message={`${SCHEMA_FORMAT_OPTIONS.find((o) => o.value === schemaFormat)?.label || schemaFormat} 格式说明`}
+                description={
+                  <div style={{ lineHeight: 1.7 }}>
+                    <div style={{ marginBottom: 4 }}>
+                      本格式仅支持「JSON 模式」直接编辑 schema JSON，不支持表单式字段配置，请按对应协议规范编写结构：
+                    </div>
+                    <ul style={{ margin: '4px 0 0 20px', padding: 0 }}>
+                      {schemaFormat === 'protobuf' && (
+                        <>
+                          <li>必须是 <strong>FileDescriptorProto JSON</strong>（含 <code>name</code> + <code>messageType[]</code>，每个 messageType 里有 <code>field[]</code>，每个 field 有 <code>name/number/label/type</code> 四要素）</li>
+                          <li>新建时已自动填充示例，可直接在其基础上修改字段。后端通过 <code>messageType</code> 字段自动识别为 Protobuf 格式</li>
+                        </>
+                      )}
+                      {schemaFormat === 'avro' && (
+                        <>
+                          <li>必须是 <strong>Avro Schema JSON</strong>（含 <code>type: 'record'</code> + <code>name</code> + <code>fields[]</code>，每个 field 有 <code>name/type</code> 和可选 <code>default/doc</code>）</li>
+                          <li>新建时已自动填充 <code>UserRecord</code> 示例，包含常见 long/string/union(null,X)/array 等类型</li>
+                        </>
+                      )}
+                      <li>如要做字段级校验（required、range、pattern 等），请在 JSON 中按协议规范声明，不支持表单交互配置</li>
+                    </ul>
+                  </div>
+                }
+              />
+            )}
 
             {mode === 'form' ? (
               <>
@@ -892,6 +946,7 @@ const SchemaEditor: React.FC = () => {
         )}
       </Card>
     </Spin>
+    </div>
   );
 };
 

@@ -1,13 +1,13 @@
-package com.fluxion.registry.http
+﻿package com.fluxion.registry.http
 
-import com.fluxion.adapter.spi.registry.InstanceDiscovery
-import com.fluxion.adapter.spi.registry.InstanceInfo
+import com.fluxion.config.core.InstanceDiscovery
+import com.fluxion.config.core.InstanceInfo
 
 /**
- * HTTP 榛樿瀹炵幇 鈥?Admin 渚у疄渚嬪彂鐜?
+ * HTTP default implementation - Admin-side instance discovery.
  *
- * 浠?[InMemoryInstanceStore] 涓煡璇?Worker 涓婃姤鐨勫瓨娲诲疄渚嬶紝
- * 渚?Admin 鍐呴儴鎺ㄩ€侀厤缃拰瀵瑰鏆撮湶瀹炰緥鍒楄〃浣跨敤銆?
+ * Queries live instances reported by Workers from [InMemoryInstanceStore],
+ * used by Admin internal push configurations and external-facing instance listing.
  */
 class HttpAdminInstanceDiscovery(
     private val store: InMemoryInstanceStore

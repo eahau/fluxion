@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Single-value Apollo config subscriber — wraps namespace subscription and
  * custom parsing logic into the generic [ConfigSubscriber] surface used by
  * the rest of the platform.
@@ -26,8 +26,8 @@ package com.fluxion.config.apollo
 
 import com.ctrip.framework.apollo.Config
 import com.ctrip.framework.apollo.ConfigService
-import com.fluxion.adapter.spi.config.ConfigChangeListener
-import com.fluxion.adapter.spi.config.ConfigSubscriber
+import com.fluxion.config.core.ConfigChangeListener
+import com.fluxion.config.core.ConfigSubscriber
 import com.fluxion.config.core.AbstractConfigSubscriber
 import org.slf4j.LoggerFactory
 import org.slf4j.*

@@ -1,4 +1,4 @@
-package com.fluxion.admin.security
+﻿package com.fluxion.admin.security
 
 import com.fluxion.admin.repository.UserRepository
 import org.springframework.security.core.authority.SimpleGrantedAuthority

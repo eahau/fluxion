@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Pluggable source-of-truth for operator-authored function metadata.
  *
  * Runtime workers never speak directly to a database; instead they stream

@@ -30,8 +30,10 @@ import {
 } from '@ant-design/icons';
 import { useEffect, useMemo, useState } from 'react';
 import { getFunctions, deleteFunction, publishFunction, deprecateFunction } from '@/services/function';
+import { listApps } from '@/services/apps';
 import { useClickDebounce } from '@/utils/useClickDebounce';
 import type { FunctionDefinition } from '@/types/function';
+import type { App } from '@/services/apps';
 import {
   FUNCTION_GROUPS,
   FUNCTION_GROUP_ORDER,
@@ -48,9 +50,22 @@ const { Text, Paragraph } = Typography;
 
 const CATEGORY_OPTIONS = [
   { value: 'BUILTIN', label: '内置' },
+  { value: 'TRIGGER', label: '触发器' },
   { value: 'CUSTOM', label: '自定义' },
   { value: 'SCRIPT', label: '脚本' },
   { value: 'EXTERNAL', label: '外部' },
+];
+
+const SORT_BY_OPTIONS = [
+  { value: 'name', label: '名称' },
+  { value: 'createdAt', label: '创建时间' },
+  { value: 'updatedAt', label: '更新时间' },
+  { value: 'category', label: '类别' },
+];
+
+const SORT_DIR_OPTIONS = [
+  { value: 'asc', label: '升序' },
+  { value: 'desc', label: '降序' },
 ];
 
 const SCOPE_META: Record<string, { label: string; color: string }> = {
@@ -59,19 +74,65 @@ const SCOPE_META: Record<string, { label: string; color: string }> = {
   MARKETPLACE: { label: '市场', color: '#fa8c16' },
 };
 
+function normalizeAppList(raw: any): App[] {
+  if (Array.isArray(raw)) return raw as App[];
+  if (!raw || typeof raw !== 'object') return [];
+  const candidates: any[] = [
+    raw.list,
+    raw.data,
+    raw.items,
+    raw.records,
+    raw.rows,
+    raw.content,
+    raw.result,
+    raw.apps,
+    raw.appList,
+  ];
+  for (const c of candidates) {
+    if (Array.isArray(c)) return c as App[];
+    if (c && Array.isArray((c as any).list)) return (c as any).list as App[];
+    if (c && Array.isArray((c as any).data)) return (c as any).data as App[];
+  }
+  return [];
+}
+
 const FunctionList: React.FC = () => {
   const access = useAccess();
   const [keyword, setKeyword] = useState('');
   const [category, setCategory] = useState<string>();
+  const [appId, setAppId] = useState<number>();
+  const [sortBy, setSortBy] = useState<string>('updatedAt');
+  const [sortDir, setSortDir] = useState<string>('desc');
   const [activeGroup, setActiveGroup] = useState<string>('all');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+
+  const { data: appsRaw } = useRequest(listApps, {
+    formatResult: (res) => normalizeAppList(res),
+  });
+
+  const appOptions = useMemo(() => {
+    return (appsRaw || [])
+      .filter((a: App) => {
+        const s = (a as any).status;
+        if (s === 0) return false;
+        if (typeof s === 'string') {
+          const su = s.toUpperCase();
+          if (su === 'DISABLED' || su === 'INACTIVE') return false;
+        }
+        return true;
+      })
+      .map((a: App) => ({
+        value: (a as any).id as number,
+        label: (a as any).appName || (a as any).name || String((a as any).id),
+      }));
+  }, [appsRaw]);
 
   // 搜索条件变化时重置到第一页，并回到“全部”分组
   useEffect(() => {
     setPage(1);
     setActiveGroup('all');
-  }, [keyword, category]);
+  }, [keyword, category, appId, sortBy, sortDir]);
 
   // 切换分组时重置分页
   useEffect(() => {
@@ -79,31 +140,53 @@ const FunctionList: React.FC = () => {
   }, [activeGroup]);
 
   const { data, loading, refresh } = useRequest(
-    () => getFunctions({ keyword, category, page: 0, pageSize: 1000 }),
-    { formatResult: (res) => res, refreshDeps: [keyword, category] },
+    () =>
+      getFunctions({
+        keyword,
+        category,
+        appId,
+        sortBy,
+        sortDir,
+        page: Math.max(0, page - 1),
+        pageSize,
+      }),
+    {
+      formatResult: (res) => res,
+      refreshDeps: [keyword, category, appId, sortBy, sortDir, page, pageSize],
+    },
   );
 
-  const allFunctions = useMemo(() => data?.list || [], [data]);
+  const allFunctions = useMemo(() => {
+    const base: FunctionDefinition[] = data?.list || [];
+    // De-duplicate (name) to avoid duplicates across registry/triggers/DB sources
+    const seen = new Set<string>();
+    const merged: FunctionDefinition[] = [];
+    for (const fn of base) {
+      if (!fn?.name || seen.has(fn.name)) continue;
+      seen.add(fn.name);
+      merged.push(fn);
+    }
+    return merged;
+  }, [data]);
 
   const currentList = useMemo(() => {
     if (activeGroup === 'all') return allFunctions;
     return allFunctions.filter((fn) => getFunctionGroupKey(fn) === activeGroup);
   }, [allFunctions, activeGroup]);
 
-  const currentPageList = useMemo(
-    () => currentList.slice((page - 1) * pageSize, page * pageSize),
-    [currentList, page, pageSize],
-  );
+  const currentPageList = currentList;
 
   // 按能力分组统计数量，用于分组标签展示
   const groupCounts = useMemo(() => {
-    const counts: Record<string, number> = { all: allFunctions.length };
+    const counts: Record<string, number> = { all: Number(data?.total || 0) };
     allFunctions.forEach((fn) => {
       const key = getFunctionGroupKey(fn);
       counts[key] = (counts[key] || 0) + 1;
     });
     return counts;
-  }, [allFunctions]);
+  }, [allFunctions, data?.total]);
+
+  const total = Number(data?.total || 0);
 
   // 将当前分页数据按分组 key 排序展示
   const grouped = useMemo(() => {
@@ -153,11 +236,15 @@ const FunctionList: React.FC = () => {
 
   const renderFunctionCard = (fn: FunctionDefinition) => {
     const isBuiltin = fn.category === 'BUILTIN';
+    const isTrigger = fn.category === 'TRIGGER';
+    const readonly = isBuiltin || isTrigger;
     const displayName = getFunctionDisplayName(fn);
-    const domain = (fn.config?.domain as string) || 'other';
-    const domainMeta = getDomainMeta(domain);
-    const nodeMeta = NODE_TYPE_MAP[fn.nodeType];
-    const icon = nodeMeta?.icon || domainMeta.emoji;
+    const domain = isTrigger ? 'trigger' : ((fn.config?.domain as string) || 'other');
+    const domainMeta = isTrigger
+      ? { label: fn.config?.legacyProtocol ? `${fn.config.legacyProtocol} 协议` : '触发器', emoji: '⚡', color: '#0ea5e9' }
+      : getDomainMeta(domain);
+    const nodeMeta = !isTrigger ? NODE_TYPE_MAP[fn.nodeType] : undefined;
+    const icon = (fn.config?.icon as string) ? undefined : (nodeMeta?.icon || domainMeta.emoji);
     const color = nodeMeta?.color || domainMeta.color;
     const scope = fn.scope || 'PRIVATE';
     const scopeCfg = SCOPE_META[scope] || SCOPE_META.PRIVATE;
@@ -169,7 +256,7 @@ const FunctionList: React.FC = () => {
         icon: <EyeOutlined />,
         onClick: () => history.push(`/function/editor/${fn.id}?readonly=1`),
       },
-      ...(!isBuiltin && access.canEditFunction
+      ...(!readonly && access.canEditFunction
         ? [
             {
               key: 'edit',
@@ -203,7 +290,7 @@ const FunctionList: React.FC = () => {
     ];
 
     const handleCardClick = () => {
-      if (isBuiltin || !access.canEditFunction) {
+      if (readonly || !access.canEditFunction) {
         history.push(`/function/editor/${fn.id}?readonly=1`);
       } else {
         history.push(`/function/editor/${fn.id}`);
@@ -277,9 +364,19 @@ const FunctionList: React.FC = () => {
         </Tooltip>
 
         <Space size={4} wrap>
-          <Tag size="small" style={{ fontSize: 11, margin: 0 }}>
-            {fn.category}
-          </Tag>
+          {isTrigger ? (
+            <Tag
+              size="small"
+              color="cyan"
+              style={{ fontSize: 11, margin: 0 }}
+            >
+              触发器
+            </Tag>
+          ) : (
+            <Tag size="small" style={{ fontSize: 11, margin: 0 }}>
+              {fn.category}
+            </Tag>
+          )}
           <Tag size="small" color={scopeCfg.color} style={{ fontSize: 11, margin: 0 }}>
             {scopeCfg.label}
           </Tag>
@@ -300,6 +397,11 @@ const FunctionList: React.FC = () => {
               {nodeMeta.label}
             </Tag>
           )}
+          {isTrigger && Array.isArray(fn.config?.paramList) && fn.config.paramList.length > 0 && (
+            <Tag size="small" color="blue" style={{ fontSize: 11, margin: 0 }}>
+              {fn.config.paramList.length} 参数
+            </Tag>
+          )}
         </Space>
       </Card>
     );
@@ -317,6 +419,14 @@ const FunctionList: React.FC = () => {
       extra={
         <Space>
           <Select
+            placeholder="所属应用"
+            allowClear
+            value={appId}
+            onChange={setAppId}
+            options={appOptions}
+            style={{ width: 140 }}
+          />
+          <Select
             placeholder="类别"
             allowClear
             value={category}
@@ -330,6 +440,20 @@ const FunctionList: React.FC = () => {
             onChange={(e) => setKeyword(e.target.value)}
             onSearch={refresh}
             style={{ width: 240 }}
+          />
+          <Select
+            placeholder="排序字段"
+            value={sortBy}
+            onChange={setSortBy}
+            options={SORT_BY_OPTIONS}
+            style={{ width: 120 }}
+          />
+          <Select
+            placeholder="排序方向"
+            value={sortDir}
+            onChange={setSortDir}
+            options={SORT_DIR_OPTIONS}
+            style={{ width: 120 }}
           />
           {access.canEditFunction && (
             <Button type="primary" icon={<PlusOutlined />} onClick={() => history.push('/function/editor')}>
@@ -392,13 +516,13 @@ const FunctionList: React.FC = () => {
         style={{ marginTop: -8, marginBottom: 16 }}
       />
 
-      {currentPageList.length > 0 && (
+      {total > 0 && (
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
           <Pagination
             current={page}
             pageSize={pageSize}
-            total={currentList.length}
-            showTotal={(total) => `共 ${total} 条`}
+            total={total}
+            showTotal={(t) => `共 ${t} 条`}
             showSizeChanger
             pageSizeOptions={['12', '20', '40', '80']}
             onChange={(p, ps) => {
@@ -412,7 +536,7 @@ const FunctionList: React.FC = () => {
       <Spin spinning={loading} tip="加载中...">
         {!loading && currentPageList.length === 0 ? (
           <Empty
-            description={keyword || category ? '未找到匹配的函数' : '暂无函数，请先在函数管理中创建'}
+            description={keyword || category || appId ? '未找到匹配的函数' : '暂无函数，请先在函数管理中创建'}
             image={Empty.PRESENTED_IMAGE_SIMPLE}
           />
         ) : (
@@ -453,13 +577,13 @@ const FunctionList: React.FC = () => {
                 </div>
               );
             })}
-            {currentPageList.length > 0 && (
+            {total > 0 && (
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
                 <Pagination
                   current={page}
                   pageSize={pageSize}
-                  total={currentList.length}
-                  showTotal={(total) => `共 ${total} 条`}
+                  total={total}
+                  showTotal={(t) => `共 ${t} 条`}
                   showSizeChanger
                   pageSizeOptions={['12', '20', '40', '80']}
                   onChange={(p, ps) => {

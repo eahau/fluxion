@@ -30,6 +30,7 @@ export interface ConditionTestPanelProps {
   onExecuteTest?: (payload: { inputs: any }) => Promise<any>;
   /** 节点当前配置的参数（如 filter 的 rules），用于预填充测试面板 */
   nodeParams?: Record<string, any>;
+  _canExecute?: boolean;
 }
 
 function patchConditionObjects(
@@ -83,9 +84,11 @@ const updateByPath = (root: any, path: string[], leafPatch: Record<string, any>)
   return cur;
 };
 
-const ConditionTestPanel: React.FC<ConditionTestPanelProps> = ({ functionId, functionDefinition, fixedInputSchema, onExecuteTest, nodeParams }) => {
+const ConditionTestPanel: React.FC<ConditionTestPanelProps> = ({ functionId, functionDefinition, fixedInputSchema, onExecuteTest, nodeParams, _canExecute }) => {
   // 是否为 filter 节点测试（使用 CompactRulesEditor 而非 RJSF）
   const isFilterNode = functionId === 'builtin:filter';
+
+  const testDisabled = _canExecute === false;
 
   // 预填充节点配置的参数（如 filter 的 rules）
   const initialInput = useMemo(() => {
@@ -219,7 +222,7 @@ const ConditionTestPanel: React.FC<ConditionTestPanelProps> = ({ functionId, fun
           <div className="function-test-col function-test-input-col">
             <div className="function-test-col-header">
               <span className="function-test-col-title">条件/过滤 · 测试输入</span>
-              <Button type="primary" icon={<PlayCircleOutlined />} size="small" onClick={uc.handleTest}>
+              <Button type="primary" icon={<PlayCircleOutlined />} size="small" onClick={uc.handleTest} disabled={testDisabled}>
                 执行测试
               </Button>
             </div>

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Nacos-backed subscriber for function configuration snapshots with
  * per-function granular listeners.
  *
@@ -13,8 +13,8 @@ package com.fluxion.config.nacos
 
 import com.alibaba.nacos.api.config.ConfigService
 import com.alibaba.nacos.api.config.listener.Listener
-import com.fluxion.adapter.spi.config.ChangeType
-import com.fluxion.adapter.spi.config.FunctionConfigSnapshot
+import com.fluxion.config.core.ChangeType
+import com.fluxion.config.core.FunctionConfigSnapshot
 import com.fluxion.config.core.SnapshotParser
 import org.slf4j.*
 import java.util.concurrent.ConcurrentHashMap

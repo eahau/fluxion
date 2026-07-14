@@ -1,7 +1,7 @@
-package com.fluxion.redis.ratelimit
+﻿package com.fluxion.redis.ratelimit
 
-import com.fluxion.decorator.ratelimit.RateLimitConfig
-import com.fluxion.decorator.ratelimit.RateLimitStore
+import com.fluxion.core.ratelimit.RateLimitConfig
+import com.fluxion.core.ratelimit.RateLimitStore
 import com.fluxion.redis.spi.RedisClientAdapter
 import org.slf4j.*
 import java.security.MessageDigest

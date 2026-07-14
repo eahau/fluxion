@@ -1,4 +1,4 @@
-package com.fluxion.builtin.db
+﻿package com.fluxion.builtin.db
 
 import com.fluxion.builtin.db.dialect.MySqlDialect
 import com.fluxion.builtin.db.dialect.SqlDialect

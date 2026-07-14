@@ -1,4 +1,4 @@
-package com.fluxion.admin.security
+﻿package com.fluxion.admin.security
 
 import com.fluxion.acl.spi.AuthProvider
 import jakarta.servlet.FilterChain

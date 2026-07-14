@@ -1,4 +1,4 @@
-package com.fluxion.redis.function
+﻿package com.fluxion.redis.function
 
 import com.fluxion.redis.meta.RedisFunctionMetas
 
@@ -7,7 +7,7 @@ import com.fluxion.core.function.WorkflowFunction
 import com.fluxion.core.model.NodeInput
 import com.fluxion.core.util.uncheckedCast
 import com.fluxion.core.value.FunctionResult
-import com.fluxion.core.redis.RedisKey
+import com.fluxion.redis.RedisKey
 import com.fluxion.redis.spi.RedisClientAdapter
 import com.fluxion.redis.spi.RedisRawCommand
 import org.slf4j.*

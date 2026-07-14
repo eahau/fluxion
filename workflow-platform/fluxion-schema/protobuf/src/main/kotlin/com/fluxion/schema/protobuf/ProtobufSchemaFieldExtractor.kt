@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Produces a uniform [SchemaField] tree from a compiled Protobuf message
  * [Descriptors.Descriptor].
  *

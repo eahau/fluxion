@@ -2,10 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { Input, Spin, Tag, Typography } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
 import { getFunctions } from '@/services/function';
+import { listTriggerFunctions, BUILTIN_TRIGGER_METAS_FALLBACK } from '@/services/triggerFunctions';
 import { NODE_TYPE_MAP, NODE_ROLE_GROUPS, NODE_TYPE_TO_ROLE } from '@/constants/nodeTypes';
 import { getDomainMeta, sortDomains } from '@/constants/domain';
 import type { FunctionDefinition } from '@/types/function';
 import type { NodeType } from '@/types/workflow';
+import type { TriggerFunctionMeta } from '@/services/triggerFunctions';
 
 const { Text } = Typography;
 
@@ -14,6 +16,7 @@ const CATEGORY_META: Record<string, { label: string; color: string; icon: string
   CUSTOM: { label: '自定义函数', color: '#10b981', icon: '🧩' },
   SCRIPT: { label: '脚本函数', color: '#8b5cf6', icon: '📝' },
   EXTERNAL: { label: '外部服务', color: '#f59e0b', icon: '🌐' },
+  SET_REF: { label: '函数集合', color: '#14b8a6', icon: '🧱' },
 };
 
 interface DragPayload {
@@ -25,13 +28,21 @@ interface DragPayload {
 const NodePalette: React.FC = () => {
   const [keyword, setKeyword] = useState('');
   const [functions, setFunctions] = useState<FunctionDefinition[]>([]);
+  const [triggers, setTriggers] = useState<TriggerFunctionMeta[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     setLoading(true);
-    getFunctions({ page: 0, pageSize: 1000 }, { silent: true })
-      .then((res) => setFunctions(res.list || []))
-      .catch(() => setFunctions([]))
+    Promise.all([
+      getFunctions({ page: 0, pageSize: 1000 }, { silent: true })
+        .then((res) => res.list || [])
+        .catch(() => []),
+      listTriggerFunctions({ silent: true }).catch(() => BUILTIN_TRIGGER_METAS_FALLBACK),
+    ])
+      .then(([funcs, triggs]) => {
+        setFunctions(funcs);
+        setTriggers(triggs);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -223,6 +234,136 @@ const NodePalette: React.FC = () => {
               </div>
             </div>
           )}
+
+          {/* 触发器节点 */}
+          <div>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              marginBottom: 10,
+            }}>
+              <span style={{ fontSize: 12 }}>⚡</span>
+              <Text style={{
+                fontSize: 11,
+                fontWeight: 600,
+                color: 'var(--fluxion-palette-text)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+              }}>
+                触发器
+              </Text>
+              <Tag
+                style={{
+                  marginLeft: 'auto',
+                  borderRadius: 10,
+                  fontSize: 10,
+                  lineHeight: '16px',
+                  padding: '0 6px',
+                  background: 'var(--fluxion-palette-tag-bg)',
+                  border: 'none',
+                  color: 'var(--fluxion-palette-text)',
+                }}
+              >
+                {triggers.length}
+              </Tag>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {triggers.filter((t) => {
+                if (!keyword) return true;
+                const kw = keyword.toLowerCase();
+                return t.label.toLowerCase().includes(kw) ||
+                  t.functionRef.toLowerCase().includes(kw) ||
+                  (t.category || '').toLowerCase().includes(kw);
+              }).map((trigger) => (
+                <div
+                  key={trigger.functionRef}
+                  draggable
+                  onDragStart={(e) => {
+                    const payload: DragPayload = {
+                      nodeType: 'TRIGGER' as NodeType,
+                      functionRef: trigger.functionRef,
+                      label: trigger.label,
+                    };
+                    e.dataTransfer.setData('application/reactflow', JSON.stringify(payload));
+                    e.dataTransfer.effectAllowed = 'move';
+                  }}
+                  style={{
+                    padding: '10px 12px',
+                    borderRadius: 10,
+                    cursor: 'grab',
+                    background: '#f0f5ff',
+                    border: '1px solid #e0e7ff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    transition: 'all 0.15s ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = '#6366f1';
+                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(99, 102, 241, 0.15)';
+                    e.currentTarget.style.transform = 'translateY(-1px)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = '#e0e7ff';
+                    e.currentTarget.style.boxShadow = 'none';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 10,
+                      background: 'rgba(99, 102, 241, 0.15)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 16,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {trigger.icon || '⚡'}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontWeight: 600,
+                      fontSize: 13,
+                      color: '#1e293b',
+                      lineHeight: 1.3,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}>
+                      {trigger.label}
+                    </div>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      fontSize: 11,
+                      color: '#64748b',
+                      lineHeight: 1.3,
+                    }}>
+                      <span>{trigger.functionRef}</span>
+                      <span
+                        style={{
+                          fontSize: 10,
+                          color: '#6366f1',
+                          background: 'rgba(99, 102, 241, 0.1)',
+                          padding: '0 4px',
+                          borderRadius: 4,
+                          lineHeight: '14px',
+                        }}
+                      >
+                        {trigger.category}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
 
           {/* 函数节点（按角色分组） */}
           {roleGrouped.length === 0 ? (

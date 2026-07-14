@@ -98,7 +98,7 @@ const WorkflowDetail: React.FC = () => {
           </div>
           <Space>
             <Button icon={<ArrowLeftOutlined />} onClick={() => history.push('/workflow')}>返回</Button>
-            <Button type="primary" icon={<EditOutlined />} onClick={() => history.push(`/workflow/designer/${id}`)}>
+            <Button type="primary" icon={<EditOutlined />} onClick={() => history.push(`/workflow/designer/${workflow?.workflowId || workflow?.id || id}`)}>
               编辑
             </Button>
           </Space>

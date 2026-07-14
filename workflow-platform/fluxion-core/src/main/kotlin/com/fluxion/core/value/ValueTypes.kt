@@ -1,4 +1,4 @@
-package com.fluxion.core.value
+﻿package com.fluxion.core.value
 
 /**
  * Return values and shared value types used across the Fluxion workflow engine.

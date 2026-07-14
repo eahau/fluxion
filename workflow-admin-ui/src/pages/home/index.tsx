@@ -52,7 +52,7 @@ const HomePage: React.FC = () => {
   const totalInstances = groups?.reduce((sum: number, g: any) => sum + (g.instanceCount || 0), 0) || 0;
 
   const quickActions = [
-    { label: '新建工作流', icon: <PlusOutlined />, path: '/workflow/designer', color: '#6366f1' },
+    { label: '新建函数集合', icon: <PlusOutlined />, path: '/workflow/designer', color: '#6366f1' },
     { label: '注册函数', icon: <FunctionOutlined />, path: '/function/editor', color: '#8b5cf6' },
     { label: '新建 Schema', icon: <FileTextOutlined />, path: '/schema/editor', color: '#06b6d4' },
     { label: '查看监控', icon: <DashboardOutlined />, path: '/monitor', color: '#f59e0b' },
@@ -124,7 +124,7 @@ const HomePage: React.FC = () => {
               </div>
               <div>
                 <Statistic
-                  title={<Text type="secondary" style={{ fontSize: 13 }}>工作流总数</Text>}
+                  title={<Text type="secondary" style={{ fontSize: 13 }}>函数集合总数</Text>}
                   value={workflows.length || overview?.activeWorkflows || 0}
                   valueStyle={{ fontSize: 28, fontWeight: 700, color: '#1e293b' }}
                 />
@@ -272,7 +272,7 @@ const HomePage: React.FC = () => {
             </div>
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                <Text style={{ fontSize: 12, color: '#8c8c8c' }}>活跃工作流</Text>
+                <Text style={{ fontSize: 12, color: '#8c8c8c' }}>活跃函数集合</Text>
                 <Text strong style={{ fontSize: 12 }}>{overview?.activeWorkflows || 0}</Text>
               </div>
               <Progress
@@ -292,7 +292,7 @@ const HomePage: React.FC = () => {
             </div>
             <Row gutter={[8, 8]}>
               {[
-                { label: '工作流', icon: <PartitionOutlined />, path: '/workflow', color: '#6366f1', count: workflows.length },
+                { label: '函数集合', icon: <PartitionOutlined />, path: '/workflow', color: '#6366f1', count: workflows.length },
                 { label: '函数库', icon: <FunctionOutlined />, path: '/function', color: '#8b5cf6', count: functions.length },
                 { label: 'Schema', icon: <FileTextOutlined />, path: '/schema', color: '#06b6d4', count: schemas.length },
                 { label: '执行历史', icon: <ClockCircleOutlined />, path: '/workflow/execution', color: '#f59e0b', count: null },
@@ -339,7 +339,7 @@ const HomePage: React.FC = () => {
         title={
           <Space>
             <PartitionOutlined style={{ color: '#6366f1' }} />
-            <span>最近工作流</span>
+            <span>最近函数集合</span>
           </Space>
         }
         extra={
@@ -362,7 +362,7 @@ const HomePage: React.FC = () => {
                 <Card
                   hoverable
                   size="small"
-                  onClick={() => history.push(`/workflow/detail/${wf.id}`)}
+                  onClick={() => history.push(`/workflow/detail/${wf.workflowId || wf.id}`)}
                   style={{ borderRadius: 10, border: '1px solid #f0f0f0' }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>

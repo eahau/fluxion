@@ -1,4 +1,4 @@
-package com.fluxion.schema.json
+﻿package com.fluxion.schema.json
 
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test

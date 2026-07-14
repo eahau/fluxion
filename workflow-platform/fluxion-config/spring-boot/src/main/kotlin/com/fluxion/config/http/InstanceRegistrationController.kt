@@ -1,7 +1,7 @@
-package com.fluxion.config.http
+﻿package com.fluxion.config.http
 
-import com.fluxion.adapter.spi.registry.InstanceInfo
-import com.fluxion.adapter.spi.registry.InstanceRegistry
+import com.fluxion.config.core.InstanceInfo
+import com.fluxion.config.core.InstanceRegistry
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.PostMapping
@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 
 /**
- * HTTP 娉ㄥ唽绔偣 鈥?Admin 渚?
+ * HTTP registration endpoint — Admin side.
  */
 @RestController
 @RequestMapping("/internal/workflow/registry")

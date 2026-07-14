@@ -1,4 +1,4 @@
-package com.fluxion.core.exception
+﻿package com.fluxion.core.exception
 
 import com.fluxion.core.value.SideEffect
 

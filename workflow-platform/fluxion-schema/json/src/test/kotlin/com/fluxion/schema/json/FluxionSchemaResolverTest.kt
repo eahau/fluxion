@@ -1,4 +1,4 @@
-package com.fluxion.schema.json
+﻿package com.fluxion.schema.json
 
 import com.fluxion.schema.registry.InMemorySchemaRegistry
 import org.junit.jupiter.api.Assertions.*

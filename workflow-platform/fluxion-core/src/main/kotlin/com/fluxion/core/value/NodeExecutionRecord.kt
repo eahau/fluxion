@@ -1,4 +1,4 @@
-package com.fluxion.core.value
+﻿package com.fluxion.core.value
 
 import com.fluxion.core.enums.NodeStatus
 import com.fluxion.core.model.WorkflowNode

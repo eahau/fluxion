@@ -1,13 +1,13 @@
-package com.fluxion.config.nacos
+﻿package com.fluxion.config.nacos
 
 import com.alibaba.nacos.api.naming.NamingService
 import com.alibaba.nacos.api.naming.pojo.Instance
-import com.fluxion.adapter.spi.registry.InstanceDiscovery
-import com.fluxion.adapter.spi.registry.InstanceInfo
+import com.fluxion.config.core.InstanceDiscovery
+import com.fluxion.config.core.InstanceInfo
 import org.slf4j.*
 
 /**
- * Nacos 瀹炵幇 鈥?瀹炰緥鍙戠幇锛圓dmin 渚э級
+ * Nacos implementation - instance discovery (Admin side).
  */
 class NacosInstanceDiscovery(
     private val namingService: NamingService

@@ -10,7 +10,7 @@ import ReactFlow, {
   MarkerType,
   type ReactFlowInstance,
 } from 'reactflow';
-import { Tooltip, Typography } from 'antd';
+import { Tooltip, Typography, App } from 'antd';
 import { FullscreenOutlined, FullscreenExitOutlined, PlusCircleOutlined } from '@ant-design/icons';
 import 'reactflow/dist/style.css';
 import { useWorkflowStore } from '@/stores/useWorkflowStore';
@@ -19,10 +19,12 @@ import { nodeTypes } from './nodes';
 import { edgeTypes } from './edges';
 import EdgeConfigPanel from './EdgeConfigPanel';
 import type { NodeType } from '@/types/workflow';
+import { BUILTIN_TRIGGER_METAS_FALLBACK } from '@/services/triggerFunctions';
 
 const { Text } = Typography;
 
 const FlowCanvasInner: React.FC<{ darkMode?: boolean }> = ({ darkMode }) => {
+  const { message } = App.useApp();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const { project } = useReactFlow();
   const [isDragOver, setIsDragOver] = useState(false);
@@ -56,6 +58,8 @@ const FlowCanvasInner: React.FC<{ darkMode?: boolean }> = ({ darkMode }) => {
     setSelectedNode,
     setSelectedEdge,
     selectedEdgeId,
+    hasAnyTrigger,
+    registerUniqueTrigger,
   } = useWorkflowStore();
 
   useKeyboardShortcuts();
@@ -91,6 +95,57 @@ const FlowCanvasInner: React.FC<{ darkMode?: boolean }> = ({ darkMode }) => {
       }
       if (!payload || !payload.nodeType) return;
 
+      // ── B3：触发器节点（拖进来自动注册为唯一头触发器 + 最多1个） ──────────────
+      const functionRef = (payload.functionRef || '').toString().trim();
+      const isTriggerDrop =
+        functionRef.startsWith('trigger:') ||
+        (payload.nodeType as string).toUpperCase().startsWith('TRIGGER');
+
+      if (isTriggerDrop) {
+        if (hasAnyTrigger()) {
+          message.warning(
+            '一个流程最多 1 个触发器，且必须是头节点。请先在「触发器配置」中删除现有触发器后再添加。',
+            5,
+          );
+          return; // 拒绝添加节点，避免画布有两个触发器
+        }
+        // 查兜底 meta 拿默认值（后端 meta 已经在 Toolbar 拉过，这里用兜底最稳妥）
+        const meta = BUILTIN_TRIGGER_METAS_FALLBACK.find((m) => m.functionRef === functionRef);
+        const defaultCfg = meta
+          ? Object.fromEntries(
+              (meta.paramSchema ?? [])
+                .filter((p: any) => p.defaultValue !== undefined && p.defaultValue !== null)
+                .map((p: any) => [p.name, p.defaultValue]),
+            )
+          : {};
+        const trigType: 'API' | 'EVENT' | 'SCHEDULE' | 'MANUAL' =
+          (meta?.category as any) || 'API';
+        const result = registerUniqueTrigger({
+          functionRef,
+          triggerType: trigType,
+          config: defaultCfg,
+        });
+        if (!result.ok) {
+          message.warning(result.msg || '添加触发器失败', 5);
+          return;
+        }
+        // 触发器节点位置：强制画布最上中央（头节点位置），不跟随鼠标，避免用户拖到中间
+        const reactFlowBounds = reactFlowWrapper.current.getBoundingClientRect();
+        const centerX = Math.max(0, (reactFlowBounds.width || 800) / 2 - 100);
+        const triggerPosition = project({ x: centerX, y: 60 });
+        addNode(payload.nodeType, triggerPosition, {
+          functionRef,
+          label: payload.label || meta?.label || functionRef,
+          params: defaultCfg,
+          _isHeadTrigger: true,
+        });
+        message.success(
+          `触发器已绑定：${meta?.label || functionRef}（一个流程仅此 1 个，已自动设为头节点）`,
+          3,
+        );
+        return;
+      }
+
       const reactFlowBounds = reactFlowWrapper.current.getBoundingClientRect();
       const position = project({
         x: event.clientX - reactFlowBounds.left,
@@ -119,7 +174,7 @@ const FlowCanvasInner: React.FC<{ darkMode?: boolean }> = ({ darkMode }) => {
         label: payload.label || payload.functionRef,
       });
     },
-    [project, addNode],
+    [project, addNode, hasAnyTrigger, registerUniqueTrigger, message],
   );
 
   const isEmpty = nodes.length === 0;

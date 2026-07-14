@@ -1,4 +1,4 @@
-package org.slf4j
+﻿package org.slf4j
 
 /**
  * Lazy SLF4J logging extensions for Kotlin.

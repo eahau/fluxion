@@ -1,9 +1,9 @@
-package com.fluxion.script.config
+﻿package com.fluxion.script.config
 
-import com.fluxion.adapter.spi.config.ChangeType
-import com.fluxion.adapter.spi.config.FunctionConfigSnapshot
-import com.fluxion.adapter.spi.config.FunctionConfigSubscriber
-import com.fluxion.adapter.spi.config.KeyedConfigChangeListener
+import com.fluxion.config.core.ChangeType
+import com.fluxion.config.core.FunctionConfigSnapshot
+import com.fluxion.config.core.FunctionConfigSubscriber
+import com.fluxion.config.core.KeyedConfigChangeListener
 import com.fluxion.core.function.FunctionRegistry
 import com.fluxion.core.function.external.ExternalFunctionConfig
 import com.fluxion.core.function.external.ExternalFunctionRequest

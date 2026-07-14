@@ -1,4 +1,4 @@
-package com.fluxion.core.model
+﻿package com.fluxion.core.model
 
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fluxion.core.enums.Protocol

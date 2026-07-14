@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Shared JSON deserialisation helpers for config-centre snapshots.
  *
  * Each backend (Apollo, Nacos, internal HTTP push) ships a raw JSON text
@@ -9,7 +9,7 @@
  */
 package com.fluxion.config.core
 
-import com.fluxion.adapter.spi.config.FunctionConfigSnapshot
+import com.fluxion.config.core.FunctionConfigSnapshot
 import com.fluxion.core.util.JsonUtil
 import org.slf4j.*
 

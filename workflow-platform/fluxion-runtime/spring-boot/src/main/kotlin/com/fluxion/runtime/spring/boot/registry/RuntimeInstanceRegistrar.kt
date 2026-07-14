@@ -1,7 +1,7 @@
-package com.fluxion.runtime.spring.boot.registry
+﻿package com.fluxion.runtime.spring.boot.registry
 
-import com.fluxion.adapter.spi.registry.InstanceInfo
-import com.fluxion.adapter.spi.registry.InstanceRegistry
+import com.fluxion.config.core.InstanceInfo
+import com.fluxion.config.core.InstanceRegistry
 import org.springframework.beans.factory.DisposableBean
 import org.springframework.boot.ApplicationArguments
 import org.springframework.boot.ApplicationRunner

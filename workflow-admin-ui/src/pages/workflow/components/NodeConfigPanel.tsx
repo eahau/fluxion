@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Button, Card, Form, Input, InputNumber, Select, Switch, Tabs, Badge, Empty, Modal, Tooltip } from 'antd';
-import { DeleteOutlined, PlayCircleOutlined, SettingOutlined, CodeOutlined, DatabaseOutlined, SafetyCertificateOutlined, ThunderboltOutlined, WarningOutlined, ClockCircleOutlined, CommentOutlined } from '@ant-design/icons';
+import { Button, Card, Form, Input, InputNumber, Select, Switch, Tabs, Badge, Empty, Modal, Tooltip, Alert } from 'antd';
+import { DeleteOutlined, PlayCircleOutlined, SettingOutlined, CodeOutlined, DatabaseOutlined, SafetyCertificateOutlined, ThunderboltOutlined, WarningOutlined, ClockCircleOutlined, CommentOutlined, EditOutlined, AppstoreOutlined } from '@ant-design/icons';
 import { useWorkflowStore } from '@/stores/useWorkflowStore';
 import { ERROR_STRATEGIES } from '@/constants/errorStrategies';
 import { NODE_TYPE_OPTIONS } from '@/constants/nodeTypes';
 import { getFunctions } from '@/services/function';
 import type { FunctionDefinition } from '@/types/function';
 import { flattenSchemaFields } from '@/utils/schemaFields';
+import { isDataAccessFunction } from '@/utils/resourceUtils';
 import DecoratorConfigPanel from './DecoratorConfigPanel';
 import FunctionRefSelect from './FunctionRefSelect';
 import NodeParamForm from './NodeParamForm';
@@ -16,6 +17,7 @@ import Editor from '@monaco-editor/react';
 interface NodeConfigPanelProps {
   workflowId?: string;
   darkMode?: boolean;
+  onOpenMeta?: () => void;
 }
 
 /** 面板宽度约束 */
@@ -35,7 +37,7 @@ const SectionTitle: React.FC<{ icon: React.ReactNode; title: string }> = ({ icon
   </div>
 );
 
-const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ workflowId, darkMode }) => {
+const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ workflowId, darkMode, onOpenMeta }) => {
   const { selectedNodeId, nodes, edges, workflowMeta, updateNodeData, removeNode } = useWorkflowStore();
   const node = nodes.find((n) => n.id === selectedNodeId);
   const [testVisible, setTestVisible] = useState(false);
@@ -180,6 +182,12 @@ const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ workflowId, darkMode 
     return [...new Set(fields)];
   }, [workflowMeta]);
 
+  const isDbRedisNode = useMemo(
+    () => !!node?.data.functionRef && isDataAccessFunction({ functionRef: node.data.functionRef, category: funcCacheRef.current.get(node.data.functionRef)?.category }),
+    [node?.data.functionRef],
+  );
+  const needsAppBinding = isDbRedisNode && !(workflowMeta.appGroup || '').toString().trim();
+
   // ─── 未选节点时（空状态） ───────────────────────────────
   if (!node) {
     return (
@@ -216,10 +224,12 @@ const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ workflowId, darkMode 
             <div style={{ position: 'absolute', left: 2, top: 0, bottom: 0, width: 1, background: 'var(--fluxion-border)' }} />
           </div>
           <Card
-            title="工作流配置"
+            title={<span style={{ fontWeight: 600 }}><SettingOutlined style={{ marginRight: 6 }} />节点配置</span>}
             style={{ width: DEFAULT_WIDTH, borderRadius: 0, borderTop: 'none', borderBottom: 'none', height: '100%' }}
           >
-            <Empty description="选择一个节点或配置工作流元信息" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 'calc(100% - 60px)' }}>
+              <Empty description={<span style={{ color: 'var(--fluxion-text-muted)' }}>选择节点以编辑配置</span>} image={Empty.PRESENTED_IMAGE_SIMPLE} />
+            </div>
           </Card>
         </div>
 
@@ -323,34 +333,62 @@ const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ workflowId, darkMode 
             </>
           }
         >
-          <style>{`
-            .node-config-tabs.ant-tabs-left > .ant-tabs-nav {
-              min-width: 56px;
-              border-right: 1px solid var(--fluxion-border);
-            }
-            .node-config-tabs.ant-tabs-left > .ant-tabs-nav .ant-tabs-tab {
-              padding: 10px 12px;
-              margin: 0;
-              font-size: 12px;
-            }
-            .node-config-tabs.ant-tabs-left > .ant-tabs-content-holder {
-              flex: 1;
-              min-width: 0;
-              overflow-y: auto;
-            }
-            .node-config-tabs.ant-tabs-left > .ant-tabs-content-holder > .ant-tabs-content {
-              min-height: 100%;
-            }
-            .node-config-tabs.ant-tabs-left > .ant-tabs-content-holder > .ant-tabs-content > .ant-tabs-tabpane-active {
-              padding: 0 4px;
-            }
-          `}</style>
-          <Tabs
-            defaultActiveKey="basic"
-            tabPosition="left"
-            className="node-config-tabs"
-            style={{ height: '100%' }}
-            items={[
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%' }}>
+            <style>{`
+              .node-config-tabs.ant-tabs-left > .ant-tabs-nav {
+                min-width: 56px;
+                border-right: 1px solid var(--fluxion-border);
+              }
+              .node-config-tabs.ant-tabs-left > .ant-tabs-nav .ant-tabs-tab {
+                padding: 10px 12px;
+                margin: 0;
+                font-size: 12px;
+              }
+              .node-config-tabs.ant-tabs-left > .ant-tabs-content-holder {
+                flex: 1;
+                min-width: 0;
+                overflow-y: auto;
+              }
+              .node-config-tabs.ant-tabs-left > .ant-tabs-content-holder > .ant-tabs-content {
+                min-height: 100%;
+              }
+              .node-config-tabs.ant-tabs-left > .ant-tabs-content-holder > .ant-tabs-content > .ant-tabs-tabpane-active {
+                padding: 0 4px;
+              }
+            `}</style>
+            {needsAppBinding && (
+              <Alert
+                style={{ margin: 4, borderRadius: 8, flexShrink: 0 }}
+                type="error"
+                showIcon
+                icon={<WarningOutlined />}
+                message={
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <strong style={{ marginRight: 6 }}>缺少所属应用（App）</strong>
+                      <span style={{ fontSize: 12 }}>DB / Redis 数据源与应用绑定，请先选择 App 才能配置此类节点。</span>
+                    </div>
+                    {onOpenMeta && (
+                      <Button
+                        size="small"
+                        type="primary"
+                        danger
+                        icon={<AppstoreOutlined />}
+                        onClick={onOpenMeta}
+                      >
+                        选择应用
+                      </Button>
+                    )}
+                  </div>
+                }
+              />
+            )}
+            <Tabs
+              defaultActiveKey="basic"
+              tabPosition="left"
+              className="node-config-tabs"
+              style={{ height: needsAppBinding ? 'calc(100% - 56px)' : '100%', flex: 1, minHeight: 0 }}
+              items={[
               {
                 key: 'basic',
                 label: '基础',
@@ -498,6 +536,7 @@ const NodeConfigPanel: React.FC<NodeConfigPanelProps> = ({ workflowId, darkMode 
               },
             ]}
           />
+          </div>
         </Card>
       </div>
 

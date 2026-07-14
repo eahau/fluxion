@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Default [SchemaManager] implementation that composes format-specific SPIs
  * loaded via [SchemaFormatBundle] entries.
  *

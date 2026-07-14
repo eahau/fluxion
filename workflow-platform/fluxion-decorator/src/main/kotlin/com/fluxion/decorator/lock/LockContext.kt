@@ -1,4 +1,4 @@
-package com.fluxion.decorator.lock
+﻿package com.fluxion.decorator.lock
 
 import com.fluxion.core.lock.DistributedLockProvider
 import com.fluxion.core.lock.LockParams
@@ -7,7 +7,7 @@ import com.fluxion.core.model.booleanParam
 import com.fluxion.core.model.intParam
 import com.fluxion.core.model.longParam
 import com.fluxion.core.model.stringParam
-import com.fluxion.core.redis.RedisKey
+import com.fluxion.redis.RedisKey
 import org.slf4j.Logger
 import org.slf4j.debug
 import org.slf4j.warn

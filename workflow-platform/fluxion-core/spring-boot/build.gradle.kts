@@ -12,13 +12,14 @@ dependencies {
     // All primary capability modules are exposed via api so downstream consumers pulling this
     // starter receive transitive compile-time access to their public types.
     api(project(":fluxion-core"))
-    api(project(":fluxion-function:external"))
     api(project(":fluxion-decorator"))
     api(project(":fluxion-mock"))
     api(project(":fluxion-engine"))
-    api(project(":fluxion-debug"))
+    api(project(":fluxion-di"))
     // Adapter SPI (router, request, configuration subscriber contracts) consumed internally only.
-    implementation(project(":fluxion-adapter-spi"))
+    implementation(project(":fluxion-config:core"))
+    implementation(project(":fluxion-schema:json"))
+    implementation(project(":fluxion-outbound"))
 
     // Spring Boot core starter - provides auto-configuration mechanism and core Spring context.
     implementation("org.springframework.boot:spring-boot-starter")

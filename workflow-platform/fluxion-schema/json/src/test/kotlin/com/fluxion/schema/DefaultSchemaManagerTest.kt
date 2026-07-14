@@ -1,4 +1,4 @@
-package com.fluxion.schema
+﻿package com.fluxion.schema
 
 import com.fluxion.schema.api.SchemaFormatBundle
 import com.fluxion.schema.json.JsonSchemaFieldExtractor

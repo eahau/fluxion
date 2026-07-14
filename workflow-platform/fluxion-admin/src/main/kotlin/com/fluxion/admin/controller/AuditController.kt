@@ -1,4 +1,4 @@
-package com.fluxion.admin.controller
+﻿package com.fluxion.admin.controller
 
 import com.fluxion.admin.entity.AuditLog
 import com.fluxion.admin.generated.api.AuditApi

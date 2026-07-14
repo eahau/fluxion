@@ -1,4 +1,4 @@
-package com.fluxion.core.engine
+﻿package com.fluxion.core.engine
 
 import com.fluxion.core.model.FilterRule
 import org.slf4j.*

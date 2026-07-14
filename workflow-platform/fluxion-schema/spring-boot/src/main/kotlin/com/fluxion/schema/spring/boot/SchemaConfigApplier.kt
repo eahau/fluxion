@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Worker-side adapter that materialises schema config snapshots into the
  * local [InMemorySchemaRegistry].
  *
@@ -18,10 +18,10 @@
  */
 package com.fluxion.schema.spring.boot
 
-import com.fluxion.adapter.spi.config.ChangeType
-import com.fluxion.adapter.spi.config.SchemaChangeListener
-import com.fluxion.adapter.spi.config.SchemaConfigSnapshot
-import com.fluxion.adapter.spi.config.SchemaConfigSubscriber
+import com.fluxion.config.core.ChangeType
+import com.fluxion.config.core.SchemaChangeListener
+import com.fluxion.config.core.SchemaConfigSnapshot
+import com.fluxion.config.core.SchemaConfigSubscriber
 import com.fluxion.schema.api.SchemaManager
 import com.fluxion.schema.model.SchemaFormat
 import com.fluxion.schema.registry.InMemorySchemaRegistry

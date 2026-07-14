@@ -1,4 +1,4 @@
-package com.fluxion.admin.acl
+﻿package com.fluxion.admin.acl
 
 import com.fluxion.acl.spi.AuthProvider
 import com.fluxion.acl.spi.model.AuthResult

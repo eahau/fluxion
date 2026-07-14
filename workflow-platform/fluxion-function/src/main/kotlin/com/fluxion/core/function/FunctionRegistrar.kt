@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Registration side of the function registry SPI.
  *
  * Component loaders – Spring bean scanning, Java ServiceLoader discovery,

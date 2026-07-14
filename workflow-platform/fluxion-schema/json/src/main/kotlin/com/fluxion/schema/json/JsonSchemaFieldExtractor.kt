@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Extracts the uniform [SchemaField] tree from a JSON Schema document.
  *
  * Handles the JSON Schema constructs that surface in workflow input/output

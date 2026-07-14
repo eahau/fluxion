@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Dynamically converts generic Java/Kotlin data structures (Map, List,
  * primitives) into Avro [GenericRecord] instances using a runtime schema.
  *

@@ -1,4 +1,4 @@
-package com.fluxion.core.spring.boot
+﻿package com.fluxion.core.spring.boot
 
 import com.fluxion.decorator.decorator.DecoratorRegistry
 import com.fluxion.decorator.decorator.WorkflowDecoratorRegistry
@@ -12,17 +12,17 @@ import com.fluxion.core.engine.IdempotencyStore
 import com.fluxion.core.engine.WorkflowEngine
 import com.fluxion.core.engine.WorkflowIdempotencyCacheSettings
 import com.fluxion.core.function.FunctionRegistry
-import com.fluxion.core.function.external.ExternalFunctionTransport
-import com.fluxion.core.function.external.ExternalFunctionTransportRegistry
+import com.fluxion.outbound.OutboundTransport
+import com.fluxion.outbound.OutboundTransportRegistry
 import com.fluxion.core.log.ExecutionLogStore
 import com.fluxion.core.metrics.WorkflowMetrics
 import com.fluxion.core.retry.RetryScheduler
-import com.fluxion.core.schema.SchemaValidator
+import com.fluxion.schema.json.SchemaValidator
 import com.fluxion.core.signal.SignalBroker
 import com.fluxion.core.value.ExecutionMeta
 import com.fluxion.core.value.NodeExecutionRecord
-import com.fluxion.adapter.spi.config.IdempotencyConfig
-import com.fluxion.adapter.spi.config.IdempotencyConfigSubscriber
+import com.fluxion.config.core.IdempotencyConfig
+import com.fluxion.config.core.IdempotencyConfigSubscriber
 import org.slf4j.*
 import org.springframework.beans.factory.InitializingBean
 import org.springframework.beans.factory.annotation.Autowired
@@ -63,18 +63,18 @@ class FluxionCoreAutoConfiguration {
      * handles discovery via `@Bean` instead.
      */
     @Bean(destroyMethod = "shutdown")
-    fun externalFunctionTransportRegistry(): ExternalFunctionTransportRegistry =
-        ExternalFunctionTransportRegistry(useServiceLoader = false)
+    fun externalFunctionTransportRegistry(): OutboundTransportRegistry =
+        OutboundTransportRegistry(useServiceLoader = false)
 
     /**
-     * Bridges every Spring `ExternalFunctionTransport` bean into the
+     * Bridges every Spring `OutboundTransport` bean into the
      * registry.  Also invoked by `BuiltinFunctionRegistrar` so that
      * the built-in HTTP client wires up cleanly.
      */
     @Bean
     fun externalFunctionTransportRegistrar(
-        registry: ExternalFunctionTransportRegistry,
-        transports: List<ExternalFunctionTransport>
+        registry: OutboundTransportRegistry,
+        transports: List<OutboundTransport>
     ): ExternalFunctionTransportRegistrar = ExternalFunctionTransportRegistrar(registry, transports)
 
     /** Per-node decorator registry — populated by `fluxion-decorator` modules. */

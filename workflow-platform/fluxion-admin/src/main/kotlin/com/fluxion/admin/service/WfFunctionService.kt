@@ -1,7 +1,7 @@
-package com.fluxion.admin.service
+﻿package com.fluxion.admin.service
 
-import com.fluxion.adapter.spi.config.FunctionConfigPublisher
-import com.fluxion.adapter.spi.config.FunctionConfigSnapshot
+import com.fluxion.config.core.FunctionConfigPublisher
+import com.fluxion.config.core.FunctionConfigSnapshot
 import com.fluxion.admin.entity.WfFunction
 import com.fluxion.admin.generated.model.FunctionStatus
 import com.fluxion.admin.mapper.JsonMapperHelper

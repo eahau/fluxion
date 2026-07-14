@@ -1,4 +1,4 @@
-package com.fluxion.builtin.json
+﻿package com.fluxion.builtin.json
 
 import com.fluxion.core.enums.FunctionStatus
 import com.fluxion.core.model.NodeInput

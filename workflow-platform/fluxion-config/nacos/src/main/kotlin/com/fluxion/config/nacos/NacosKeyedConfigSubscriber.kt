@@ -1,9 +1,9 @@
-package com.fluxion.config.nacos
+﻿package com.fluxion.config.nacos
 
 import com.alibaba.nacos.api.config.ConfigService
 import com.alibaba.nacos.api.config.listener.Listener
-import com.fluxion.adapter.spi.config.ChangeType
-import com.fluxion.adapter.spi.config.KeyedConfigChangeListener
+import com.fluxion.config.core.ChangeType
+import com.fluxion.config.core.KeyedConfigChangeListener
 import com.fluxion.config.core.AbstractKeyedConfigSubscriber
 import com.fluxion.config.core.SnapshotParser
 import org.slf4j.*

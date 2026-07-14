@@ -1,4 +1,4 @@
-/**
+﻿/**
  * [SchemaCodec] implementation for the Protobuf wire format plus
  * Protobuf-style JSON (via `protobuf-java-util` [JsonFormat]).
  *

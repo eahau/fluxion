@@ -15,7 +15,7 @@ sourceSets {
 
 dependencies {
     // Adapter SPI: base subscriber / change event contracts.
-    implementation(project(":fluxion-adapter-spi"))
+    implementation(project(":fluxion-config:core"))
     // Config core SPI: ConfigCenterProvider + data model interfaces.
     implementation(project(":fluxion-config:core"))
 

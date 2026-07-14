@@ -1,4 +1,4 @@
-/**
+﻿/**
  * [SchemaCodec] implementation for Avro payloads.
  *
  * Provides two separate encodings consistent with the Avro ecosystem:

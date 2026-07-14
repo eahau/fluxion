@@ -19,9 +19,10 @@ export interface RedisTestPanelProps {
   functionId: string;
   functionDefinition?: { config?: { paramSchema?: any; domain?: string; outputSchema?: any } } | null;
   onExecuteTest?: (payload: { inputs: any }) => Promise<any>;
+  _canExecute?: boolean;
 }
 
-const RedisTestPanel: React.FC<RedisTestPanelProps> = ({ functionId, functionDefinition, onExecuteTest }) => {
+const RedisTestPanel: React.FC<RedisTestPanelProps> = ({ functionId, functionDefinition, onExecuteTest, _canExecute }) => {
   const paramSchemaFromProps = useMemo(() => {
     const raw = functionDefinition?.config?.paramSchema;
     if (!raw) return null;
@@ -35,6 +36,8 @@ const RedisTestPanel: React.FC<RedisTestPanelProps> = ({ functionId, functionDef
     paramSchemaFromProps,
     domainFromProps: functionDefinition?.config?.domain as string | undefined,
   });
+
+  const testDisabled = _canExecute === false;
 
   const hasSchema = !!(uc.paramSchema && Object.keys(uc.paramSchema).length > 0);
   const dynamicWidgets = useMemo(
@@ -86,7 +89,7 @@ const RedisTestPanel: React.FC<RedisTestPanelProps> = ({ functionId, functionDef
             onChange={(e) => uc.setInput(e.formData || {})}
           />
           <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-end' }}>
-            <Button type="primary" icon={<PlayCircleOutlined />} size="middle" onClick={uc.handleTest}>
+            <Button type="primary" icon={<PlayCircleOutlined />} size="middle" onClick={uc.handleTest} disabled={testDisabled}>
               执行测试
             </Button>
           </div>
@@ -116,7 +119,7 @@ const RedisTestPanel: React.FC<RedisTestPanelProps> = ({ functionId, functionDef
             </>
           )}
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <Button type="primary" icon={<PlayCircleOutlined />} size="middle" onClick={uc.handleTest}>
+            <Button type="primary" icon={<PlayCircleOutlined />} size="middle" onClick={uc.handleTest} disabled={testDisabled}>
               执行测试
             </Button>
           </div>

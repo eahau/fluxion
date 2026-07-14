@@ -1,4 +1,4 @@
-package com.fluxion.admin.config
+﻿package com.fluxion.admin.config
 
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Worker-side workflow-definition subscriber that pulls
  * [WorkflowDefinitionSnapshot] entries from the Admin server over HTTP and
  * accepts typed push deltas.
@@ -10,8 +10,8 @@
 package com.fluxion.config.http
 
 import com.fluxion.core.util.JsonUtil
-import com.fluxion.adapter.spi.config.ChangeType
-import com.fluxion.adapter.spi.config.WorkflowDefinitionSnapshot
+import com.fluxion.config.core.ChangeType
+import com.fluxion.config.core.WorkflowDefinitionSnapshot
 import com.fluxion.config.core.AbstractKeyedConfigSubscriber
 import org.slf4j.*
 import java.net.URI

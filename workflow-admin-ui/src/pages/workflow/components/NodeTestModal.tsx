@@ -2,7 +2,7 @@ import { useMemo, useCallback } from 'react';
 import { Modal } from 'antd';
 import { debugWorkflowNode } from '@/services/workflow';
 import { useDebugStore } from '@/stores/useDebugStore';
-import FunctionTestPanel from '@/pages/function/components/FunctionTestPanel';
+import { FunctionTestPanel } from '@/features/function-test';
 import type { FunctionDefinition } from '@/types/function';
 import type { Node } from 'reactflow';
 
@@ -54,7 +54,6 @@ const NodeTestModal: React.FC<NodeTestModalProps> = ({ workflowId, node, paramSc
         <FunctionTestPanel
           functionId={functionId}
           functionDefinition={functionDefinition}
-          mode="node"
           onExecuteTest={handleExecuteTest}
         />
       )}

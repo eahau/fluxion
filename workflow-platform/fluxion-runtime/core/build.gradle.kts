@@ -11,8 +11,10 @@ dependencies {
     api(project(":fluxion-core"))
     // DAG execution engine (api - downstream modules inherit engine types).
     api(project(":fluxion-engine"))
-    // Adapter SPI (api - UnifiedRequest / WorkflowRouter / DefinitionProvider contracts).
-    api(project(":fluxion-adapter-spi"))
+    // Inbound SPI (api - UnifiedRequest / InboundRouter contracts).
+    api(project(":fluxion-inbound:spi"))
+    // Config core (api - provides DefinitionConfigSubscriber, WorkflowDefinitionSnapshot, ChangeType).
+    api(project(":fluxion-config:core"))
 
     // Kotlin coroutines core - DagExecutor entry is a suspend function.
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core")

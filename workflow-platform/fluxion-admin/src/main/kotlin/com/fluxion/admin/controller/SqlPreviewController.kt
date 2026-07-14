@@ -1,4 +1,4 @@
-package com.fluxion.admin.controller
+﻿package com.fluxion.admin.controller
 
 import com.fluxion.builtin.db.DataSourceProvider
 import com.fluxion.builtin.db.sql.NamedParameterSql
@@ -76,12 +76,12 @@ class SqlPreviewController(private val dataSourceProvider: DataSourceProvider) {
         val statements = withoutComments.split(';')
             .map { it.trim() }
             .filter { it.isNotBlank() }
-        check(statements.isNotEmpty()) { "SQL 不能为空" }
+        check(statements.isNotEmpty()) { "SQL cannot be empty" }
         statements.forEach { stmt ->
             val upper = stmt.uppercase()
-            require(upper.startsWith("SELECT")) { "SQL 预览仅允许 SELECT 语句: $stmt" }
+            require(upper.startsWith("SELECT")) { "SQL preview only allows SELECT statements: $stmt" }
             require(!FORBIDDEN_KEYWORDS.containsMatchIn(upper)) {
-                "SQL 预览禁止 DML/DDL 关键字: $stmt"
+                "SQL preview forbids DML/DDL keywords: $stmt"
             }
         }
     }

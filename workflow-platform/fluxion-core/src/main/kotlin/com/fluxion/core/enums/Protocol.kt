@@ -1,4 +1,4 @@
-package com.fluxion.core.enums
+﻿package com.fluxion.core.enums
 
 /**
  * Communication protocol used to trigger a workflow.

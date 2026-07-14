@@ -1,4 +1,4 @@
-package com.fluxion.builtin.db
+﻿package com.fluxion.builtin.db
 
 import com.fluxion.builtin.db.sql.CompiledSql
 import com.fluxion.builtin.db.sql.DbExecuteSqlCompiler

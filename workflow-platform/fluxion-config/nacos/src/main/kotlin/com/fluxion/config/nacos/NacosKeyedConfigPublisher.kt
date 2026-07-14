@@ -1,7 +1,7 @@
-package com.fluxion.config.nacos
+﻿package com.fluxion.config.nacos
 
 import com.alibaba.nacos.api.config.ConfigService
-import com.fluxion.adapter.spi.config.KeyedConfigPublisher
+import com.fluxion.config.core.KeyedConfigPublisher
 import com.fluxion.core.util.JsonUtil
 import org.slf4j.*
 

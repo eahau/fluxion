@@ -15,7 +15,7 @@ sourceSets {
 
 dependencies {
     // Adapter SPI: base registry/discovery contracts this module implements.
-    implementation(project(":fluxion-adapter-spi"))
+    implementation(project(":fluxion-config:core"))
 
     // Jackson Databind for JSON serialization of registry payloads.
     implementation("com.fasterxml.jackson.core:jackson-databind")

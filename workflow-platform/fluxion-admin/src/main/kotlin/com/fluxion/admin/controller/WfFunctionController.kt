@@ -1,4 +1,4 @@
-package com.fluxion.admin.controller
+﻿package com.fluxion.admin.controller
 
 import com.fluxion.admin.exception.WorkflowAdminException
 import com.fluxion.admin.generated.api.FunctionsApi
@@ -15,7 +15,7 @@ import com.fluxion.admin.service.WfFunctionService
 import com.fluxion.decorator.decorator.NodeDecorator
 import com.fluxion.core.function.FunctionRegistry
 import com.fluxion.core.function.WorkflowFunction
-import com.fluxion.core.function.external.ExternalFunctionTransportRegistry
+import com.fluxion.outbound.OutboundTransportRegistry
 import com.fluxion.core.model.NodeInput
 import com.fluxion.core.model.WorkflowNode
 import com.fluxion.core.util.JsonUtil
@@ -79,10 +79,14 @@ class WfFunctionController(
         keyword: String?,
         category: FunctionCategory?,
         page: Int,
-        pageSize: Int
+        pageSize: Int,
+        appId: Long?,
+        sortBy: String,
+        sortDir: String
     ): ResponseEntity<PageResponseFunctionDefinition> {
         val size = pageSize.coerceAtMost(100)
-        val pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "updatedAt"))
+        val direction = if (sortDir.equals("asc", ignoreCase = true)) Sort.Direction.ASC else Sort.Direction.DESC
+        val pageable = PageRequest.of(page, size, Sort.by(direction, sortBy))
 
         // Source 1: BUILTIN functions registered in the engine's FunctionRegistry
         val registryFunctions = functionRegistry.listAll()
@@ -326,7 +330,7 @@ class WfFunctionController(
                 ExternalWorkflowFunction(
                     name = functionName,
                     configMap = config,
-                    transportRegistry = ExternalFunctionTransportRegistry(),
+                    transportRegistry = OutboundTransportRegistry(),
                     paramSchema = paramSchema,
                     outputSchema = outputSchema,
                     description = description

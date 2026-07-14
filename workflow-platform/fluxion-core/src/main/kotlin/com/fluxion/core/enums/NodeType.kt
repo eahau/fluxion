@@ -1,4 +1,4 @@
-package com.fluxion.core.enums
+﻿package com.fluxion.core.enums
 
 /**
  * Classification of workflow nodes used by

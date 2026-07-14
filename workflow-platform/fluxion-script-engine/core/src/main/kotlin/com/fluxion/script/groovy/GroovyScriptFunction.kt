@@ -1,4 +1,4 @@
-package com.fluxion.script.groovy
+﻿package com.fluxion.script.groovy
 
 import com.github.benmanes.caffeine.cache.Cache
 import com.github.benmanes.caffeine.cache.Caffeine

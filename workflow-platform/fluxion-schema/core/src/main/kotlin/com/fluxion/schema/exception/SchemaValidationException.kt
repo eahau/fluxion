@@ -1,4 +1,4 @@
-package com.fluxion.schema.exception
+﻿package com.fluxion.schema.exception
 
 /**
  * Thrown by strict-mode schema validation (see

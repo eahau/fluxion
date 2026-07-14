@@ -1,4 +1,4 @@
-package com.fluxion.builtin
+﻿package com.fluxion.builtin
 
 /**
  * Marker interface for built-in workflow functions.

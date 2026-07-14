@@ -1,4 +1,4 @@
-package com.fluxion.core.mock
+﻿package com.fluxion.core.mock
 
 /**
  * Top-level container for the declarative Mock configuration consumed by

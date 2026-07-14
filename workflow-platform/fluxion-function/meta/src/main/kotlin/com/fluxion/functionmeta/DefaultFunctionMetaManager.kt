@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Function meta management façade implementations.
  *
  * This package holds the default manager that simply delegates to a plugged

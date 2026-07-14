@@ -1,4 +1,4 @@
-package com.fluxion.schema.json
+﻿package com.fluxion.schema.json
 
 import com.fluxion.schema.api.SchemaParser
 import com.fluxion.schema.model.Schema
@@ -9,7 +9,7 @@ import com.networknt.schema.SchemaValidatorsConfig
 import com.networknt.schema.SpecVersion
 
 /**
- * JSON Schema 瑙ｆ瀽鍣紝鍩轰簬 networknt/json-schema-validator銆?
+ * JSON Schema parser based on networknt/json-schema-validator.
  */
 class JsonSchemaParser : SchemaParser {
 
@@ -38,8 +38,8 @@ class JsonSchemaParser : SchemaParser {
     }
 
     /**
-     * 瑙勮寖鍖栧師濮嬭緭鍏ワ細灏?null / 绌哄瓧绗︿覆 / 绌哄璞＄粺涓€瑙嗕负绌?Schema `"{}"`锛?
-     * 涓庡師鏈?[com.fluxion.core.schema.SchemaValidator] 鐨?empty schema 琛屼负淇濇寔涓€鑷淬€?
+     * Normalize raw input: treat null/blank string/empty object uniformly as empty Schema `{}`.
+     * Consistent with the empty schema behavior in [com.fluxion.core.schema.SchemaValidator].
      */
     private fun normalizeRaw(raw: String): String {
         val trimmed = raw.trim()

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * In-memory worker instance store for the Admin-side HTTP self-registration mode.
  *
  * Holds [InstanceInfo] records pushed by workers through the HTTP registry endpoints,
@@ -8,7 +8,7 @@
  */
 package com.fluxion.registry.http
 
-import com.fluxion.adapter.spi.registry.InstanceInfo
+import com.fluxion.config.core.InstanceInfo
 import org.slf4j.LoggerFactory
 import org.slf4j.*
 import java.util.concurrent.ConcurrentHashMap

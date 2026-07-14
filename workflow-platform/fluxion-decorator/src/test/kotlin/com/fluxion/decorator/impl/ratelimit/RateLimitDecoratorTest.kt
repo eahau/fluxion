@@ -1,4 +1,4 @@
-package com.fluxion.decorator.impl.ratelimit
+﻿package com.fluxion.decorator.impl.ratelimit
 
 import com.fluxion.core.exception.RateLimitExceededException
 import com.fluxion.core.function.WorkflowFunction
@@ -6,7 +6,7 @@ import com.fluxion.core.model.WorkflowNode
 import com.fluxion.core.ratelimit.RateLimitConfig
 import com.fluxion.core.ratelimit.RateLimitStore
 import com.fluxion.core.value.FunctionResult
-import com.fluxion.decorator.impl.RateLimitDecorator
+import com.fluxion.decorator.decorator.RateLimitDecorator
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 

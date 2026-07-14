@@ -1,4 +1,4 @@
-package com.fluxion.core.model
+﻿package com.fluxion.core.model
 
 /**
  * Configuration for JDBC / Spring transaction wrapping applied to an

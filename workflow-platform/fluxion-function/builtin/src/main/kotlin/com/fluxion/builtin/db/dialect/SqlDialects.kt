@@ -1,4 +1,4 @@
-package com.fluxion.builtin.db.dialect
+﻿package com.fluxion.builtin.db.dialect
 
 /**
  * MySQL (and MariaDB) dialect.

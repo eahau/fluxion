@@ -1,6 +1,6 @@
-package com.fluxion.admin.controller
+﻿package com.fluxion.admin.controller
 
-import com.fluxion.adapter.spi.config.FunctionConfigSnapshot
+import com.fluxion.config.core.FunctionConfigSnapshot
 import com.fluxion.admin.service.WfFunctionService
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.web.bind.annotation.GetMapping

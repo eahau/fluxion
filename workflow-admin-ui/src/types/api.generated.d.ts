@@ -888,6 +888,358 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/function-sets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 列出已发布的函数集合
+         * @description 给前端 Designer 的函数下拉框用，返回所有 isPublishedSet=true 的工作流定义。
+         *     可选按 appId（应用）和 scope（PUBLIC/PRIVATE）过滤。
+         */
+        get: operations["listFunctionSets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/function-sets/{definitionId}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 将工作流定义发布为可复用函数集合（SET_REF 函数）
+         * @description 前置条件：wf_definition.status=ACTIVE 且 inputSchema / outputSchema 都非空。
+         *     发布后会在 wf_function 表 upsert 一条 function_type=SET_REF 的记录，前端拖拽函数下拉时可见。
+         */
+        post: operations["publishFunctionSet"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/function-sets/{definitionId}/unpublish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 撤销函数集合发布（删除 SET_REF 函数） */
+        post: operations["unpublishFunctionSet"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/function-sets/can-compose-after": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 预检两个集合 A→B 是否可通过兼容子集 + 字段映射组合
+         * @description 供前端 Designer 接线 widget 用：集合 B 的输入 schema 必须是集合 A 输出 schema 的目标子集，
+         *     可附带 inputMapping JSON 做 JSONPath/字面量字段映射后再校验。
+         *     返回结果和 /api/schema-tools/compatibility-check 结构相同，可复用同一诊断组件。
+         */
+        post: operations["canComposeAfterFunctionSet"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/schema-tools/compatibility-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 通用 schema 兼容校验（目标子集规则 + 可选字段映射层）
+         * @description 跨场景使用：
+         *     1) 节点 A→B 接线校验（DAG edge 保存前）
+         *     2) 测试 payload → DAG 输入 schema 校验
+         *     3) Trigger 事件入站 payload → 头节点 schema 校验
+         *     先对 sourceSchema 做 mapping（若有），再对 targetSchema 做 required 子集 + 类型匹配，
+         *     返回三级诊断：missingRequired / typeMismatches / unmappedOptional。
+         */
+        post: operations["checkSchemaCompatibility"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/schema-tools/apply-mapping": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 预览字段映射效果（把真实 sourcePayload + mapping JSON 跑一遍，返回映射后的对象）
+         * @description 设计器接线 preview 用，方便用户看映射后的 JSON 形状。
+         */
+        post: operations["applySchemaMapping"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/trigger-functions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 列出当前 classpath 上注册的所有入站触发函数元数据
+         * @description 前端 Designer 的 TriggerDrawer 动态渲染表单的唯一事实来源。
+         *     每个 TriggerFunctionMeta 携带稳定的 functionRef、label/icon，
+         *     以及 paramSchema（有序参数列表，每个参数含 type/required/options/defaultValue），
+         *     前端按此 schema 生成表单控件，不再 hardcode HTTP/Kafka 配置。
+         */
+        get: operations["listTriggerFunctions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/apps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出所有应用 */
+        get: operations["listApps"];
+        put?: never;
+        /** 新建应用 */
+        post: operations["createApp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/apps/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["AppId"];
+            };
+            cookie?: never;
+        };
+        /** 查询单个应用 */
+        get: operations["getApp"];
+        /** 更新应用字段 */
+        put: operations["updateApp"];
+        post?: never;
+        /** 删除应用（级联清理所有 binding） */
+        delete: operations["deleteApp"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/apps/{id}/bindings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["AppId"];
+            };
+            cookie?: never;
+        };
+        /** 列出该应用已绑定的所有资源 */
+        get: operations["listAppBindings"];
+        put?: never;
+        /** 为应用绑定一个全局资源 */
+        post: operations["createAppBinding"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/apps/{id}/bindings/{bindingId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["AppId"];
+                bindingId: components["parameters"]["BindingId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** 更新绑定（aliasInApp / resourceScope） */
+        put: operations["updateAppBinding"];
+        post?: never;
+        /** 解除绑定 */
+        delete: operations["deleteAppBinding"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/apps/{id}/resource-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["AppId"];
+            };
+            cookie?: never;
+        };
+        /** 下拉可绑定资源（设计器中 dbExecute/redisCommand 的 resource 参数用） */
+        get: operations["listAppResourceOptions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/resources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 列出所有全局资源
+         * @description 返回的 `config` 是脱敏副本，password/secret/token 等 key 会被替换为 `<REDACTED>`。
+         */
+        get: operations["listResources"];
+        put?: never;
+        /** 创建资源（config 含明文密码，服务端加密存储） */
+        post: operations["createResource"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/resources/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        /** 查询单个资源（config 脱敏） */
+        get: operations["getResource"];
+        /**
+         * 更新资源
+         * @description 若 config 中对应 key 的值是字符串 `<REDACTED>`，表示未修改，服务端会保留原值。
+         */
+        put: operations["updateResource"];
+        post?: never;
+        /**
+         * 删除资源
+         * @description 若仍有应用 binding 引用该资源，返回 409 Conflict。
+         */
+        delete: operations["deleteResource"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/internal/debug/sandbox/acquire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 申请一个调试沙盒会话（对指定 DB 资源做 sb_ 前缀克隆表） */
+        post: operations["acquireSandbox"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/internal/debug/sandbox/session/{sessionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 释放整个调试会话的所有沙盒（DROP 克隆表） */
+        delete: operations["releaseSandboxSession"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/internal/debug/sandbox/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["SandboxId"];
+            };
+            cookie?: never;
+        };
+        /** 沙盒详情（预留，当前返回 501） */
+        get: operations["peekSandbox"];
+        put?: never;
+        post?: never;
+        /** 强制释放单个沙盒实例 */
+        delete: operations["releaseSandbox"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -947,7 +1299,7 @@ export interface components {
         /** @enum {string} */
         WorkflowStatus: "DRAFT" | "ACTIVE" | "DEPRECATED";
         /** @enum {string} */
-        FunctionCategory: "BUILTIN" | "CUSTOM" | "SCRIPT" | "EXTERNAL";
+        FunctionCategory: "BUILTIN" | "CUSTOM" | "SCRIPT" | "EXTERNAL" | "TRIGGER";
         /** @enum {string} */
         FunctionStatus: "ACTIVE" | "INACTIVE";
         /** @enum {string} */
@@ -1033,9 +1385,16 @@ export interface components {
             id?: string;
             type: components["schemas"]["TriggerType"];
             /**
-             * @description 触发器配置（按类型不同结构不同）：
-             *     - EVENT: { "eventType": "user.created", "source": "authing" }
-             *     - WEBHOOK: { "path": "/hooks/my-workflow" }
+             * @description TriggerFunctionMeta SPI 的稳定标识符，如 trigger:httpInbound / trigger:kafkaConsumer。
+             *     前端用此值从 /api/admin/trigger-functions 返回值中找对应 meta，拿到 paramSchema 动态渲染表单。
+             *     新增触发器时必填；老数据迁移时按 legacyProtocol 回算。
+             * @example trigger:httpInbound
+             */
+            functionRef: string;
+            /**
+             * @description 触发器配置，键值完全由对应 TriggerFunctionMeta.paramSchema 决定，前端按 schema 校验：
+             *     - trigger:httpInbound → { "method":"POST","path":"/api/order","authRequired":true }
+             *     - trigger:kafkaConsumer → { "topic":"order.created","consumerGroup":"xxx","concurrency":3 }
              */
             config?: {
                 [key: string]: unknown;
@@ -1044,16 +1403,58 @@ export interface components {
             enabled: boolean;
         };
         /**
-         * @description 触发器类型：
+         * @description 触发器类型（粗粒度分类，仅用于 UI 分组/图标）：
          *     - MANUAL: 手动执行
          *     - WEBHOOK: HTTP POST 触发
          *     - EVENT: 应用事件触发
          *     - API: API 同步调用
+         *     具体参数结构看 WorkflowTrigger.functionRef + TriggerFunctionMeta.paramSchema。
          * @enum {string}
          */
         TriggerType: "MANUAL" | "WEBHOOK" | "EVENT" | "API";
+        TriggerFunctionParam: {
+            /** @description 稳定 snake_case 标识符；对应 WorkflowTrigger.config 的 JSON key */
+            name: string;
+            /**
+             * @description UI 渲染提示类型：string / number / integer / boolean / enum / duration_ms。
+             *     未知类型前端 fall back 到自由文本输入。
+             */
+            type: string;
+            /** @default false */
+            required: boolean;
+            /** @description 表单 label，默认 = name */
+            label?: string;
+            /** @description Tooltip 提示 */
+            description?: string;
+            /** @description 新增触发器时预填的值，类型按 type 决定（可能是 string/number/boolean/null） */
+            defaultValue?: unknown;
+            /** @description 当 type=enum 时必填。每对 [value, label]，value 存到 config，label 显示给用户。 */
+            options?: unknown[][];
+        };
+        TriggerFunctionMeta: {
+            /** @description 稳定标识符，如 trigger:httpInbound，对应 WorkflowTrigger.functionRef */
+            functionRef: string;
+            /** @description 触发函数下拉显示名，如 HTTP / HTTPS 接口 */
+            label: string;
+            /** @description AntD 图标名，默认 ApiOutlined */
+            icon?: string;
+            /** @description 表单顶部 help banner 文本 */
+            description?: string;
+            paramSchema: components["schemas"]["TriggerFunctionParam"][];
+            /**
+             * @description 映射到 legacy wf_definition.protocol 的大写标签（HTTP/KAFKA/DUBBO/GRPC）。
+             *     纯函数集合或非入站型 trigger（如 cron）为 null。用于过渡期双向同步旧列。
+             */
+            legacyProtocol?: string | null;
+        };
         WorkflowDefinition: {
-            readonly id?: string;
+            /**
+             * Format: int64
+             * @description 主键（发布函数集合、调试、版本管理等需要 Long ID）
+             */
+            readonly id?: number;
+            /** @description 业务工作流 ID（对外暴露，可用于路由绑定） */
+            readonly workflowId?: string;
             name: string;
             category: components["schemas"]["WorkflowCategory"];
             scope?: components["schemas"]["WorkflowScope"];
@@ -1061,7 +1462,11 @@ export interface components {
             appGroup?: string;
             /** @description 来源引用（安装市场工作流时指向原始 workflowId） */
             readonly sourceRef?: string;
-            protocol: string;
+            /**
+             * @description 触发协议（HTTP/HTTPS/KAFKA/DUBBO/GRPC 等）。
+             *     为空表示"无触发入口的纯函数集合"——不能直接被外部事件/请求触发，仅能被其它工作流通过 SET_REF 引用/复用。
+             */
+            protocol?: string | null;
             /**
              * @description 协议方法。HTTP/HTTPS：标准 HTTP 方法（GET/POST/PUT/DELETE 等）；
              *     gRPC：调用类型（UNARY/SERVER_STREAMING 等）；Dubbo：接口方法名（可选）。
@@ -1069,6 +1474,10 @@ export interface components {
             method?: string;
             path?: string;
             status?: components["schemas"]["WorkflowStatus"];
+            /** @description 是否已发布为可复用函数集合（wf_function 中有对应 SET_REF 记录） */
+            readonly isPublishedSet?: boolean;
+            /** @description 已发布集合在函数表的 function_alias（SET_REF 解析用），未发布时为 null */
+            readonly setRefName?: string | null;
             /** @description 入参 Schema 内容（具体语法由 inputSchemaFormat 决定） */
             inputSchema?: {
                 [key: string]: unknown;
@@ -1078,6 +1487,11 @@ export interface components {
              * @default json-schema
              */
             inputSchemaFormat: string;
+            /**
+             * @description 共享入参 Schema 引用名称（对应 wf_schema.schema_name）。
+             *     当此字段非空时，前端「Schema 下拉」显示当前选中的引用名；运行时由 SchemaManager 按 ref 解析，优先级高于内嵌的 inputSchema。
+             */
+            inputSchemaRef?: string | null;
             /** @description 出参 Schema 内容（具体语法由 outputSchemaFormat 决定） */
             outputSchema?: {
                 [key: string]: unknown;
@@ -1087,6 +1501,11 @@ export interface components {
              * @default json-schema
              */
             outputSchemaFormat: string;
+            /**
+             * @description 共享出参 Schema 引用名称（对应 wf_schema.schema_name）。
+             *     当此字段非空时，运行时由 SchemaManager 按 ref 解析，优先级高于内嵌的 outputSchema。
+             */
+            outputSchemaRef?: string | null;
             /**
              * @description 事务配置（TransactionConfig 序列化）。
              *     字段示例：{ "propagationBehavior": 0, "isolationLevel": 2, "timeoutMs": 30000, "transactionName": "create-order" }
@@ -1275,6 +1694,11 @@ export interface components {
             scope: string;
             /** @description 所属应用分组（scope=PRIVATE 时必填） */
             appGroup?: string;
+            /**
+             * @description 领域分类（db/redis/cache/http/mq/script/common/other），用于 Schema 列表按领域分组展示
+             * @default common
+             */
+            domain: string;
             /**
              * Format: int64
              * @description Unix 毫秒时间戳
@@ -1671,9 +2095,299 @@ export interface components {
              */
             type: string;
         };
+        PublishFunctionSetRequest: {
+            /**
+             * @description 可选自定义函数别名。为空时按 {appGroup}.set.{workflowId} 自动生成。
+             *     该别名会写入 wf_function.function_alias，供 SET_REF 解析时使用。
+             */
+            setRefName?: string;
+        };
+        CanComposeAfterRequest: {
+            /** @description 前一个集合的 SET_REF 别名（对应 wf_function.function_alias） */
+            setARefName: string;
+            /** @description 后一个集合的 SET_REF 别名 */
+            setBRefName: string;
+            /**
+             * @description 可选字段映射 JSON 字符串，数组形式：
+             *     [
+             *       {"type":"path","from":"$.user.id","to":"userId"},
+             *       {"type":"literal","value":10000,"to":"timeoutMs"}
+             *     ]
+             */
+            inputMapping?: string;
+        };
+        FunctionSetDTO: {
+            /** Format: int64 */
+            id: number;
+            workflowId: string;
+            workflowName: string;
+            /** @description is_published_set 是否生效 */
+            published: boolean;
+            /** @description wf_function.function_alias，SET_REF 解析时用 */
+            setRefName?: string | null;
+            /** @enum {string} */
+            status: "DRAFT" | "ACTIVE" | "DEPRECATED" | "ARCHIVED";
+            /** @description 触发协议（HTTP/KAFKA/DUBBO/GRPC/null），null 表示无触发入口的纯封装集合 */
+            protocol?: string | null;
+            /** @enum {string} */
+            scope: "PUBLIC" | "PRIVATE";
+            appGroup?: string | null;
+            /** @description 入参 schema 是否已填（发布集合的前置条件之一） */
+            inputSchemaPresent?: boolean;
+            /** @description 出参 schema 是否已填（发布集合的前置条件之一） */
+            outputSchemaPresent?: boolean;
+            /** Format: int32 */
+            version?: number;
+            /** @enum {string} */
+            category: "ETL" | "SERVICE" | "INTEGRATION" | "TEST" | "OTHER";
+            /** @description 所有者登录名 */
+            owner?: string | null;
+        };
+        SchemaCompatCheckRequest: {
+            /** @description 源端 JSON-Schema 字符串（如节点 A 输出 schema，或测试输入 schema），为空时按自由对象处理 */
+            sourceSchema?: string;
+            /** @description 目标端 JSON-Schema 字符串（如节点 B 输入 schema，或 DAG 输入 schema），为空时校验必失败 */
+            targetSchema?: string;
+            /**
+             * @description 可选字段映射 JSON 字符串，数组形式。非空时先对 source 跑映射再做子集校验。
+             *     规则：
+             *     - {type:"path", from:"JSONPath表达式", to:"目标字段名"}
+             *     - {type:"literal", value:字面量, to:"目标字段名"}
+             */
+            mappingJson?: string | null;
+        };
+        SchemaApplyMappingRequest: {
+            /** @description 真实的源端 JSON 对象字符串（即设计器 preview 里用户填的 payload） */
+            sourcePayloadJson: string;
+            /** @description 同 SchemaCompatCheckRequest.mappingJson */
+            mappingJson?: string | null;
+        };
+        CompatDiagnostic: {
+            /** @description JSONPath 风格的字段定位，如 "properties.user.properties.id" */
+            field: string;
+            /** @description 对人友好的诊断文案，可直接在设计器标红 */
+            message: string;
+            expectedType?: string | null;
+            actualType?: string | null;
+        };
+        CompatResult: {
+            /** @description true = target 所有 required 字段在 source/mapping 中存在且类型兼容 */
+            compatible: boolean;
+            /**
+             * Format: int32
+             * @description 映射后的 source schema 顶层字段数
+             */
+            sourceFields?: number;
+            /** Format: int32 */
+            targetRequiredCount?: number;
+            /** @description 目标 required 字段在 source 缺失，必须补映射才能接线 */
+            missingRequired?: components["schemas"]["CompatDiagnostic"][];
+            /** @description 字段名对得上但类型不匹配（需要类型转换/数据清洗） */
+            typeMismatches?: components["schemas"]["CompatDiagnostic"][];
+            /** @description 目标 optional 字段缺失，非硬性阻塞，用于提示用户 */
+            unmappedOptional?: components["schemas"]["CompatDiagnostic"][];
+        };
+        CompositionResult: components["schemas"]["CompatResult"] & {
+            setAWorkflowId?: string | null;
+            setBWorkflowId?: string | null;
+            setAWorkflowName?: string | null;
+            setBWorkflowName?: string | null;
+            /** @description 是否存在 inputMapping 且成功应用 */
+            mappingApplied?: boolean;
+            /** @description A/B 本身未发布等业务级错误（不同于 schema 级诊断） */
+            errors?: string[];
+        };
+        App: {
+            /** Format: int64 */
+            id: number;
+            /** @description 稳定业务标识（如 order-app / pay-app），函数集合的 appGroup 会对齐到这个 key */
+            appKey: string;
+            appName: string;
+            description?: string | null;
+            owner?: string | null;
+            /** @enum {string} */
+            status: "ACTIVE" | "DISABLED";
+            /**
+             * Format: int64
+             * @description Unix 毫秒
+             */
+            createdAt: number;
+            /** Format: int64 */
+            updatedAt: number;
+        };
+        AppCreateRequest: {
+            appKey: string;
+            appName: string;
+            description?: string;
+            owner?: string;
+            /**
+             * @default ACTIVE
+             * @enum {string}
+             */
+            status: "ACTIVE" | "DISABLED";
+        };
+        AppUpdateRequest: {
+            appName?: string;
+            description?: string;
+            owner?: string;
+            /** @enum {string} */
+            status?: "ACTIVE" | "DISABLED";
+        };
+        AppBinding: {
+            /** Format: int64 */
+            id: number;
+            /** Format: int64 */
+            appId: number;
+            /** Format: int64 */
+            resourceId: number;
+            resourceName: string;
+            /** @description 资源类型（MYSQL/POSTGRESQL/REDIS/HTTP_ENDPOINT…） */
+            resourceType: string;
+            /** @description 驱动类名（DB 类资源） */
+            driver?: string | null;
+            /**
+             * @description 应用对该资源的访问级别
+             * @enum {string}
+             */
+            scope: "READONLY" | "READWRITE" | "ADMIN";
+            /** @description 用户自定义别名；为空时 effectiveAlias 默认取资源名 resourceName */
+            aliasInApp?: string | null;
+            /** @description 最终别名，设计器下拉选项实际用这个 value */
+            effectiveAlias: string;
+        };
+        AppBindingCreateRequest: {
+            /** Format: int64 */
+            resourceId: number;
+            aliasInApp?: string;
+            /**
+             * @default READWRITE
+             * @enum {string}
+             */
+            scope: "READONLY" | "READWRITE" | "ADMIN";
+        };
+        AppBindingUpdateRequest: {
+            aliasInApp?: string | null;
+            /** @enum {string} */
+            scope?: "READONLY" | "READWRITE" | "ADMIN";
+        };
+        /** @enum {string} */
+        ResourceType: "MYSQL" | "POSTGRESQL" | "ORACLE" | "SQLSERVER" | "H2" | "CLICKHOUSE" | "REDIS" | "HTTP_ENDPOINT" | "RABBITMQ" | "KAFKA" | "OTHER";
+        Resource: {
+            /** Format: int64 */
+            id: number;
+            resourceType: components["schemas"]["ResourceType"];
+            resourceName: string;
+            /** @description JDBC driver class 等可选驱动标识 */
+            driver?: string | null;
+            /**
+             * @description 资源配置（返回内容为脱敏副本：password/secret/token 等 key 被替换为 "<REDACTED>"；
+             *     更新时发送 "<REDACTED>" 表示保留原值，无需重填明文）。
+             *     典型 schema 示例：
+             *     - MYSQL: { host, port, database, username, password, useSSL:bool, driverClassname? }
+             *     - REDIS: { host, port, dbIndex, password?, timeoutMs?, sentinel? }
+             *     - HTTP_ENDPOINT: { baseUrl, defaultHeaders?:{k:v}, timeoutMs?, auth? }
+             */
+            configJson: {
+                [key: string]: unknown;
+            };
+            /** Format: int64 */
+            createdAt: number;
+            /** Format: int64 */
+            updatedAt: number;
+        };
+        ResourceCreateRequest: {
+            resourceName: string;
+            resourceType: components["schemas"]["ResourceType"];
+            driver?: string;
+            /** @description 明文配置（包含 password/secret/token 等） */
+            configJson: {
+                [key: string]: unknown;
+            };
+        };
+        ResourceUpdateRequest: {
+            resourceName?: string;
+            resourceType?: components["schemas"]["ResourceType"];
+            driver?: string | null;
+            /** @description 若某敏感 key 的值为字符串 "<REDACTED>" 表示保留原值 */
+            configJson?: {
+                [key: string]: unknown;
+            };
+        };
+        ResourceOption: {
+            /** Format: int64 */
+            resourceId: number;
+            /** @description effectiveAlias（函数参数 value = 此值） */
+            alias: string;
+            /** @description 用户可读形式：alias — resourceName */
+            label: string;
+            resourceType: string;
+            driver: string | null;
+        };
+        /** @enum {string} */
+        SandboxStatus: "CREATING" | "READY" | "EXPIRED" | "RELEASING" | "FAILED";
+        SandboxInstance: {
+            /** Format: int64 */
+            id: number;
+            /**
+             * Format: int64
+             * @description 克隆源 Resource（DB）的 id
+             */
+            resourceId: number;
+            /** @description 实际加到表名前的前缀，如 "sb_a1b2c3d4_" */
+            tablePrefix: string;
+            /**
+             * Format: int32
+             * @description 已克隆（CREATE TABLE LIKE + INSERT）的表数量
+             */
+            clonedTables: number;
+            status: components["schemas"]["SandboxStatus"];
+            /** Format: int64 */
+            expiresAt: number;
+            /** Format: int64 */
+            createdAt: number;
+        };
+        SandboxTicket: {
+            sessionId: string;
+            /** Format: int64 */
+            appId: number;
+            ownerUsername?: string | null;
+            instances: components["schemas"]["SandboxInstance"][];
+            /** Format: int32 */
+            totalClonedTables: number;
+            /** Format: int64 */
+            expiresAt: number;
+            /** Format: int64 */
+            createdAt: number;
+            /**
+             * @description 设计器必须把此 object 合并到每次 /internal/debug/execute 请求的 body 里，
+             *     让 builtin:dbExecute 透明路由到 sb_* 前缀的克隆表。
+             */
+            routingContext?: {
+                [key: string]: unknown;
+            };
+        };
+        SandboxAcquireRequest: {
+            /** Format: int64 */
+            appId: number;
+            sessionId: string;
+            username?: string;
+            /** @description 要克隆的 DB Resource id 列表；为空时取该应用下所有 scope=READWRITE 的 DB 资源 */
+            resourceIds?: number[];
+            /**
+             * Format: int32
+             * @description 沙盒存活时间，超时后自动 DROP 克隆表
+             * @default 240
+             */
+            ttlMinutes: number;
+        };
     };
     responses: never;
     parameters: {
+        AppId: number;
+        BindingId: number;
+        ResourceId: number;
+        SandboxId: number;
+        SessionId: string;
         /** @description 页码（从 0 开始） */
         Page: number;
         /** @description 每页条数 */
@@ -2282,6 +2996,8 @@ export interface operations {
                 keyword?: string;
                 /** @description 按类型标签过滤（INPUT/OUTPUT/EVENT），仅返回包含该标签的 Schema */
                 schemaType?: string;
+                /** @description 按领域分类过滤（db/redis/cache/http/mq/script/common/other），传 all 或空表示不限 */
+                domain?: string;
                 /** @description 页码（从 0 开始） */
                 page?: components["parameters"]["Page"];
                 /** @description 每页条数 */
@@ -3415,6 +4131,718 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["DatasourceColumnInfo"][];
                 };
+            };
+        };
+    };
+    listFunctionSets: {
+        parameters: {
+            query?: {
+                appId?: number;
+                /** @description PUBLIC=全局可见，PRIVATE=仅同 appGroup 可见 */
+                scope?: "PUBLIC" | "PRIVATE";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 函数集合列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FunctionSetDTO"][];
+                };
+            };
+        };
+    };
+    publishFunctionSet: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                definitionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PublishFunctionSetRequest"];
+            };
+        };
+        responses: {
+            /** @description 发布成功 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FunctionSetDTO"];
+                };
+            };
+            /** @description 不满足发布条件（非 ACTIVE / 缺少入出参 schema）或 setRefName 冲突 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    unpublishFunctionSet: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                definitionId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 撤销成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FunctionSetDTO"];
+                };
+            };
+            /** @description 定义不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    canComposeAfterFunctionSet: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CanComposeAfterRequest"];
+            };
+        };
+        responses: {
+            /** @description 兼容校验结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompositionResult"];
+                };
+            };
+        };
+    };
+    checkSchemaCompatibility: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SchemaCompatCheckRequest"];
+            };
+        };
+        responses: {
+            /** @description 校验结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompatResult"];
+                };
+            };
+        };
+    };
+    applySchemaMapping: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SchemaApplyMappingRequest"];
+            };
+        };
+        responses: {
+            /** @description 映射后的 JSON 对象（自由结构，不预先定义 schema） */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    listTriggerFunctions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 触发函数元数据列表（不含分页，通常 3-10 条） */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TriggerFunctionMeta"][];
+                };
+            };
+        };
+    };
+    listApps: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 应用列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["App"][];
+                };
+            };
+        };
+    };
+    createApp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AppCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description 创建成功 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["App"];
+                };
+            };
+            /** @description 参数错误（重复 appKey 等） */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getApp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["AppId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 应用实体 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["App"];
+                };
+            };
+            /** @description 应用不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    updateApp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["AppId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AppUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description 更新后实体 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["App"];
+                };
+            };
+            /** @description 应用不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    deleteApp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["AppId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 删除成功 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 应用不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listAppBindings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["AppId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 绑定关系列表（已 left join 资源名/类型/驱动） */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppBinding"][];
+                };
+            };
+        };
+    };
+    createAppBinding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["AppId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AppBindingCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description 绑定成功 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppBinding"];
+                };
+            };
+            /** @description 参数错误（aliasInApp 重复、资源不存在、scope 不匹配等） */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    updateAppBinding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["AppId"];
+                bindingId: components["parameters"]["BindingId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AppBindingUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description 更新后绑定 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppBinding"];
+                };
+            };
+            /** @description 应用或绑定不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    deleteAppBinding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["AppId"];
+                bindingId: components["parameters"]["BindingId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 解绑成功 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 应用或绑定不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listAppResourceOptions: {
+        parameters: {
+            query: {
+                /** @description 资源类型过滤，如 MYSQL / REDIS / HTTP_ENDPOINT */
+                resourceType: string;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["AppId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已绑定该类型资源的下拉选项（携带 alias） */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResourceOption"][];
+                };
+            };
+        };
+    };
+    listResources: {
+        parameters: {
+            query?: {
+                /** @description 按资源类型过滤（MYSQL/POSTGRESQL/REDIS/HTTP_ENDPOINT…） */
+                resourceType?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 资源列表（config 脱敏） */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Resource"][];
+                };
+            };
+        };
+    };
+    createResource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResourceCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description 创建成功（返回脱敏 config） */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Resource"];
+                };
+            };
+            /** @description 参数错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getResource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 资源实体 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Resource"];
+                };
+            };
+            /** @description 资源不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    updateResource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResourceUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description 更新后实体（config 脱敏） */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Resource"];
+                };
+            };
+            /** @description 资源不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    deleteResource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 删除成功 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 资源不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 存在引用，禁止删除 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    acquireSandbox: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SandboxAcquireRequest"];
+            };
+        };
+        responses: {
+            /** @description 沙盒票据（含 routingContext，设计器要在 run 请求中带上） */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SandboxTicket"];
+                };
+            };
+            /** @description 参数错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    releaseSandboxSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已释放 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    peekSandbox: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["SandboxId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Not Implemented */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    releaseSandbox: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["SandboxId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 释放成功 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description 沙盒不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

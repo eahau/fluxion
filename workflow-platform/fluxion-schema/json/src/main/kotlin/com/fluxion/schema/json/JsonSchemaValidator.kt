@@ -1,4 +1,4 @@
-/**
+﻿/**
  * JSON Schema (draft V7) validator backed by the networknt
  * `json-schema-validator` library.
  *

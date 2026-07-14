@@ -1,14 +1,14 @@
-package com.fluxion.config.apollo
+﻿package com.fluxion.config.apollo
 
 import com.ctrip.framework.apollo.Config
 import com.ctrip.framework.apollo.ConfigService
-import com.fluxion.adapter.spi.registry.InstanceDiscovery
+import com.fluxion.config.core.InstanceDiscovery
 import com.fluxion.core.util.JsonUtil
-import com.fluxion.adapter.spi.registry.InstanceInfo
+import com.fluxion.config.core.InstanceInfo
 import org.slf4j.*
 
 /**
- * Apollo 瀹炵幇 鈥?瀹炰緥鍙戠幇锛圓dmin 渚э級
+ * Apollo implementation - instance discovery (Admin side).
  */
 class ApolloInstanceDiscovery : InstanceDiscovery {
 

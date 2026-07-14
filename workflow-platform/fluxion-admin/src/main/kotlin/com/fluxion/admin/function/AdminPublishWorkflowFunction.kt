@@ -1,4 +1,4 @@
-package com.fluxion.admin.function
+﻿package com.fluxion.admin.function
 
 import com.fluxion.admin.generated.model.PublishTarget
 import com.fluxion.admin.mapper.WorkflowMapper

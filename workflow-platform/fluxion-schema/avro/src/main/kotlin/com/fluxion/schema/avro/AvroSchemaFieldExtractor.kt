@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Produces a uniform [SchemaField] tree from a compiled Avro schema.
  *
  * Handles the constructs that appear in typical workflow payloads: RECORD

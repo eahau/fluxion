@@ -1,4 +1,4 @@
-package com.fluxion.admin.controller
+﻿package com.fluxion.admin.controller
 
 import com.fluxion.admin.exception.WorkflowAdminException
 import com.fluxion.admin.generated.api.DebugApi
@@ -43,7 +43,7 @@ class WorkflowDebugController(
         debugWorkflowRequest: DebugWorkflowRequest
     ): ResponseEntity<DebugResult> {
         val def = definitionService.getDefinitionAnyStatus(workflowId)
-            ?: throw WorkflowAdminException.notFound("WORKFLOW_NOT_FOUND", "工作流不存在: $workflowId")
+            ?: throw WorkflowAdminException.notFound("WORKFLOW_NOT_FOUND", "Workflow not found: $workflowId")
 
         val mockConfig = MockConfigMapper.toCoreMockConfig(debugWorkflowRequest.mockConfig)
         val result = runBlocking {
@@ -64,10 +64,10 @@ class WorkflowDebugController(
         debugNodeRequest: DebugNodeRequest
     ): ResponseEntity<DebugResult> {
         val def = definitionService.getDefinitionAnyStatus(workflowId)
-            ?: throw WorkflowAdminException.notFound("WORKFLOW_NOT_FOUND", "工作流不存在: $workflowId")
+            ?: throw WorkflowAdminException.notFound("WORKFLOW_NOT_FOUND", "Workflow not found: $workflowId")
 
         val node = def.nodes.find { it.id == debugNodeRequest.nodeId }
-            ?: throw WorkflowAdminException.badRequest("NODE_NOT_FOUND", "节点不存在: ${debugNodeRequest.nodeId}")
+            ?: throw WorkflowAdminException.badRequest("NODE_NOT_FOUND", "Node not found: ${debugNodeRequest.nodeId}")
 
         val input = debugNodeRequest.inputData ?: emptyMap()
         var state = ImmutableExecutionState.start(def, input)
@@ -101,7 +101,7 @@ class WorkflowDebugController(
         val snapshot = try {
             JsonUtil.convertValue(debugStepRequest.snapshot, DebugSnapshot::class.java)
         } catch (ex: Exception) {
-            throw WorkflowAdminException.badRequest("SNAPSHOT_INVALID", "调试快照解析失败: ${ex.message}")
+            throw WorkflowAdminException.badRequest("SNAPSHOT_INVALID", "Failed to parse debug snapshot: ${ex.message}")
         }
         val nextSnapshot = runBlocking { debugService.step(snapshot) }
         return ResponseEntity.ok(toDebugResult(nextSnapshot))
@@ -114,10 +114,10 @@ class WorkflowDebugController(
         val snapshot = try {
             JsonUtil.convertValue(debugRerunRequest.snapshot, DebugSnapshot::class.java)
         } catch (ex: Exception) {
-            throw WorkflowAdminException.badRequest("SNAPSHOT_INVALID", "调试快照解析失败: ${ex.message}")
+            throw WorkflowAdminException.badRequest("SNAPSHOT_INVALID", "Failed to parse debug snapshot: ${ex.message}")
         }
         val executionId = snapshot.executionState.meta.executionId
-            ?: throw WorkflowAdminException.badRequest("EXECUTION_ID_MISSING", "快照中缺少执行 ID")
+            ?: throw WorkflowAdminException.badRequest("EXECUTION_ID_MISSING", "Execution ID missing from snapshot")
         val result = runBlocking {
             debugService.rerunFromNode(
                 executionId,

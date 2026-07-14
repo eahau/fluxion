@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Avro [SchemaParser] that compiles an Avro schema JSON document into an
  * [org.apache.avro.Schema] instance wrapped in the unified [Schema] envelope.
  *

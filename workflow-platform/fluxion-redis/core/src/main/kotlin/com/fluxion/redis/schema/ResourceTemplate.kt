@@ -1,6 +1,6 @@
-package com.fluxion.redis.schema
+﻿package com.fluxion.redis.schema
 
-import com.fluxion.core.redis.RedisKey
+import com.fluxion.redis.RedisKey
 import com.fluxion.core.util.castOrNull
 import org.slf4j.*
 import java.util.concurrent.ConcurrentHashMap

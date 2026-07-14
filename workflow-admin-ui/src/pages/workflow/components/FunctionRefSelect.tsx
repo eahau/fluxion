@@ -16,6 +16,7 @@ const CATEGORY_META: Record<string, { label: string; color: string }> = {
   CUSTOM: { label: '自定义', color: 'green' },
   SCRIPT: { label: '脚本', color: 'purple' },
   EXTERNAL: { label: '外部', color: 'orange' },
+  SET_REF: { label: '集合', color: 'cyan' },
 };
 
 const FunctionRefSelect: React.FC<FunctionRefSelectProps> = ({

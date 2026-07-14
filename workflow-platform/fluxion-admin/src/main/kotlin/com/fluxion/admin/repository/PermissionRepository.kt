@@ -1,4 +1,4 @@
-package com.fluxion.admin.repository
+﻿package com.fluxion.admin.repository
 
 import com.fluxion.admin.entity.Permission
 import com.fluxion.admin.entity.Role

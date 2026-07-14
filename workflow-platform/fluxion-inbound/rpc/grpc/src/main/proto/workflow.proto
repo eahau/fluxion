@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package workflow;
+
+option java_package = "com.fluxion.inbound.rpc.grpc.proto";
+option java_outer_classname = "WorkflowProto";
+option java_multiple_files = true;
+
+import "google/protobuf/any.proto";
+
+// 工作流执行服务
+//
+// 请求与响应均直接使用 google.protobuf.Any：
+//   - type_url 携带 message 类型标识（服务端据此从 SchemaRegistry 动态解析/构建）
+//   - value 为序列化字节
+//
+// 路由标识通过 gRPC metadata（HTTP/2 headers）传递：
+//   - x-workflow-id: 直接按 ID 执行（跳过路由）
+//   - x-service-key: 按 bind_key 路由（二选一，x-workflow-id 优先）
+//
+// 响应 Schema 由服务端从 WorkflowDefinition.outputSchema 自动解析，无需客户端指定。
+// 错误通过 gRPC 原生 Status（StatusRuntimeException）返回，无需 message 包装。
+service WorkflowService {
+  // 同步执行工作流（请求/响应模式）
+  // 成功：返回 DynamicMessage 包装的 Any（按定义中 outputSchema 序列化）
+  // 失败：抛出 StatusRuntimeException，错误信息携带于 gRPC status
+  rpc Execute(google.protobuf.Any) returns (google.protobuf.Any);
+  // 流式响应（长时间执行工作流，支持进度回调）
+  rpc ExecuteStream(google.protobuf.Any) returns (stream WorkflowStreamEvent);
+}
+
+// 流式执行事件（仅 ExecuteStream 使用）
+message WorkflowStreamEvent {
+  enum EventType {
+    NODE_START    = 0;
+    NODE_COMPLETE = 1;
+    NODE_ERROR    = 2;
+    WORKFLOW_DONE = 3;
+  }
+  EventType event_type = 1;
+  string    node_id    = 2;
+  string    data_json  = 3;
+  int64     timestamp  = 4;
+}

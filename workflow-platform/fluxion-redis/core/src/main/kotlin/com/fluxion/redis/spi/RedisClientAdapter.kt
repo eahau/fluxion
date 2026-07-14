@@ -1,4 +1,4 @@
-package com.fluxion.redis.spi
+﻿package com.fluxion.redis.spi
 
 /**
  * Value object that describes a single raw Redis command inside a pipeline batch.

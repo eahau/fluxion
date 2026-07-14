@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Version slot container supporting zero-downtime hot-reload of functions.
  *
  * A single named function holds two logical slots:

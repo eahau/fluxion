@@ -1,4 +1,4 @@
-package com.fluxion.core.mock
+﻿package com.fluxion.core.mock
 
 import com.fluxion.core.enums.NodeType
 import com.fluxion.core.function.FunctionResolver

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Plugin SPI that lets contributors ship groups of related [WorkflowFunction]
  * implementations as a single discoverable unit.
  *

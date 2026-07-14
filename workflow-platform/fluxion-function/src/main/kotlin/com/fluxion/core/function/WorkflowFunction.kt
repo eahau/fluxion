@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Core function SPI and foundational types for the Fluxion workflow engine.
  *
  * This package defines the minimum contract every executable unit in a workflow

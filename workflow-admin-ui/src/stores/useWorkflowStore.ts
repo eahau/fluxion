@@ -51,6 +51,21 @@ interface WorkflowState {
 
   /** 确保工作流头部存在 paramValidate 节点，其 params.schema 与 inputSchema 同步 */
   ensureParamValidateHeadNode: (inputSchema: Record<string, any> | undefined) => void;
+
+  /** 触发器（最多 1 个，头节点）相关 API：前后端校验逻辑在前端先拦截，后端二次校验 */
+  hasAnyTrigger: () => boolean;
+  /**
+   * 注册唯一触发器（最多 1 个，拖 trigger:xxx 节点过来时自动调用）
+   * - 已存在触发器 → 返回 ok=false, msg=提示信息（让 UI 弹 warning，不添加节点）
+   * - 成功 → 写入 workflowMeta.triggers[0]，返回 ok=true
+   */
+  registerUniqueTrigger: (payload: {
+    functionRef: string;
+    triggerType?: 'API' | 'EVENT' | 'SCHEDULE' | 'MANUAL';
+    config?: Record<string, any>;
+  }) => { ok: boolean; msg?: string };
+  /** 删除触发器（用户想换触发器时先调用清空，再 register 新的） */
+  clearAllTriggers: () => void;
 }
 
 let nodeIdCounter = 1;
@@ -170,11 +185,15 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   loadDefinition: (def) => {
     const { nodes, edges } = definitionToFlow(def);
     nodeIdCounter = Math.max(1, ...nodes.map((n) => parseInt(n.id.replace('n', ''), 10) || 0)) + 1;
-    // 确保 method 有默认值且大小写正确（HTTP/HTTPS 默认 GET，选项均为大写）
-    const protocol = def.protocol || 'HTTP';
+    // protocol 为空表示"纯函数集合"（无触发入口），不做默认值回填；
+    // 仅在存在 HTTP/HTTPS 协议时才默认 GET method
+    const protocol = def.protocol ?? null;
     const workflowMeta = {
       ...def,
-      method: def.method?.toUpperCase() || (protocol === 'HTTP' || protocol === 'HTTPS' ? 'GET' : undefined),
+      protocol,
+      method:
+        def.method?.toUpperCase() ||
+        (protocol === 'HTTP' || protocol === 'HTTPS' ? 'GET' : undefined),
     };
     set({ nodes, edges, workflowMeta, past: [], future: [], pasteCount: 0, clipboard: null });
   },
@@ -412,6 +431,47 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     set({
       nodes: [headNode, ...shiftedNodes],
       edges: [...state.edges, ...newEdges],
+      future: [],
+    });
+  },
+
+  hasAnyTrigger: () => Array.isArray(get().workflowMeta.triggers) && get().workflowMeta.triggers!.length > 0,
+
+  registerUniqueTrigger: ({ functionRef, triggerType = 'API', config = {} }) => {
+    const state = get();
+    if (Array.isArray(state.workflowMeta.triggers) && state.workflowMeta.triggers.length > 0) {
+      const existing = state.workflowMeta.triggers[0];
+      return {
+        ok: false,
+        msg: `当前流程已存在触发器 ${existing.functionRef || '（未命名）'}，一个流程最多 1 个触发器。请先在「触发器配置」里删除现有触发器后再添加。`,
+      };
+    }
+    const newTrigger = {
+      id: `trigger-${Date.now().toString(36)}`,
+      functionRef,
+      type: triggerType,
+      enabled: true,
+      order: 0,
+      config,
+    } as any;
+    set({
+      workflowMeta: {
+        ...state.workflowMeta,
+        triggers: [newTrigger],
+      },
+      future: [],
+    });
+    return { ok: true };
+  },
+
+  clearAllTriggers: () => {
+    const state = get();
+    if (!Array.isArray(state.workflowMeta.triggers) || state.workflowMeta.triggers.length === 0) return;
+    set({
+      workflowMeta: {
+        ...state.workflowMeta,
+        triggers: [],
+      },
       future: [],
     });
   },

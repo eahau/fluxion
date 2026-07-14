@@ -1,9 +1,9 @@
-package com.fluxion.config.nacos
+﻿package com.fluxion.config.nacos
 
 import com.alibaba.nacos.api.config.ConfigService
 import com.alibaba.nacos.api.config.listener.Listener
-import com.fluxion.adapter.spi.config.ConfigChangeListener
-import com.fluxion.adapter.spi.config.ConfigSubscriber
+import com.fluxion.config.core.ConfigChangeListener
+import com.fluxion.config.core.ConfigSubscriber
 import com.fluxion.config.core.AbstractConfigSubscriber
 import org.slf4j.*
 import java.util.concurrent.Executor

@@ -1,4 +1,4 @@
-package com.fluxion.admin.config
+﻿package com.fluxion.admin.config
 
 import com.fluxion.admin.security.JwtAuthenticationFilter
 import org.springframework.context.annotation.Bean

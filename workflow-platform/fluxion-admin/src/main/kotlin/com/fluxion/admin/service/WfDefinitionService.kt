@@ -1,4 +1,4 @@
-package com.fluxion.admin.service
+﻿package com.fluxion.admin.service
 
 import com.fluxion.builtin.db.workflow.DbExecuteWorkflowCompiler
 import com.fluxion.core.function.FunctionRegistry
@@ -9,9 +9,9 @@ import com.fluxion.core.model.TriggerType
 import com.fluxion.core.util.DagTopology
 import com.fluxion.core.util.JsonUtil
 import com.fluxion.core.util.uncheckedCast
-import com.fluxion.adapter.spi.config.DefinitionConfigPublisher
+import com.fluxion.config.core.DefinitionConfigPublisher
 import com.fluxion.runtime.core.provider.DefinitionProvider
-import com.fluxion.adapter.spi.registry.PublishTarget as SpiPublishTarget
+import com.fluxion.config.core.PublishTarget as SpiPublishTarget
 import com.fluxion.admin.entity.WfDefinition
 import com.fluxion.admin.generated.model.FunctionStatus
 import com.fluxion.admin.mapper.JsonMapperHelper
@@ -201,6 +201,11 @@ class WfDefinitionService(
         return repository.findByWorkflowId(workflowId).orElse(null)
     }
 
+    /** Raw entity fetch by primary key ID. */
+    fun getEntityById(id: Long): WfDefinition? {
+        return repository.findById(id).orElse(null)
+    }
+
     /**
      * Returns the [WorkflowDefinition] domain object regardless of status. Used
      * by debug / trace tooling that needs to replay DRAFT executions.
@@ -378,7 +383,7 @@ class WfDefinitionService(
      * When `appGroup` is null every ACTIVE definition is returned (back-compat for
      * single-tenant local-dev deployments).
      */
-    fun loadAllActiveSnapshots(appGroup: String? = null): List<com.fluxion.adapter.spi.config.WorkflowDefinitionSnapshot> {
+    fun loadAllActiveSnapshots(appGroup: String? = null): List<com.fluxion.config.core.WorkflowDefinitionSnapshot> {
         val entities = if (appGroup.isNullOrBlank()) {
             repository.findAllActive()
         } else {
@@ -387,18 +392,18 @@ class WfDefinitionService(
             platform + private
         }
         return entities.map { entity ->
-            com.fluxion.adapter.spi.config.WorkflowDefinitionSnapshot.of(
+            com.fluxion.config.core.WorkflowDefinitionSnapshot.of(
                 entity.workflowId, entity.dagJson, entity.version, true
             )
         }
     }
 
     /** Single-definition snapshot lookup used for incremental worker refresh. */
-    fun getSnapshot(workflowId: String): com.fluxion.adapter.spi.config.WorkflowDefinitionSnapshot? {
+    fun getSnapshot(workflowId: String): com.fluxion.config.core.WorkflowDefinitionSnapshot? {
         return repository.findByWorkflowId(workflowId)
             .filter { it.status == "ACTIVE" }
             .map { entity ->
-                com.fluxion.adapter.spi.config.WorkflowDefinitionSnapshot.of(
+                com.fluxion.config.core.WorkflowDefinitionSnapshot.of(
                     entity.workflowId, entity.dagJson, entity.version, true
                 )
             }

@@ -1,6 +1,7 @@
-package com.fluxion.decorator.impl.ratelimit
+﻿package com.fluxion.decorator.impl.ratelimit
 
 import com.fluxion.core.ratelimit.RateLimitConfig
+import com.fluxion.decorator.ratelimit.SlidingWindowState
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 

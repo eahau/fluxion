@@ -1,4 +1,4 @@
-package com.fluxion.core.value
+﻿package com.fluxion.core.value
 
 /**
  * Bridge between the admin console's function-metadata schema and the

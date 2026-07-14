@@ -1,4 +1,4 @@
-package com.fluxion.core.sql
+﻿package com.fluxion.core.sql
 
 import com.fluxion.core.value.SqlCondition
 import com.fluxion.core.value.SqlWithParams

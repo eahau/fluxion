@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Default [SchemaResolver] that resolves Fluxion-standard references
  * (`schema:<name>`, `protobuf:<name>`, `avro:<name>`) against the local
  * [SchemaRegistry].

@@ -1,7 +1,7 @@
-package com.fluxion.admin.service
+﻿package com.fluxion.admin.service
 
-import com.fluxion.adapter.spi.config.SchemaConfigPublisher
-import com.fluxion.adapter.spi.config.SchemaConfigSnapshot
+import com.fluxion.config.core.SchemaConfigPublisher
+import com.fluxion.config.core.SchemaConfigSnapshot
 import com.fluxion.admin.entity.WfSchema
 import com.fluxion.admin.entity.WfSchemaSummary
 import com.fluxion.admin.repository.WfDefinitionRepository

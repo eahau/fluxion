@@ -1,4 +1,4 @@
-package com.fluxion.admin.exception
+﻿package com.fluxion.admin.exception
 
 import jakarta.servlet.http.HttpServletRequest
 import org.springframework.boot.web.servlet.error.ErrorController

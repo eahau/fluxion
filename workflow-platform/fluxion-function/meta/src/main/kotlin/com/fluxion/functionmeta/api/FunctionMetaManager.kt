@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Operator-facing management API for workflow function metadata.
  *
  * Bridges the in-memory or DB-backed `FunctionMetaRegistry` SPI with

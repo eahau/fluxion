@@ -18,8 +18,10 @@ dependencies {
     implementation(project(":fluxion-decorator"))
     // DAG Engine: required for workflow orchestration built-in functions.
     implementation(project(":fluxion-engine"))
+    // Redis module: RedisKey for cache key generation.
+    implementation(project(":fluxion-redis:core"))
     // Adapter SPI: WorkflowFunctionMeta + FunctionMetaManager types (api - downstream workers use it).
-    api(project(":fluxion-adapter-spi"))
+    api(project(":fluxion-outbound:mq"))
     // Function Spring Boot meta: FunctionMetaManager/FunctionMetaRegistry SPI.
     api(project(":fluxion-function:spring-boot"))
 

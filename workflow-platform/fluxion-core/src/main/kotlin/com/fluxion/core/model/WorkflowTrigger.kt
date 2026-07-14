@@ -1,4 +1,4 @@
-package com.fluxion.core.model
+﻿package com.fluxion.core.model
 
 /**
  * Mechanism by which a workflow is triggered.

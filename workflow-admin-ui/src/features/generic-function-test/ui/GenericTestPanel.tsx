@@ -20,6 +20,7 @@ export interface GenericTestPanelProps {
   onExecuteTest?: (payload: { inputs: any }) => Promise<any>;
   /** paramValidate 的锁定校验 Schema（只读展示），测试输入基于此 schema 生成 */
   lockedSchema?: Record<string, any>;
+  _canExecute?: boolean;
 }
 
 const BASE_UI_SCHEMA = {
@@ -30,7 +31,7 @@ const BASE_UI_SCHEMA = {
   script: { 'ui:widget': 'textarea', 'ui:options': { rows: 4 } },
 };
 
-const GenericTestPanel: React.FC<GenericTestPanelProps> = ({ functionId, functionDefinition, onExecuteTest, lockedSchema }) => {
+const GenericTestPanel: React.FC<GenericTestPanelProps> = ({ functionId, functionDefinition, onExecuteTest, lockedSchema, _canExecute }) => {
   const initialInput = useMemo(() => {
     const def = functionDefinition?.config?.defaultInput;
     if (!def) return undefined;
@@ -44,8 +45,8 @@ const GenericTestPanel: React.FC<GenericTestPanelProps> = ({ functionId, functio
   });
 
   const hasSchema = !!(uc.paramSchema && Object.keys(uc.paramSchema).length > 0);
-  // lockedSchema 模式：强制 JSON 编辑器（不渲染 RJSF 多字段表单）
   const forceJsonMode = !!lockedSchema;
+  const testDisabled = _canExecute === false;
 
   const dynamicWidgets = useMemo(
     () => (hasSchema ? resolveDynamicWidgets(uc.paramSchema as any) : {}),
@@ -86,7 +87,7 @@ const GenericTestPanel: React.FC<GenericTestPanelProps> = ({ functionId, functio
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>测试数据（JSON）</Typography.Text>
           <JsonEditor value={uc.input} onChange={uc.setInput as any} autoHeight minHeight={120} maxHeight={300} />
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <Button type="primary" icon={<PlayCircleOutlined />} size="middle" onClick={uc.handleTest}>
+            <Button type="primary" icon={<PlayCircleOutlined />} size="middle" onClick={uc.handleTest} disabled={testDisabled}>
               执行测试
             </Button>
           </div>
@@ -106,7 +107,7 @@ const GenericTestPanel: React.FC<GenericTestPanelProps> = ({ functionId, functio
             onChange={(e) => uc.setInput(e.formData || {})}
           />
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <Button type="primary" icon={<PlayCircleOutlined />} size="middle" onClick={uc.handleTest}>
+            <Button type="primary" icon={<PlayCircleOutlined />} size="middle" onClick={uc.handleTest} disabled={testDisabled}>
               执行测试
             </Button>
           </div>
@@ -125,7 +126,7 @@ const GenericTestPanel: React.FC<GenericTestPanelProps> = ({ functionId, functio
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>输入参数（JSON）</Typography.Text>
           <JsonEditor value={uc.input} onChange={uc.setInput as any} autoHeight minHeight={80} maxHeight={240} />
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <Button type="primary" icon={<PlayCircleOutlined />} size="middle" onClick={uc.handleTest}>
+            <Button type="primary" icon={<PlayCircleOutlined />} size="middle" onClick={uc.handleTest} disabled={testDisabled}>
               执行测试
             </Button>
           </div>

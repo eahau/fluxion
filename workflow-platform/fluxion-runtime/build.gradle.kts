@@ -16,11 +16,11 @@ dependencies {
 
     // ===== Protocol Adapters =====
     // HTTP (Spring MVC) adapter Spring Boot starter (required default adapter).
-    implementation(project(":fluxion-adapter-http:springmvc:spring-boot"))
+    implementation(project(":fluxion-inbound:http:springmvc:spring-boot"))
     // RPC adapter Spring Boot starter (Dubbo + gRPC, compiled in; runtime activated conditionally).
-    implementation(project(":fluxion-adapter-rpc:spring-boot"))
+    implementation(project(":fluxion-inbound:rpc:spring-boot"))
     // MQ adapter Spring Boot starter (Kafka-backed).
-    implementation(project(":fluxion-adapter-mq:spring-boot"))
+    implementation(project(":fluxion-inbound:mq:spring-boot"))
 
     // ===== Function Capability Domain =====
     // Built-in + external function registry Spring Boot starter.
@@ -28,9 +28,9 @@ dependencies {
     // Groovy script engine Spring Boot starter (dynamic script evaluation).
     implementation(project(":fluxion-script-engine:spring-boot"))
     // External function transport Spring Boot starters (Dubbo / gRPC / HTTP).
-    implementation(project(":fluxion-function:external:dubbo:spring-boot"))
-    implementation(project(":fluxion-function:external:grpc:spring-boot"))
-    implementation(project(":fluxion-function:external:http:spring-boot"))
+    implementation(project(":fluxion-outbound:dubbo:spring-boot"))
+    implementation(project(":fluxion-outbound:grpc:spring-boot"))
+    implementation(project(":fluxion-outbound:http:spring-boot"))
 
     // ===== Cross-cutting Capability Domain =====
     // Decorator Spring Boot starter (metrics/tracing/caching decorators).

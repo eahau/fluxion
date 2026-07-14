@@ -17,7 +17,7 @@ sourceSets {
 
 dependencies {
     // Adapter SPI: ConfigSubscriber / SchemaConfigSubscriber bridge contracts.
-    implementation(project(":fluxion-adapter-spi"))
+    implementation(project(":fluxion-config:core"))
     // Config core SPI: ConfigCenterProvider + base types.
     implementation(project(":fluxion-config:core"))
     // Core module: JsonUtil utility for declarative YAML/JSON config parsing in auto-config classes.

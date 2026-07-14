@@ -1,4 +1,4 @@
-package com.fluxion.redis.meta
+﻿package com.fluxion.redis.meta
 
 import com.fasterxml.jackson.core.type.TypeReference
 import com.networknt.schema.JsonSchemaFactory

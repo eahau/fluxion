@@ -1,4 +1,4 @@
-package com.fluxion.acl.spi.model
+﻿package com.fluxion.acl.spi.model
 
 /**
  * Authentication / authorization data models used by the ACL SPI layer.

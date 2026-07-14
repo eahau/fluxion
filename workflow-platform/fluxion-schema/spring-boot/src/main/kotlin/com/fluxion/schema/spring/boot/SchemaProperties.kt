@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Spring Boot `@ConfigurationProperties` binding for the `fluxion.schema`
  * configuration namespace.
  *

@@ -10,7 +10,17 @@ export function getCachedSchemaMap(): Map<string, SchemaDefinition> {
 }
 
 export async function getSchemas(
-  params?: { keyword?: string; schemaType?: string; page?: number; pageSize?: number },
+  params?: {
+    keyword?: string;
+    schemaType?: string;
+    domain?: string;
+    frozen?: boolean;
+    appGroup?: string;
+    sortField?: 'createdAt' | 'updatedAt';
+    sortDirection?: 'asc' | 'desc';
+    page?: number;
+    pageSize?: number;
+  },
   options?: RequestOptions,
 ) {
   return unwrap(

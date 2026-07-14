@@ -1,4 +1,4 @@
-package com.fluxion.script.function
+﻿package com.fluxion.script.function
 
 import com.fluxion.core.function.WorkflowFunction
 import com.fluxion.core.model.NodeInput

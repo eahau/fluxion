@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Avro-backed [SchemaValidator] that validates runtime data against a compiled
  * Avro schema using a round-trip binary encode/decode strategy.
  *

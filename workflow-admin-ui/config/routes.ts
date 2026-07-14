@@ -18,7 +18,7 @@ export default [
       },
       {
         path: '/workflow',
-        name: '工作流管理',
+        name: '函数集合',
         icon: 'PartitionOutlined',
         routes: [
           { path: '/workflow', component: '@/pages/workflow/list', exact: true },
@@ -36,6 +36,32 @@ export default [
           { path: '/function', component: '@/pages/function/list', exact: true },
           { path: '/function/editor', component: '@/pages/function/editor', exact: true },
           { path: '/function/editor/:id', component: '@/pages/function/editor', exact: true },
+        ],
+      },
+      {
+        path: '/app',
+        name: '应用管理',
+        icon: 'AppstoreOutlined',
+        routes: [
+          { path: '/app', component: '@/pages/app/list', exact: true },
+          { path: '/app/:id', component: '@/pages/app/detail', exact: true },
+        ],
+      },
+      {
+        path: '/resource',
+        name: '资源中心',
+        icon: 'DatabaseOutlined',
+        routes: [
+          { path: '/resource', component: '@/pages/resource/list', exact: true },
+          { path: '/resource/:id', component: '@/pages/resource/editor', exact: true },
+        ],
+      },
+      {
+        path: '/sandbox',
+        name: '沙盒管理',
+        icon: 'ExperimentOutlined',
+        routes: [
+          { path: '/sandbox', component: '@/pages/sandbox/list', exact: true },
         ],
       },
       {

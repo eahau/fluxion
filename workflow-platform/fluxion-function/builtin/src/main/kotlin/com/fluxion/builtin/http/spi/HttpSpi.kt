@@ -1,4 +1,4 @@
-package com.fluxion.builtin.http.spi
+﻿package com.fluxion.builtin.http.spi
 
 /**
  * Immutable HTTP request value-object — shared between the [HttpClientAdapter]

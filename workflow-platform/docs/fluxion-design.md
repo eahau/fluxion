@@ -1919,7 +1919,7 @@ class WorkflowRouteRegistry(
  * workflowId 由 WorkflowRouteInterceptor 通过 request attribute 注入
  */
 class MvcWorkflowHandler(
-    private val workflowRouter: WorkflowRouter,
+    private val inboundRouter: WorkflowRouter,
     private val objectMapper:   ObjectMapper
 ) {
     companion object {
@@ -1941,7 +1941,7 @@ class MvcWorkflowHandler(
             rawBody    = body
         )
         return try {
-            ResponseEntity.ok(workflowRouter.execute(unifiedRequest).data)
+            ResponseEntity.ok(inboundRouter.execute(unifiedRequest).data)
         } catch (ex: WorkflowException) {
             handleWorkflowError(ex)
         }
@@ -2090,7 +2090,7 @@ admin 后台发布 HTTP 接口定义
  */
 @Component
 class DubboWorkflowAdapter(
-    private val workflowRouter: WorkflowRouter
+    private val inboundRouter: WorkflowRouter
 ) : WorkflowAdapter {
 
     private val exportedServices = ConcurrentHashMap<String, ServiceConfig<GenericService>>()
@@ -2107,7 +2107,7 @@ class DubboWorkflowAdapter(
             ref = GenericService { method, _, args ->
                 val params = args?.firstOrNull()?.let { it as? Map<String, Any> } ?: emptyMap()
                 val req = UnifiedRequest(definition.id, params, emptyMap(), "DUBBO", null)
-                val result = workflowRouter.execute(req)
+                val result = inboundRouter.execute(req)
                 if (result.isSuccess) result.data else throw WorkflowExecutionException(result.errorMsg)
             }
             this.interfaceName = interfaceName
@@ -2135,7 +2135,7 @@ class DubboWorkflowAdapter(
  */
 @Component
 class GrpcWorkflowAdapter(
-    private val workflowRouter: WorkflowRouter
+    private val inboundRouter: WorkflowRouter
 ) : WorkflowAdapter, WorkflowGatewayGrpc.WorkflowGatewayImplBase() {
 
     override fun protocol() = "GRPC"
@@ -2147,7 +2147,7 @@ class GrpcWorkflowAdapter(
         try {
             val params = objectMapper.readValue(request.paramsJson, Map::class.java) as Map<String, Any>
             val req    = UnifiedRequest(request.workflowId, params, request.headersMap, "GRPC", request.paramsJson)
-            val result = workflowRouter.execute(req)
+            val result = inboundRouter.execute(req)
             val resp   = WorkflowResponse.newBuilder()
                 .setSuccess(result.isSuccess)
                 .setDataJson(objectMapper.writeValueAsString(result.data))
@@ -2183,7 +2183,7 @@ class GrpcWorkflowAdapter(
 class KafkaConsumerWorkflowAdapter(
     private val registry: KafkaListenerEndpointRegistry,
     private val kafkaListenerContainerFactory: ConcurrentKafkaListenerContainerFactory<String, String>,
-    private val workflowRouter: WorkflowRouter
+    private val inboundRouter: WorkflowRouter
 ) : WorkflowAdapter {
 
     private val containerIds = ConcurrentHashMap<String, String>() // workflowId → containerId
@@ -2207,7 +2207,7 @@ class KafkaConsumerWorkflowAdapter(
                     val req    = UnifiedRequest(definition.id, params,
                         mapOf("kafka-topic" to record.topic(), "kafka-offset" to record.offset().toString()),
                         "KAFKA", record.value())
-                    workflowRouter.execute(req)
+                    inboundRouter.execute(req)
                 } catch (e: Exception) {
                     log.error("Kafka workflow execution failed: workflowId={}, topic={}", definition.id, topic, e)
                 }
@@ -5291,7 +5291,7 @@ fluxion-platform/
 │
 ├── fluxion-runtime/                            运行面 / sidecar（嵌套子模块）
 │   ├── fluxion-runtime-core/                   ★ 零 Spring 依赖
-│   │   ├── router/RuntimeWorkflowRouter.kt     ← Runtime 侧 WorkflowRouter 实现
+│   │   ├── router/RuntimeInboundRouter.kt     ← Runtime 侧 WorkflowRouter 实现
 │   │   └── spi/ExecutionSnapshotStore.kt       ← 执行快照 SPI
 │   ├── fluxion-runtime-spring-boot/            ← @AutoConfiguration 装配
 │   │   ├── FluxionRuntimeAutoConfiguration.kt

@@ -1,18 +1,18 @@
-package com.fluxion.config.apollo
+﻿package com.fluxion.config.apollo
 
 import com.ctrip.framework.apollo.openapi.client.ApolloOpenApiClient
-import com.fluxion.adapter.spi.config.DefinitionConfigPublisher
-import com.fluxion.adapter.spi.config.DefinitionConfigSubscriber
-import com.fluxion.adapter.spi.config.FunctionConfigPublisher
-import com.fluxion.adapter.spi.config.FunctionConfigSubscriber
-import com.fluxion.adapter.spi.config.IdempotencyConfig
-import com.fluxion.adapter.spi.config.IdempotencyConfigSubscriber
-import com.fluxion.adapter.spi.config.SchemaConfigPublisher
-import com.fluxion.adapter.spi.config.SchemaConfigSnapshot
-import com.fluxion.adapter.spi.config.SchemaConfigSubscriber
-import com.fluxion.adapter.spi.config.WorkflowDefinitionSnapshot
-import com.fluxion.adapter.spi.registry.InstanceDiscovery
-import com.fluxion.adapter.spi.registry.InstanceRegistry
+import com.fluxion.config.core.DefinitionConfigPublisher
+import com.fluxion.config.core.DefinitionConfigSubscriber
+import com.fluxion.config.core.FunctionConfigPublisher
+import com.fluxion.config.core.FunctionConfigSubscriber
+import com.fluxion.config.core.IdempotencyConfig
+import com.fluxion.config.core.IdempotencyConfigSubscriber
+import com.fluxion.config.core.SchemaConfigPublisher
+import com.fluxion.config.core.SchemaConfigSnapshot
+import com.fluxion.config.core.SchemaConfigSubscriber
+import com.fluxion.config.core.WorkflowDefinitionSnapshot
+import com.fluxion.config.core.InstanceDiscovery
+import com.fluxion.config.core.InstanceRegistry
 import com.fluxion.core.util.JsonUtil
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
@@ -21,13 +21,13 @@ import org.springframework.context.annotation.Bean
 import org.springframework.core.env.Environment
 
 /**
- * Apollo 閰嶇疆涓績 + 娉ㄥ唽涓績鑷姩瑁呴厤
+ * Apollo config center + service discovery auto-configuration.
  *
- * ## 澹版槑寮忛厤缃敞鍐岋紙瀵规爣 NacosConfigs.java锛?
+ * ## Builder-style bindings (similar to NacosConfigs.java)
  *
- * 鎵€鏈?Subscriber/Publisher 鍧囦娇鐢ㄦ硾鍨嬪熀绫荤洿鎺ュ疄渚嬪寲锛屾棤闇€涓烘瘡绉嶉厤缃畾涔夌嫭绔嬪瓙绫汇€?
- * 鏂板 keyed 閰嶇疆锛氫竴琛?`ApolloKeyedConfigSubscriber(mapper = { ... }, removedMapper = { ... })`
- * 鏂板鍗曞€奸厤缃細涓€琛?`ApolloConfigSubscriber(parser = { cfg -> ... })`
+ * All Subscriber/Publisher implementations use base classes directly; no need to define separate subclasses for each config type.
+ * Add keyed config: one line `ApolloKeyedConfigSubscriber(mapper = { ... }, removedMapper = { ... })`
+ * Add single-key config: one line `ApolloConfigSubscriber(parser = { cfg -> ... })`
  */
 @AutoConfiguration
 @ConditionalOnClass(name = ["com.ctrip.framework.apollo.ConfigService"])
@@ -105,7 +105,7 @@ class ApolloConfigAutoConfiguration {
         ApolloConfigSubscriber(
             namespace = "workflow-idempotency",
             parser = { cfg ->
-                // 优先读取 JSON 内容，支持工作流级覆盖；兼容旧版扁平属性配置
+                // Prefer JSON content first to support workflow-level overrides; fallback to legacy flat property config
                 cfg.getProperty("content", null)
                     ?.takeIf { it.isNotBlank() }
                     ?.let { JsonUtil.deserialize(it, IdempotencyConfig::class.java) }

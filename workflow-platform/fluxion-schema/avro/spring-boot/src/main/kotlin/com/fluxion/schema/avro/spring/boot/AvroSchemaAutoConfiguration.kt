@@ -1,4 +1,4 @@
-package com.fluxion.schema.avro.spring.boot
+﻿package com.fluxion.schema.avro.spring.boot
 
 import com.fluxion.schema.api.SchemaFormatBundle
 import com.fluxion.schema.avro.AvroSchemaCodec

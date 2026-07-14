@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Protobuf [SchemaParser] that compiles `FileDescriptorProto` JSON (as
  * produced by `protoc --descriptor_set_out --json_format`) into a
  * [Descriptors.Descriptor] wrapped in the unified [Schema] envelope.

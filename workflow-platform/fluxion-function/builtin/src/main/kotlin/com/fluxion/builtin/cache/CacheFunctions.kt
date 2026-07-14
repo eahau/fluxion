@@ -1,10 +1,10 @@
-package com.fluxion.builtin.cache
+﻿package com.fluxion.builtin.cache
 
 import com.fluxion.builtin.BuiltinFunction
 import com.fluxion.decorator.decorator.CacheStore
 import com.fluxion.core.function.WorkflowFunction
 import com.fluxion.core.model.NodeInput
-import com.fluxion.core.redis.RedisKey
+import com.fluxion.redis.RedisKey
 import com.fluxion.core.value.FunctionResult
 import org.slf4j.*
 import java.util.concurrent.TimeUnit

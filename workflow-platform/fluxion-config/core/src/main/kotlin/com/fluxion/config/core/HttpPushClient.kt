@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Fan-out HTTP push client used by the Admin to broadcast config changes
  * to every registered Worker instance.
  *
@@ -14,10 +14,10 @@
  */
 package com.fluxion.config.core
 
-import com.fluxion.adapter.spi.registry.InstanceDiscovery
-import com.fluxion.adapter.spi.registry.InstanceInfo
-import com.fluxion.adapter.spi.registry.PublishTarget
-import com.fluxion.adapter.spi.registry.TargetType
+import com.fluxion.config.core.InstanceDiscovery
+import com.fluxion.config.core.InstanceInfo
+import com.fluxion.config.core.PublishTarget
+import com.fluxion.config.core.TargetType
 import org.slf4j.*
 import java.net.URI
 import java.net.http.HttpClient

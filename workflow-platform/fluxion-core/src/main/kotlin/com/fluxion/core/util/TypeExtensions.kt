@@ -1,4 +1,4 @@
-package com.fluxion.core.util
+﻿package com.fluxion.core.util
 
 /**
  * Small set of casting / coercion helpers for loosely-typed payloads.
@@ -36,7 +36,6 @@ inline fun <reified T> Any?.castOrDefault(default: T): T = (this as? T) ?: defau
  * already approved the payload shape.  Returns `null` on `null`
  * receiver (same as Kotlin's own `as?`).
  */
-@Suppress("UNCHECKED_CAST")
 inline fun <reified T> Any?.uncheckedCast(): T? = this as? T
 
 /**

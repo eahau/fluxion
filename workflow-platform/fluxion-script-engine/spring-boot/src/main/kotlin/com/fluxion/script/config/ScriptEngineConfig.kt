@@ -1,8 +1,8 @@
-package com.fluxion.script.config
+﻿package com.fluxion.script.config
 
-import com.fluxion.adapter.spi.config.FunctionConfigSubscriber
+import com.fluxion.config.core.FunctionConfigSubscriber
 import com.fluxion.core.function.FunctionRegistry
-import com.fluxion.core.function.external.ExternalFunctionTransportRegistry
+import com.fluxion.outbound.OutboundTransportRegistry
 import com.fluxion.di.DependencyResolver
 import com.fluxion.script.groovy.GroovyScriptFunction
 import org.slf4j.*
@@ -125,7 +125,7 @@ class FunctionConfigApplierConfiguration {
         subscriber: FunctionConfigSubscriber,
         registry: FunctionRegistry,
         @Autowired(required = false) groovyScriptFunction: GroovyScriptFunction?,
-        @Autowired(required = false) transportRegistry: ExternalFunctionTransportRegistry?,
+        @Autowired(required = false) transportRegistry: OutboundTransportRegistry?,
         env: Environment
     ): FunctionConfigApplier {
         val appGroup = env.getProperty("workflow.instance.app-group")
@@ -138,7 +138,7 @@ class FunctionConfigApplierConfiguration {
             registry = registry,
             groovyEngine = groovyScriptFunction,
             appGroup = appGroup,
-            transportRegistry = transportRegistry ?: ExternalFunctionTransportRegistry()
+            transportRegistry = transportRegistry ?: OutboundTransportRegistry()
         )
         applier.init()
         log.info { "FunctionConfigApplier initialized for appGroup=$appGroup" }

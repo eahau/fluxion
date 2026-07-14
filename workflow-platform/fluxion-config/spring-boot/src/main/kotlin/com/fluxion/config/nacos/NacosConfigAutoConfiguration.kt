@@ -1,21 +1,21 @@
-package com.fluxion.config.nacos
+﻿package com.fluxion.config.nacos
 
 import com.alibaba.nacos.api.NacosFactory
 import com.alibaba.nacos.api.config.ConfigService
 import com.alibaba.nacos.api.naming.NamingFactory
 import com.alibaba.nacos.api.naming.NamingService
-import com.fluxion.adapter.spi.config.DefinitionConfigPublisher
-import com.fluxion.adapter.spi.config.DefinitionConfigSubscriber
-import com.fluxion.adapter.spi.config.FunctionConfigPublisher
-import com.fluxion.adapter.spi.config.FunctionConfigSubscriber
-import com.fluxion.adapter.spi.config.IdempotencyConfig
-import com.fluxion.adapter.spi.config.IdempotencyConfigSubscriber
-import com.fluxion.adapter.spi.config.SchemaConfigPublisher
-import com.fluxion.adapter.spi.config.SchemaConfigSnapshot
-import com.fluxion.adapter.spi.config.SchemaConfigSubscriber
-import com.fluxion.adapter.spi.config.WorkflowDefinitionSnapshot
-import com.fluxion.adapter.spi.registry.InstanceDiscovery
-import com.fluxion.adapter.spi.registry.InstanceRegistry
+import com.fluxion.config.core.DefinitionConfigPublisher
+import com.fluxion.config.core.DefinitionConfigSubscriber
+import com.fluxion.config.core.FunctionConfigPublisher
+import com.fluxion.config.core.FunctionConfigSubscriber
+import com.fluxion.config.core.IdempotencyConfig
+import com.fluxion.config.core.IdempotencyConfigSubscriber
+import com.fluxion.config.core.SchemaConfigPublisher
+import com.fluxion.config.core.SchemaConfigSnapshot
+import com.fluxion.config.core.SchemaConfigSubscriber
+import com.fluxion.config.core.WorkflowDefinitionSnapshot
+import com.fluxion.config.core.InstanceDiscovery
+import com.fluxion.config.core.InstanceRegistry
 import com.fluxion.core.util.JsonUtil
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
@@ -25,16 +25,16 @@ import org.springframework.core.env.Environment
 import java.util.Properties
 
 /**
- * Nacos 閰嶇疆涓績 + 娉ㄥ唽涓績鑷姩瑁呴厤
+ * Nacos config center + service discovery auto-configuration.
  *
- * 鐢熸晥鏉′欢锛?
- *   1. classpath 瀛樺湪 ConfigService锛坣acos-client jar锛?
- *   2. 閰嶇疆 workflow.config.type=nacos
+ * Activation conditions:
+ *   1. ConfigService class is present (nacos-client jar)
+ *   2. Configuration property workflow.config.type=nacos
  *
- * ## 澹版槑寮忛厤缃敞鍐岋紙瀵规爣 NacosConfigs.java锛?
+ * ## Builder-style bindings (see NacosConfigs.java for details)
  *
- * 閫氳繃 [NacosConfigFactory] 灏佽 ConfigService + group锛?
- * 鏂板閰嶇疆鍙渶浼犱笟鍔″弬鏁帮紝鏃犻渶閲嶅鍩虹璁炬柦渚濊禆銆?
+ * Uses [NacosConfigFactory] to assemble ConfigService + group.
+ * New configurations only require business parameters; no need to re-implement infrastructure.
  */
 @AutoConfiguration
 @ConditionalOnClass(name = ["com.alibaba.nacos.api.config.ConfigService"])
@@ -49,13 +49,13 @@ class NacosConfigAutoConfiguration {
     fun nacosNamingService(env: Environment): NamingService =
         NamingFactory.createNamingService(buildProperties(env))
 
-    // 鈹€鈹€鈹€ 閰嶇疆宸ュ巶锛堜竴娆℃€ф敞鍐岋紝娑堥櫎鍚庣画 Bean 鐨勯噸澶嶅弬鏁帮級鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+    // ===== Config Factory (one-time binding, eliminates duplicate parameter passing) =====
 
     @Bean
     fun nacosConfigFactory(configService: ConfigService): NacosConfigFactory =
         NacosConfigFactory(configService)
 
-    // 鈹€鈹€鈹€ Publisher 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+    // ===== Publishers =====
 
     @Bean
     fun nacosDefinitionConfigPublisher(configService: ConfigService): DefinitionConfigPublisher =
@@ -69,7 +69,7 @@ class NacosConfigAutoConfiguration {
     fun nacosSchemaConfigPublisher(configService: ConfigService): SchemaConfigPublisher =
         NacosSchemaConfigPublisher(configService)
 
-    // 鈹€鈹€鈹€ Subscriber锛堥€氳繃 factory 澹版槑寮忔敞鍐岋級鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+    // ===== Subscribers (builder-style binding via factory) =====
 
     @Bean
     fun nacosDefinitionConfigSubscriber(f: NacosConfigFactory): DefinitionConfigSubscriber =
@@ -99,7 +99,7 @@ class NacosConfigAutoConfiguration {
             default = IdempotencyConfig()
         )
 
-    // 鈹€鈹€鈹€ 娉ㄥ唽涓績 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+    // ===== Service Registry =====
 
     @Bean
     fun nacosInstanceRegistry(namingService: NamingService): InstanceRegistry =

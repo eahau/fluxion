@@ -1,4 +1,4 @@
-package com.fluxion.decorator.impl.lock
+﻿package com.fluxion.decorator.impl.lock
 
 import com.fluxion.core.exception.LockAcquisitionException
 import com.fluxion.core.function.WorkflowFunction
@@ -6,6 +6,7 @@ import com.fluxion.core.model.WorkflowNode
 import com.fluxion.test.lock.InMemoryDistributedLockProvider
 import com.fluxion.core.value.ExecutionMeta
 import com.fluxion.core.value.FunctionResult
+import com.fluxion.decorator.lock.DistributedLockDecorator
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test

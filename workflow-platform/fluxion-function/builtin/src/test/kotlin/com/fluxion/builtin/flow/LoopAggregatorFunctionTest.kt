@@ -1,4 +1,4 @@
-package com.fluxion.builtin.flow
+﻿package com.fluxion.builtin.flow
 
 import com.fluxion.core.model.NodeInput
 import com.fluxion.core.util.uncheckedCast

@@ -1,13 +1,13 @@
-package com.fluxion.config.http
+﻿package com.fluxion.config.http
 
-import com.fluxion.adapter.spi.config.DefinitionConfigPublisher
-import com.fluxion.adapter.spi.config.DefinitionConfigSubscriber
-import com.fluxion.adapter.spi.config.FunctionConfigPublisher
-import com.fluxion.adapter.spi.config.FunctionConfigSubscriber
-import com.fluxion.adapter.spi.config.SchemaConfigPublisher
-import com.fluxion.adapter.spi.config.SchemaConfigSubscriber
-import com.fluxion.adapter.spi.registry.InstanceDiscovery
-import com.fluxion.adapter.spi.registry.InstanceRegistry
+import com.fluxion.config.core.DefinitionConfigPublisher
+import com.fluxion.config.core.DefinitionConfigSubscriber
+import com.fluxion.config.core.FunctionConfigPublisher
+import com.fluxion.config.core.FunctionConfigSubscriber
+import com.fluxion.config.core.SchemaConfigPublisher
+import com.fluxion.config.core.SchemaConfigSubscriber
+import com.fluxion.config.core.InstanceDiscovery
+import com.fluxion.config.core.InstanceRegistry
 import com.fluxion.registry.http.HttpAdminInstanceDiscovery
 import com.fluxion.registry.http.HttpAdminInstanceRegistry
 import com.fluxion.registry.http.HttpInstanceRegistry
@@ -20,13 +20,13 @@ import org.springframework.context.annotation.Primary
 import org.springframework.core.env.Environment
 
 /**
- * HTTP 閰嶇疆涓績 + 娉ㄥ唽涓績鑷姩瑁呴厤
+ * HTTP config center + service discovery auto-configuration.
  */
 @AutoConfiguration
 @ConditionalOnProperty(name = ["workflow.config.type"], havingValue = "http", matchIfMissing = true)
 class HttpConfigAutoConfiguration {
 
-    // 鈹€鈹€鈹€ Admin 瑙掕壊 Bean 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+    // ===== Admin-side Beans ======================================================
 
     @Configuration
     @ConditionalOnProperty(name = ["workflow.instance.role"], havingValue = "admin")
@@ -66,7 +66,7 @@ class HttpConfigAutoConfiguration {
         ): SchemaConfigPublisher = HttpSchemaConfigPublisher(instanceDiscovery)
     }
 
-    // 鈹€鈹€鈹€ Worker 瑙掕壊 Bean 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+    // ===== Worker-side Beans =====================================================
 
     @Configuration
     @ConditionalOnProperty(name = ["workflow.instance.role"], havingValue = "worker")

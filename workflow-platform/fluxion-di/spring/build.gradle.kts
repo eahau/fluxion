@@ -9,8 +9,8 @@ plugins {
 dependencies {
     // Core base types (api - downstream modules get transitive compile access to core types).
     api(project(":fluxion-core"))
-    // Debug/DI abstractions (api - exposes FunctionInstanceProvider/DependencyResolver transitively).
-    api(project(":fluxion-debug"))
+    // DI abstractions (api - exposes FunctionInstanceProvider/DependencyResolver transitively).
+    api(project(":fluxion-di"))
     // Unified logging extensions.
     implementation(project(":fluxion-log"))
 

@@ -1,6 +1,6 @@
-package com.fluxion.builtin.config
+﻿package com.fluxion.builtin.config
 
-import com.fluxion.adapter.spi.mq.MqPublisher
+import com.fluxion.outbound.mq.spi.MqPublisher
 import com.fluxion.builtin.BuiltinFunction
 import com.fluxion.builtin.cache.CacheGetFunction
 import com.fluxion.builtin.cache.CacheSetFunction

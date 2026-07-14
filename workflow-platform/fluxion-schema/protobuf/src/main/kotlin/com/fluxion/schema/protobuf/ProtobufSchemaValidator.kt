@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Protobuf-backed [SchemaValidator] that coerces runtime values into a
  * [DynamicMessage] built from the schema's compiled [Descriptors.Descriptor].
  *

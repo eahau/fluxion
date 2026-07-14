@@ -188,6 +188,12 @@ subprojects {
         useJUnitPlatform()
     }
 
+    // Spring Boot bootJar duplicate handling - resolve conflicts from nested spring-boot modules.
+    tasks.matching { it.name == "bootJar" }.configureEach {
+        val jarTask = this as? org.springframework.boot.gradle.tasks.bundling.BootJar ?: return@configureEach
+        jarTask.duplicatesStrategy = org.gradle.api.file.DuplicatesStrategy.EXCLUDE
+    }
+
     // ===== Spring Boot AOT Output Redirection =====
     // The processAot JavaExec task defaults its working directory to the project root, causing it to
     // generate bin/main/ bytecode/source mirrors at the project root level. Redirects both workingDir
