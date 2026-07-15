@@ -1,21 +1,20 @@
-﻿package com.fluxion.config.nacos
+package com.fluxion.config.nacos
 
 import com.alibaba.nacos.api.NacosFactory
 import com.alibaba.nacos.api.config.ConfigService
-import com.alibaba.nacos.api.naming.NamingFactory
-import com.alibaba.nacos.api.naming.NamingService
 import com.fluxion.config.core.DefinitionConfigPublisher
 import com.fluxion.config.core.DefinitionConfigSubscriber
 import com.fluxion.config.core.FunctionConfigPublisher
 import com.fluxion.config.core.FunctionConfigSubscriber
+import com.fluxion.config.core.CacheConfig
+import com.fluxion.config.core.CacheConfigSubscriber
 import com.fluxion.config.core.IdempotencyConfig
 import com.fluxion.config.core.IdempotencyConfigSubscriber
+import com.fluxion.config.core.KeyedConfigSubscriber
 import com.fluxion.config.core.SchemaConfigPublisher
 import com.fluxion.config.core.SchemaConfigSnapshot
 import com.fluxion.config.core.SchemaConfigSubscriber
 import com.fluxion.config.core.WorkflowDefinitionSnapshot
-import com.fluxion.config.core.InstanceDiscovery
-import com.fluxion.config.core.InstanceRegistry
 import com.fluxion.core.util.JsonUtil
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
@@ -44,10 +43,6 @@ class NacosConfigAutoConfiguration {
     @Bean
     fun nacosConfigService(env: Environment): ConfigService =
         NacosFactory.createConfigService(buildProperties(env))
-
-    @Bean
-    fun nacosNamingService(env: Environment): NamingService =
-        NamingFactory.createNamingService(buildProperties(env))
 
     // ===== Config Factory (one-time binding, eliminates duplicate parameter passing) =====
 
@@ -99,15 +94,13 @@ class NacosConfigAutoConfiguration {
             default = IdempotencyConfig()
         )
 
-    // ===== Service Registry =====
-
     @Bean
-    fun nacosInstanceRegistry(namingService: NamingService): InstanceRegistry =
-        NacosInstanceRegistry(namingService)
-
-    @Bean
-    fun nacosInstanceDiscovery(namingService: NamingService): InstanceDiscovery =
-        NacosInstanceDiscovery(namingService)
+    fun nacosCacheConfigSubscriber(f: NacosConfigFactory): CacheConfigSubscriber =
+        f.subscriber(
+            dataId  = "workflow.cache",
+            mapper  = { content -> JsonUtil.deserialize(content, CacheConfig::class.java) },
+            default = CacheConfig()
+        )
 
     private fun buildProperties(env: Environment): Properties = Properties().apply {
         setProperty("serverAddr", env.getRequiredProperty("workflow.config.nacos.server-addr"))

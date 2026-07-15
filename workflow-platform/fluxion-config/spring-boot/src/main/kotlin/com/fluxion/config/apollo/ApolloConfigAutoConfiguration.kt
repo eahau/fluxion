@@ -1,4 +1,4 @@
-﻿package com.fluxion.config.apollo
+package com.fluxion.config.apollo
 
 import com.ctrip.framework.apollo.openapi.client.ApolloOpenApiClient
 import com.fluxion.config.core.DefinitionConfigPublisher
@@ -7,12 +7,12 @@ import com.fluxion.config.core.FunctionConfigPublisher
 import com.fluxion.config.core.FunctionConfigSubscriber
 import com.fluxion.config.core.IdempotencyConfig
 import com.fluxion.config.core.IdempotencyConfigSubscriber
+import com.fluxion.config.core.KeyedConfigSubscriber
 import com.fluxion.config.core.SchemaConfigPublisher
 import com.fluxion.config.core.SchemaConfigSnapshot
 import com.fluxion.config.core.SchemaConfigSubscriber
 import com.fluxion.config.core.WorkflowDefinitionSnapshot
-import com.fluxion.config.core.InstanceDiscovery
-import com.fluxion.config.core.InstanceRegistry
+
 import com.fluxion.core.util.JsonUtil
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass
@@ -86,9 +86,9 @@ class ApolloConfigAutoConfiguration {
         env: Environment
     ): SchemaConfigPublisher {
         val appId = env.getRequiredProperty("workflow.config.apollo.app-id")
-        val envName = env.getProperty("workflow.config.apollo.env", "DEV")!!
-        val cluster = env.getProperty("workflow.config.apollo.cluster", "default")!!
-        val operator = env.getProperty("workflow.config.apollo.operator", "workflow-admin")!!
+        val envName = env.getProperty("workflow.config.apollo.env", "DEV")
+        val cluster = env.getProperty("workflow.config.apollo.cluster", "default")
+        val operator = env.getProperty("workflow.config.apollo.operator", "workflow-admin")
         return ApolloSchemaConfigPublisher(client, appId, envName, cluster, operator)
     }
 
@@ -105,7 +105,6 @@ class ApolloConfigAutoConfiguration {
         ApolloConfigSubscriber(
             namespace = "workflow-idempotency",
             parser = { cfg ->
-                // Prefer JSON content first to support workflow-level overrides; fallback to legacy flat property config
                 cfg.getProperty("content", null)
                     ?.takeIf { it.isNotBlank() }
                     ?.let { JsonUtil.deserialize(it, IdempotencyConfig::class.java) }
@@ -119,17 +118,10 @@ class ApolloConfigAutoConfiguration {
         )
 
     @Bean
-    fun apolloInstanceRegistry(
-        client: ApolloOpenApiClient,
-        env: Environment
-    ): InstanceRegistry {
-        val appId = env.getRequiredProperty("workflow.config.apollo.app-id")
-        val envName = env.getProperty("workflow.config.apollo.env", "DEV")
-        val cluster = env.getProperty("workflow.config.apollo.cluster", "default")
-        val operator = env.getProperty("workflow.config.apollo.operator", "workflow-admin")
-        return ApolloInstanceRegistry(client, appId, envName, cluster, operator)
-    }
-
-    @Bean
-    fun apolloInstanceDiscovery(): InstanceDiscovery = ApolloInstanceDiscovery()
+    fun apolloCacheConfigSubscriber(): KeyedConfigSubscriber<String> =
+        ApolloKeyedConfigSubscriber(
+            namespace = "workflow-cache",
+            mapper = { _, content -> content },
+            removedMapper = { _ -> "" }
+        )
 }

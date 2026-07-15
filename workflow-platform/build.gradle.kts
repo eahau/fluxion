@@ -35,6 +35,8 @@ val grpcSpringBootVersion        = "3.0.0.RELEASE"
 val protobufPluginVersion        = "0.9.4"
 val nacosClientVersion           = "2.3.3"
 val apolloClientVersion          = "2.2.0"
+val springCloudVersion           = "2023.0.3"
+val springCloudAlibabaVersion    = "2023.0.3.3"
 val jjwtVersion                  = "0.12.5"
 val javaxAnnotationApiVersion    = "1.3.2"
 val jsr305Version                = "3.0.2"
@@ -103,11 +105,16 @@ subprojects {
         imports {
             // Spring Boot BOM manages Spring Framework, Jackson, Log4j2, Micrometer, etc.
             mavenBom("org.springframework.boot:spring-boot-dependencies:$springBootVersion")
+            // Spring Cloud BOM manages ServiceRegistry, DiscoveryClient, LoadBalancer, etc.
+            mavenBom("org.springframework.cloud:spring-cloud-dependencies:$springCloudVersion")
             // Protobuf BOM ensures consistent protobuf-java, protobuf-java-util versions.
             mavenBom("com.google.protobuf:protobuf-bom:$protobufBomVersion")
         }
 
         dependencies {
+            // Spring Cloud Alibaba Nacos Discovery - explicitly pinned to avoid BOM conflicts
+            dependency("com.alibaba.cloud:spring-cloud-starter-alibaba-nacos-discovery:$springCloudAlibabaVersion")
+
             // Kotlin standard library, reflection, and coroutines with centrally pinned versions.
             dependency("org.jetbrains:annotations:$jetbrainsAnnotationsVersion")
             dependency("org.jetbrains.kotlin:kotlin-stdlib:$kotlinVersion")

@@ -11,6 +11,9 @@ dependencies {
     api(project(":fluxion-schema:core"))
     api(project(":fluxion-schema:json"))
 
+    // Configurable cache abstraction
+    implementation(project(":fluxion-cache"))
+
     // Adapter SPI: SchemaConfigSubscriber / SchemaChangeListener interfaces (compileOnly to avoid
     // forcing adapter-spi as required runtime when consumers don't use adapter features).
     compileOnly(project(":fluxion-config:core"))

@@ -18,6 +18,8 @@ dependencies {
     api(project(":fluxion-inbound:http:core"))
     // Config core (api - provides DefinitionConfigSubscriber, WorkflowDefinitionSnapshot, ChangeType).
     api(project(":fluxion-config:core"))
+    // Registry core (api - provides InstanceRegistry, InstanceDiscovery, InstanceInfo).
+    api(project(":fluxion-registry:core"))
     // Config center Spring Boot starter (runtimeOnly - pulled in automatically but not required for compile).
     runtimeOnly(project(":fluxion-config:spring-boot"))
 

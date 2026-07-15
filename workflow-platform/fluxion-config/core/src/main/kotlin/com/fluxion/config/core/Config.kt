@@ -1,6 +1,7 @@
-﻿package com.fluxion.config.core
+package com.fluxion.config.core
 
 import com.fluxion.core.value.FunctionMeta
+import com.fluxion.registry.core.PublishTarget
 
 enum class ChangeType {
     PUBLISH,
@@ -101,6 +102,10 @@ data class IdempotencyConfig(
     val workflows: Map<String, WorkflowIdempotencyConfig> = emptyMap()
 )
 
+data class CacheConfig(
+    private val delegate: Map<String, String> = emptyMap()
+) : Map<String, String> by delegate
+
 data class WorkflowIdempotencyConfig(
     val enabled: Boolean? = null,
     val ttlHours: Long? = null,
@@ -151,6 +156,8 @@ typealias FunctionConfigSubscriber = KeyedConfigSubscriber<FunctionConfigSnapsho
 typealias SchemaConfigSubscriber = KeyedConfigSubscriber<SchemaConfigSnapshot>
 
 typealias IdempotencyConfigSubscriber = ConfigSubscriber<IdempotencyConfig>
+
+typealias CacheConfigSubscriber = ConfigSubscriber<CacheConfig>
 
 interface KeyedConfigPublisher<T> {
     fun publish(key: String, snapshot: T)

@@ -1,26 +1,10 @@
-﻿/**
- * Spring Boot auto-configuration for `fluxion-schema:core`.
- *
- * Always registers the JSON-Schema format bundle plus the core
- * [SchemaManager] facade backed by an [InMemorySchemaRegistry]. Format
- * extensions for Avro and Protobuf are shipped as separate spring-boot
- * sub-modules that contribute their own [SchemaFormatBundle] beans:
- * * `fluxion-schema:avro:spring-boot`
- * * `fluxion-schema:protobuf:spring-boot`
- *
- * [SchemaManager] collects every [SchemaFormatBundle] on the context and
- * assembles O(1) lookup maps per SPI (parser/validator/extractor/codec/
- * dataProvider) so adding new formats is purely additive.
- *
- * When a [SchemaConfigSubscriber] bean is present on the classpath (provided
- * by the `fluxion-config` adapter), the nested [SchemaHotReloadConfiguration]
- * activates and wires a [SchemaConfigApplier] that performs the initial bulk
- * load plus continuous incremental push updates.
- */
 package com.fluxion.schema.spring.boot
 
-import com.fluxion.config.core.SchemaConfigSubscriber
+import com.fluxion.cache.FluxionCacheFactory
 import com.fluxion.schema.DefaultSchemaManager
+import com.fluxion.schema.api.ExternalSchemaRegistry
+import com.fluxion.schema.api.ExternalSchemaRegistryPoller
+import com.fluxion.schema.api.SchemaCacheManager
 import com.fluxion.schema.api.SchemaDataProviderRegistry
 import com.fluxion.schema.api.SchemaFormatBundle
 import com.fluxion.schema.api.SchemaManager
@@ -43,6 +27,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.context.annotation.DependsOn
+import org.springframework.context.annotation.Primary
 import org.springframework.core.env.Environment
 
 @Configuration
@@ -75,55 +61,63 @@ class FluxionSchemaAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    fun schemaResolver(schemaRegistry: SchemaRegistry?): SchemaResolver? {
-        return schemaRegistry?.let { FluxionSchemaResolver(it) }
-    }
+    fun schemaCacheManager(properties: SchemaProperties): SchemaCacheManager =
+        SchemaCacheManager(preloadOnStartup = properties.cache.preloadOnStartup)
+
+    @Bean
+    @ConditionalOnMissingBean
+    fun schemaResolver(schemaRegistry: SchemaRegistry?): SchemaResolver? =
+        schemaRegistry?.let { FluxionSchemaResolver(it) }
 
     @Bean
     @ConditionalOnMissingBean
     fun schemaManager(
         bundles: List<SchemaFormatBundle>,
         resolver: SchemaResolver?,
-        registry: SchemaRegistry?
+        registry: SchemaRegistry?,
+        cacheManager: SchemaCacheManager
     ): SchemaManager = DefaultSchemaManager(
         bundles = bundles,
         resolver = resolver,
-        registry = registry
+        registry = registry,
+        cacheManager = cacheManager
     )
 
-    /**
-     * Worker-side hot-reload wiring.
-     *
-     * Activates only when the config-adapter SPI classes are on the
-     * classpath AND a concrete [SchemaConfigSubscriber] bean has been
-     * registered (Nacos, Apollo, or internal HTTP registry adapter).
-     * The resulting [SchemaConfigApplier] performs the initial bulk
-     * schema load and then subscribes to incremental push updates.
-     */
     @Configuration
-    @ConditionalOnClass(name = ["com.fluxion.adapter.spi.config.SchemaConfigSubscriber"])
-    @ConditionalOnBean(SchemaConfigSubscriber::class)
-    class SchemaHotReloadConfiguration {
+    @ConditionalOnBean(ExternalSchemaRegistry::class)
+    class ExternalSchemaRegistryPollingConfiguration {
 
         private val log = LoggerFactory.getLogger(javaClass)
 
         @Bean
-        fun schemaConfigApplier(
-            subscriber: SchemaConfigSubscriber,
-            registry: InMemorySchemaRegistry,
-            schemaManager: SchemaManager,
-            env: Environment
-        ): SchemaConfigApplier {
-            val scope = env.getProperty("workflow.instance.app-group")
-            val applier = SchemaConfigApplier(
-                subscriber = subscriber,
+        fun schemaRegistryPoller(
+            registry: ExternalSchemaRegistry,
+            schemaManager: DefaultSchemaManager,
+            properties: SchemaProperties
+        ): ExternalSchemaRegistryPoller {
+            val poller = ExternalSchemaRegistryPoller(
                 registry = registry,
-                schemaManager = schemaManager,
-                scope = scope
+                intervalMs = properties.cache.pollIntervalMs,
+                listener = object : com.fluxion.schema.api.SchemaRegistryListener {
+                    override fun onSchemaRegistered(name: String, schema: com.fluxion.schema.model.Schema) {
+                        schemaManager.getCacheManager().putSchema(name, schema)
+                        log.info { "Registered schema [$name] from external registry" }
+                    }
+
+                    override fun onSchemaUpdated(name: String, schema: com.fluxion.schema.model.Schema) {
+                        schemaManager.getCacheManager().putSchema(name, schema)
+                        log.info { "Updated schema [$name] from external registry" }
+                    }
+
+                    override fun onSchemaDeleted(name: String) {
+                        schemaManager.getCacheManager().evictSchema(name)
+                        log.info { "Deleted schema [$name] from cache" }
+                    }
+                }
             )
-            applier.init()
-            log.info { "SchemaConfigApplier initialized for scope=$scope" }
-            return applier
+            poller.start()
+            log.info { "ExternalSchemaRegistryPoller started with interval=${properties.cache.pollIntervalMs}ms" }
+            return poller
         }
     }
 }

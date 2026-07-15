@@ -100,8 +100,16 @@ dependencies {
     implementation(project(":fluxion-schema:spring-boot"))
     // Spring Boot auto-configuration for cross-cutting decorators (metrics/tracing/cache).
     implementation(project(":fluxion-decorator:spring-boot"))
-    // Config core (InstanceRegistry, DefinitionConfigSubscriber, etc.).
+    // Config core (DefinitionConfigSubscriber, etc.).
     implementation(project(":fluxion-config:core"))
+    // Registry core (InstanceRegistry, InstanceInfo, PublishTarget).
+    implementation(project(":fluxion-registry:core"))
+    // Registry Spring Boot auto-configuration (SpringCloudInstanceRegistry).
+    implementation(project(":fluxion-registry:spring-boot"))
+    // Discovery core (InstanceDiscovery).
+    implementation(project(":fluxion-discovery:core"))
+    // Discovery Spring Boot auto-configuration (SpringCloudInstanceDiscovery).
+    implementation(project(":fluxion-discovery:spring-boot"))
     // Inbound SPI (InboundRouter, UnifiedRequest, UnifiedResponse).
     implementation(project(":fluxion-inbound:spi"))
     // Runtime core - DAG executor and workflow orchestration primitives.
@@ -121,7 +129,7 @@ dependencies {
     // Lettuce Redis client adapter implementation.
     implementation(project(":fluxion-redis:lettuce"))
     // Groovy script engine Spring Boot auto-configuration + dynamic evaluation.
-    implementation(project(":fluxion-script-engine:spring-boot"))
+    implementation(project(":fluxion-script:spring-boot"))
     // Config center core.
     implementation(project(":fluxion-config:core"))
     // Debug module - DebugService and DebugSnapshot for admin debugger UI.
@@ -134,8 +142,8 @@ dependencies {
     implementation(project(":fluxion-config:http"))
     // Nacos config backend - activated when workflow.config.type=nacos.
     implementation(project(":fluxion-config:nacos"))
-    // HTTP-based service registry for lightweight discovery (bootstrap mode).
-    implementation(project(":fluxion-config:registry-http"))
+    // Spring Cloud Nacos Discovery for service registration and discovery.
+    implementation("com.alibaba.cloud:spring-cloud-starter-alibaba-nacos-discovery")
     // Nacos Client SDK on runtime classpath when running in Nacos configuration mode.
     runtimeOnly("com.alibaba.nacos:nacos-client")
 

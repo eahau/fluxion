@@ -22,6 +22,10 @@
 
 - [1. 项目简介](#1-项目简介)
 - [2. 架构图示](#2-架构图示)
+  - [2.1 模块依赖关系图](#21-模块依赖关系图)
+  - [2.2 端到端执行流程](#22-端到端执行流程)
+  - [2.3 管理后台内部架构](#23-管理后台内部架构)
+  - [2.4 平台整体分层示意](#24-平台整体分层示意)
 - [3. 设计哲学与核心特性](#3-设计哲学与核心特性)
 - [4. 整体架构分层](#4-整体架构分层)
 - [5. 技术栈](#5-技术栈)
@@ -46,7 +50,7 @@ Fluxion 是一套**函数式工作流编排引擎 + 配置后台**的完整解�
 |------|------|------|
 | **控制面** | `fluxion-admin`（Spring Boot 3）+ `workflow-admin-ui`（React） | 工作流定义、Schema 管理、函数注册、版本发布、在线调试、监控审计、元工作流 |
 | **运行面** | `fluxion-runtime`（Worker / Sidecar） | 自注册、热加载工作流/函数/Schema，绑定 HTTP/RPC/MQ 协议端口并执行 DAG |
-| **基础设施** | MySQL 8 · Redis · 配置中心（Apollo/Nacos/HTTP） | 持久化、幂等/限流、分布式锁、配置推送与服务发现 |
+| **基础设施**| 基础设施 | MySQL 8 · Redis · 配置中心（Apollo/Nacos/HTTP）· 注册中心（Nacos/Consul/Eureka/Zookeeper） | 持久化、幂等/限流、分布式锁、配置推送与服务发现 |
 
 平台核心能力：
 
@@ -80,10 +84,13 @@ Fluxion 是一套**函数式工作流编排引擎 + 配置后台**的完整解�
 
 > 单请求主路径：外部协议 → 适配层（统一请求） → WorkflowRouter（Caffeine L1 取 WfDef 快照） → InputSchema 校验 → ImmutableState.start → 引擎三选一 → Node 循环（buildInput → resolve+装饰器链 → fn.apply → ErrorStrategy → 写快照 → resolveNext） → OutputSchema 校验 → EngineResult → 适配层反向翻译 → 响应。
 
-### 2.3 其他参考架构图
+### 2.3 管理后台内部架构
 
-- [管理后台内部架构](doc/diagrams/admin-backend.svg)
-- [平台整体分层示意](doc/diagrams/architecture-layers.svg)
+![管理后台内部架构](doc/diagrams/admin-backend.svg)
+
+### 2.4 平台整体分层示意
+
+![平台整体分层示意](doc/diagrams/architecture-layers.svg)
 
 ---
 
@@ -147,7 +154,8 @@ Fluxion 是一套**函数式工作流编排引擎 + 配置后台**的完整解�
 ┌──────────────────────────────▼────────────────────────────────────────┐
 │  L3 · 能力域 Capability Domains（每个 domain:core / :backend / :sb）   │
 │  fluxion-schema:*  ·  fluxion-function:*  ·  fluxion-config:*          │
-│  fluxion-redis:*   ·  fluxion-script-engine:*                          │
+│  fluxion-registry:*  ·  fluxion-discovery:*  ·  fluxion-redis:*        │
+│  fluxion-script:*                                                      │
 └──────────────────────────────┬────────────────────────────────────────┘
 ┌──────────────────────────────▼────────────────────────────────────────┐
 │  L2 · 横切 / 组件 Cross-Cutting                                        │
@@ -180,7 +188,8 @@ Fluxion 是一套**函数式工作流编排引擎 + 配置后台**的完整解�
 | 语言 | Kotlin 2.x（JDK 21 target） + Java 互操作 | Java 8 业务系统通过 Runtime 远程接入，无需升级 |
 | 构建 | Gradle 8.x · Kotlin DSL | settings.gradle.kts 统一仓库（阿里云镜像）；禁止子项目 declare repositories |
 | 运行时 | Spring Boot 3.x · Spring Framework 6 | 虚拟线程 + Kotlin Coroutines（WebFlux 经 kotlinx-coroutines-reactor 桥接） |
-| 配置中心 | Apollo / Nacos / HTTP（内置轻量注册中心） | 启动时 Apollo→Nacos→HTTP 兜底；`registry-http` 用 JDK HttpClient 保持最小依赖 |
+| 配置中心 | Apollo / Nacos / HTTP | 启动时 Apollo→Nacos→HTTP 兜底；HTTP 用 JDK HttpClient 保持最小依赖 |
+| 服务注册/发现 | Nacos / Consul / Eureka / Zookeeper（基于 Spring Cloud Commons） | 依赖 fluxion-starters 聚合模块按需引入；支持即插即用切换 |
 | 持久化 | Spring Data JPA + Hibernate + Flyway | MySQL 8 InnoDB；ddl-auto=validate，所有 schema 变更走 Flyway migration |
 | 缓存/分布式 | Redis（Lettuce / Redisson / Spring Data 三选一） | Lua 脚本限流、分布式锁、幂等存储、缓存装饰器 |
 | RPC | Apache Dubbo 3 · gRPC（protobuf-gradle-plugin codegen） | 共享 `WorkflowRouter`，协议仅负责编解码 |
@@ -263,16 +272,21 @@ workflow/
 │   │   └── spring-boot/                      #     Spring Boot 自动装配（值类型/ObjectMapper）
 │   ├── fluxion-engine/                       #   WorkflowEngine · DagExecutor · SagaExecutor
 │   │                                            LinearEngine · RuleEvaluator · RetryScheduler
-│   ├── fluxion-schema/                       #   JSON Schema / Protobuf / Avro 校验
-│   │   ├── core/ · json/ · protobuf/         #     每种格式 core+backend+spring-boot
-│   │   ├── avro/ · spring-boot/
-│   │   └── protobuf/spring-boot/ · avro/spring-boot/
+│   ├── fluxion-schema/                       #   JSON Schema / Protobuf / Avro 校验 + 第三方 Registry 适配
+│   ├── core/ · json/ · protobuf/ · avro/ #     每种格式 core+backend+spring-boot
+│   ├── registry/confluent/                #     Confluent Schema Registry 适配
+│   ├── registry/aws-glue/                 #     AWS Glue Schema Registry 适配
+│   ├── registry/azure/                    #     Azure Schema Registry 适配
+│   ├── registry/apicurio/                 #     Apicurio Schema Registry 适配
+│   └── spring-boot/
 │   │
 │   ├── 【L2】 横切 / 组件
 │   ├── fluxion-decorator/ + spring-boot/     #   NodeDecorator 实现（metrics/trace/cache/retry/ratelimit/tx/...）
 │   ├── fluxion-debug/                        #   FunctionInstanceProvider · DependencyResolver · Debug 钩子
 │   ├── fluxion-di/spring/                    #   Spring ApplicationContext 桥接 DI
-│   ├── fluxion-script-engine/ core + sb      #   Groovy 求值（编译缓存）
+│   ├── fluxion-script/ core + sb             #   Groovy 求值（编译缓存）
+│   ├── fluxion-registry/ core + spring-boot  #   服务注册 SPI + Spring Cloud 适配
+│   ├── fluxion-discovery/ core + spring-boot #   服务发现 SPI + Spring Cloud 适配
 │   ├── fluxion-mock/                         #   Mock 引擎（AviatorScript 表达式）
 │   │
 │   ├── 【L3】 能力域（每域:core/:backend/:spring-boot 三层）
@@ -282,7 +296,7 @@ workflow/
 │   │       ├── dubbo(/spring-boot) · grpc(/spring-boot) · http(/spring-boot)
 │   ├── fluxion-config/                       #   配置中心客户端
 │   │   ├── core/ · apollo/ · nacos/ · http/  #     Apollo→Nacos→HTTP 启动优先级
-│   │   ├── spring-boot/ · registry-http/     #     HTTP 自注册 + 10s heartbeat
+│   │   └── spring-boot/                      #     自动装配配置中心后端
 │   ├── fluxion-redis/                        #   Redis 命令 SPI + 限流 Lua
 │   │   ├── core/ · lettuce/ · redisson/      #     三后端：Lettuce/Redisson/Spring Data
 │   │   ├── spring-data/ · spring-boot/       #     Spring Boot 按 classpath 择优装配
@@ -312,7 +326,8 @@ workflow/
 │   │           ├── db/migration/              #     Flyway V1..Vn（ddl-auto=validate）
 │   │           └── application.yaml  (默认 port 8080，local profile 排除 Redis 自动配置)
 │   ├── fluxion-runtime/ core + spring-boot + boot jar  #   运行面 Worker (默认 port 8081 + 50051)
-│   └── fluxion-test/ + webflux/              #   test fixtures（InMemory 实现 / WebFlux support）
+│   ├── fluxion-test/ + webflux/              #   test fixtures（InMemory 实现 / WebFlux support）
+│   └── fluxion-starters/                     #   聚合 starter（dubbo/grpc/http/mq/nacos/apollo/consul/eureka）
 │
 └── workflow-admin-ui/                         # 前端配置后台（Umi 4）
     ├── package.json / pnpm-lock.yaml          #   pnpm workspace；脚本 pnpm openapi/dev/build

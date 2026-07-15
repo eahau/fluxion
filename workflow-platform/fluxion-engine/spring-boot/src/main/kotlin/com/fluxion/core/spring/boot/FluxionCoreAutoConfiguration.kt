@@ -1,5 +1,6 @@
-﻿package com.fluxion.core.spring.boot
+package com.fluxion.core.spring.boot
 
+import com.fluxion.cache.FluxionCacheFactory
 import com.fluxion.decorator.decorator.DecoratorRegistry
 import com.fluxion.decorator.decorator.WorkflowDecoratorRegistry
 import com.fluxion.decorator.engine.TaskInterceptor
@@ -264,16 +265,7 @@ class FluxionCoreAutoConfiguration {
     fun idempotencyStore(env: Environment): IdempotencyStore {
         val enabled = env.getProperty("workflow.idempotency.enabled", Boolean::class.java, true)
         if (!enabled) return IdempotencyStore.NOOP
-
-        val ttlHours = env.getProperty("workflow.idempotency.ttl-hours", Long::class.java, 24L)
-        val maxSize  = env.getProperty("workflow.idempotency.max-size",  Long::class.java, 1000L)
-        val spec     = env.getProperty("workflow.idempotency.spec", String::class.java)
-
-        return CaffeineIdempotencyStore(
-            ttl     = Duration.ofHours(ttlHours),
-            maxSize = maxSize,
-            spec    = spec
-        )
+        return CaffeineIdempotencyStore()
     }
 
     /**
@@ -300,22 +292,17 @@ class FluxionCoreAutoConfiguration {
             val settings = IdempotencyCacheSettings(
                 enabled = config.enabled,
                 ttlHours = config.ttlHours,
-                maxSize = config.maxSize,
-                spec = config.spec,
                 workflows = config.workflows.mapValues { (_, wf) ->
                     WorkflowIdempotencyCacheSettings(
                         enabled = wf.enabled,
-                        ttlHours = wf.ttlHours,
-                        maxSize = wf.maxSize,
-                        spec = wf.spec
+                        ttlHours = wf.ttlHours
                     )
                 }
             )
             store.apply(settings)
             log.info {
                 "Idempotency config applied: enabled=${config.enabled} " +
-                    "ttlHours=${config.ttlHours} maxSize=${config.maxSize} spec=${config.spec} " +
-                    "workflows=${config.workflows.keys}"
+                    "ttlHours=${config.ttlHours} workflows=${config.workflows.keys}"
             }
         }
 

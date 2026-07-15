@@ -1,7 +1,7 @@
-﻿package com.fluxion.admin.controller
+package com.fluxion.admin.controller
 
-import com.fluxion.config.core.InstanceInfo
-import com.fluxion.config.core.InstanceRegistry
+import com.fluxion.registry.core.InstanceInfo
+import com.fluxion.registry.core.InstanceRegistry
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.PathVariable

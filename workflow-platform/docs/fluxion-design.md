@@ -5272,11 +5272,36 @@ fluxion-platform/
 │   ├── fluxion-builtin-functions-jdbc/         JDBC 函数实现（可选）
 │   └── fluxion-builtin-functions-spring-boot/  ← @AutoConfiguration 装配
 │
-├── fluxion-script-engine/                      脚本引擎（嵌套子模块）
-│   ├── fluxion-script-engine-core/             ★ 零 Spring 依赖
+├── fluxion-schema/                             Schema 能力域（嵌套子模块）
+│   ├── fluxion-schema-core/                    ★ 零 Spring 依赖
+│   │   ├── api/SchemaManager · SchemaValidator
+│   │   ├── api/ExternalSchemaRegistry SPI
+│   │   └── registry/InMemorySchemaRegistry
+│   ├── fluxion-schema-json/                    JSON Schema 解析与校验
+│   ├── fluxion-schema-protobuf/                Protobuf Schema 支持（+ :spring-boot）
+│   ├── fluxion-schema-avro/                    Avro Schema 支持（+ :spring-boot）
+│   ├── fluxion-schema-registry-confluent/      Confluent Schema Registry 适配
+│   ├── fluxion-schema-registry-aws-glue/       AWS Glue Schema Registry 适配
+│   ├── fluxion-schema-registry-azure/          Azure Schema Registry 适配
+│   ├── fluxion-schema-registry-apicurio/       Apicurio Schema Registry 适配
+│   └── fluxion-schema-spring-boot/             ← @AutoConfiguration 装配
+│
+├── fluxion-script/                             脚本引擎（嵌套子模块）
+│   ├── fluxion-script-core/                    ★ 零 Spring 依赖
 │   │   ├── groovy/GroovyScriptFunction.kt
 │   │   └── js/JsScriptFunction.kt
-│   └── fluxion-script-engine-spring-boot/      ← @AutoConfiguration 装配
+│   └── fluxion-script-spring-boot/             ← @AutoConfiguration 装配
+│
+├── fluxion-registry/                            服务注册能力域（嵌套子模块）
+│   ├── fluxion-registry-core/                   ★ 零 Spring 依赖
+│   │   ├── InstanceRegistry · InstanceInfo
+│   │   └── SpringCloudRegistration
+│   └── fluxion-registry-spring-boot/            ← @AutoConfiguration 装配（SpringCloudInstanceRegistry）
+│
+├── fluxion-discovery/                           服务发现能力域（嵌套子模块）
+│   ├── fluxion-discovery-core/                  ★ 零 Spring 依赖
+│   │   └── InstanceDiscovery
+│   └── fluxion-discovery-spring-boot/           ← @AutoConfiguration 装配（SpringCloudInstanceDiscovery）
 │
 ├── fluxion-config/                             配置中心能力域（嵌套子模块）
 │   ├── fluxion-config-core/                    ★ 零 Spring 依赖
@@ -5331,15 +5356,33 @@ include(
     // fluxion-builtin-functions 子模块群（内置函数能力域）
     "fluxion-builtin-functions:fluxion-builtin-functions-core",
     "fluxion-builtin-functions:fluxion-builtin-functions-spring-boot",
+    // fluxion-schema 子模块群（Schema 能力域）
+    "fluxion-schema:fluxion-schema-core",
+    "fluxion-schema:fluxion-schema-json",
+    "fluxion-schema:fluxion-schema-protobuf",
+    "fluxion-schema:fluxion-schema-protobuf:fluxion-schema-protobuf-spring-boot",
+    "fluxion-schema:fluxion-schema-avro",
+    "fluxion-schema:fluxion-schema-avro:fluxion-schema-avro-spring-boot",
+    "fluxion-schema:fluxion-schema-registry:fluxion-schema-registry-confluent",
+    "fluxion-schema:fluxion-schema-registry:fluxion-schema-registry-aws-glue",
+    "fluxion-schema:fluxion-schema-registry:fluxion-schema-registry-azure",
+    "fluxion-schema:fluxion-schema-registry:fluxion-schema-registry-apicurio",
+    "fluxion-schema:fluxion-schema-spring-boot",
     // fluxion-redis 子模块群（Redis 能力域）
     "fluxion-redis:fluxion-redis-core",
     "fluxion-redis:fluxion-redis-spring-boot",
     "fluxion-redis:fluxion-redis-lettuce",
     "fluxion-redis:fluxion-redis-redisson",
     "fluxion-redis:fluxion-redis-spring-data",
-    // fluxion-script-engine 子模块群（脚本引擎能力域）
-    "fluxion-script-engine:fluxion-script-engine-core",
-    "fluxion-script-engine:fluxion-script-engine-spring-boot",
+    // fluxion-script 子模块群（脚本引擎能力域）
+    "fluxion-script:fluxion-script-core",
+    "fluxion-script:fluxion-script-spring-boot",
+    // fluxion-registry 子模块群（服务注册能力域）
+    "fluxion-registry:fluxion-registry-core",
+    "fluxion-registry:fluxion-registry-spring-boot",
+    // fluxion-discovery 子模块群（服务发现能力域）
+    "fluxion-discovery:fluxion-discovery-core",
+    "fluxion-discovery:fluxion-discovery-spring-boot",
     // fluxion-config 子模块群（配置中心能力域）
     "fluxion-config:fluxion-config-core",
     "fluxion-config:fluxion-config-apollo",

@@ -17,6 +17,8 @@ dependencyResolutionManagement {
     repositories {
         mavenLocal()
         maven("https://maven.aliyun.com/repository/public/")
+        maven("https://packages.confluent.io/maven/")
+        maven("https://repo1.maven.org/maven2/")
     }
 }
 
@@ -34,6 +36,11 @@ include(
     "fluxion-schema:avro",
     "fluxion-schema:avro:spring-boot",
     "fluxion-schema:spring-boot",
+    // External schema registry implementations
+    "fluxion-schema:registry:confluent",
+    "fluxion-schema:registry:apicurio",
+    "fluxion-schema:registry:aws-glue",
+    "fluxion-schema:registry:azure",
 
     // === fluxion-core group ===
     // Foundation module providing base types, node abstractions, workflow context,
@@ -43,6 +50,11 @@ include(
     // === fluxion-log ===
     // Unified Kotlin SLF4J lazy logging extension functions shared across all modules.
     "fluxion-log",
+
+    // === fluxion-cache ===
+    // Configurable cache abstraction layer built on Caffeine with configuration change listening.
+    "fluxion-cache",
+    "fluxion-cache:spring-boot",
 
     // === fluxion-function group ===
     // Workflow function abstraction layer with built-in function implementations,
@@ -119,27 +131,34 @@ include(
     "fluxion-redis:redisson",
     "fluxion-redis:spring-data",
 
-    // === fluxion-script-engine group ===
+    // === fluxion-script group ===
     // Embedded script execution engine supporting Groovy dynamic evaluation with
     // compilation caching and Spring Boot auto-configuration for script registry beans.
-    "fluxion-script-engine:core",
-    "fluxion-script-engine:spring-boot",
+    "fluxion-script:core",
+    "fluxion-script:spring-boot",
 
     // === fluxion-config group ===
     // Configuration center capability domain with core SPI, multiple backend implementations
-    // (Apollo, Nacos, HTTP bootstrap), Spring Boot auto-configuration, and HTTP service registry.
+    // (Apollo, Nacos, HTTP bootstrap), and Spring Boot auto-configuration.
     "fluxion-config:core",
     "fluxion-config:apollo",
     "fluxion-config:nacos",
     "fluxion-config:http",
     "fluxion-config:spring-boot",
 
-    // === fluxion-config:registry-http ===
-    // HTTP-based service registry implementation for lightweight workflow service discovery
-    // without heavyweight registry infrastructure dependencies.
-    "fluxion-config:registry-http",
+    // === fluxion-registry group ===
+    // Service registry capability domain with core SPI, Spring Cloud integration,
+    // and Spring Boot auto-configuration for instance registration.
+    "fluxion-registry:core",
+    "fluxion-registry:spring-boot",
 
-    // === fluxion-di group ===
+    // === fluxion-discovery group ===
+    // Service discovery capability domain with core SPI, Spring Cloud integration,
+    // and Spring Boot auto-configuration for instance discovery.
+    "fluxion-discovery:core",
+    "fluxion-discovery:spring-boot",
+
+    // === fluxion-di group ==="
     // Dependency injection capability domain providing Spring Framework-based integration
     // that bridges fluxion-debug DI abstractions to Spring ApplicationContext bean resolution.
     "fluxion-di:spring",
@@ -160,5 +179,17 @@ include(
     // Shared test fixtures and in-memory SPI implementations providing base test classes,
     // JUnit 5 extensions, and helper utilities consumed as testImplementation dependencies.
     "fluxion-test",
-    "fluxion-test:webflux"
+    "fluxion-test:webflux",
+
+    // === fluxion-starters group ===
+    // Convenience aggregator starters that bundle fluxion modules with their external
+    // dependencies, enabling users to pick a single dependency for each capability.
+    "fluxion-starters:dubbo-spring-boot-starter",
+    "fluxion-starters:grpc-spring-boot-starter",
+    "fluxion-starters:http-spring-boot-starter",
+    "fluxion-starters:mq-spring-boot-starter",
+    "fluxion-starters:nacos-spring-boot-starter",
+    "fluxion-starters:apollo-spring-boot-starter",
+    "fluxion-starters:consul-spring-boot-starter",
+    "fluxion-starters:eureka-spring-boot-starter"
 )

@@ -1,8 +1,8 @@
-﻿package com.fluxion.runtime.spring.boot
+package com.fluxion.runtime.spring.boot
 
 import com.fluxion.inbound.spi.InboundRouter
 import com.fluxion.config.core.DefinitionConfigSubscriber
-import com.fluxion.config.core.InstanceRegistry
+import com.fluxion.registry.core.InstanceRegistry
 import com.fluxion.core.engine.DagExecutor
 import com.fluxion.core.engine.IdempotencyStore
 import com.fluxion.core.lock.DistributedLockProvider

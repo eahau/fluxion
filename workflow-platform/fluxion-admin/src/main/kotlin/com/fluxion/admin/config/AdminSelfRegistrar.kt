@@ -1,4 +1,4 @@
-﻿package com.fluxion.admin.config
+package com.fluxion.admin.config
 
 import java.net.InetAddress
 import java.util.UUID
@@ -9,8 +9,8 @@ import org.springframework.boot.ApplicationArguments
 import org.springframework.boot.ApplicationRunner
 import org.springframework.core.env.Environment
 
-import com.fluxion.config.core.InstanceInfo
-import com.fluxion.config.core.InstanceRegistry
+import com.fluxion.registry.core.InstanceInfo
+import com.fluxion.registry.core.InstanceRegistry
 
 class AdminSelfRegistrar(
     private val registry: InstanceRegistry,

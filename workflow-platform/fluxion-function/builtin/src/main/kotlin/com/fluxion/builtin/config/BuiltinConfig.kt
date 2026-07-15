@@ -1,5 +1,6 @@
-﻿package com.fluxion.builtin.config
+package com.fluxion.builtin.config
 
+import org.springframework.beans.factory.InitializingBean
 import com.fluxion.outbound.mq.spi.MqPublisher
 import com.fluxion.builtin.BuiltinFunction
 import com.fluxion.builtin.cache.CacheGetFunction
@@ -22,6 +23,7 @@ import com.fluxion.builtin.response.ErrorWrapperFunction
 import com.fluxion.builtin.response.ResponseWrapperFunction
 import com.fluxion.builtin.signal.WaitForSignalFunction
 import com.fluxion.builtin.validation.ParamValidateFunction
+import com.fluxion.cache.FluxionCacheFactory
 import com.fluxion.decorator.decorator.CacheStore
 import com.fluxion.decorator.decorator.DecoratorRegistry
 import com.fluxion.core.function.FunctionRegistry

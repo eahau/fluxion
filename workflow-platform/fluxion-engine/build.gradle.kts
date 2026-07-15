@@ -18,8 +18,8 @@ dependencies {
     // Unified logging extensions.
     implementation(project(":fluxion-log"))
     implementation(project(":fluxion-schema:json"))
-    // Caffeine in-memory cache for default idempotency store implementation (zero Spring deps).
-    implementation("com.github.ben-manes.caffeine:caffeine")
+    // Fluxion cache - configurable cache for idempotency store implementation.
+    implementation(project(":fluxion-cache"))
     // AviatorScript expression engine for ExpressionEvaluator-based expression nodes.
     implementation("com.googlecode.aviator:aviator:5.4.3")
 

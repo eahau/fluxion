@@ -26,7 +26,7 @@ dependencies {
     // Built-in + external function registry Spring Boot starter.
     implementation(project(":fluxion-function:spring-boot"))
     // Groovy script engine Spring Boot starter (dynamic script evaluation).
-    implementation(project(":fluxion-script-engine:spring-boot"))
+    implementation(project(":fluxion-script:spring-boot"))
     // External function transport Spring Boot starters (Dubbo / gRPC / HTTP).
     implementation(project(":fluxion-outbound:dubbo:spring-boot"))
     implementation(project(":fluxion-outbound:grpc:spring-boot"))
@@ -45,12 +45,23 @@ dependencies {
     implementation(project(":fluxion-log"))
 
     // ===== Configuration / Registry =====
-    // Config center Spring Boot auto-configuration.
+    // Config center Spring Boot auto-configuration (SPI layer, no concrete backend).
     implementation(project(":fluxion-config:spring-boot"))
-    // HTTP bootstrap config backend (default: workflow.config.type=http).
-    implementation(project(":fluxion-config:http"))
-    // HTTP-based lightweight service registry (bootstrap mode default).
-    implementation(project(":fluxion-config:registry-http"))
+    // Registry Spring Boot auto-configuration (SPI layer, no concrete backend).
+    implementation(project(":fluxion-registry:spring-boot"))
+    // Discovery Spring Boot auto-configuration (SPI layer, no concrete backend).
+    implementation(project(":fluxion-discovery:spring-boot"))
+    // === User-specific backends - uncomment or add as needed ===
+    // Nacos (config + registry + discovery):
+    // implementation(project(":fluxion-starters:nacos-spring-boot-starter"))
+    // Apollo (config only):
+    // implementation(project(":fluxion-starters:apollo-spring-boot-starter"))
+    // Consul (registry + discovery only):
+    // implementation(project(":fluxion-starters:consul-spring-boot-starter"))
+    // Eureka (registry + discovery only):
+    // implementation(project(":fluxion-starters:eureka-spring-boot-starter"))
+    // HTTP bootstrap config (default fallback):
+    // implementation(project(":fluxion-config:http"))
 
     // ===== Spring Boot Starters =====
     // DevTools for live-reload during local development.

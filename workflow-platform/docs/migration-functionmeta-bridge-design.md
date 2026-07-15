@@ -1,6 +1,6 @@
 # 迁移设计文档：FunctionMeta 兼容层 + wf_function 元数据扩展
 
-> 目标模块：`fluxion-core`（兼容层）、`fluxion-admin`（`WfFunction` 实体/表、`JsonMapperHelper`、`WfFunctionService`）、`fluxion-builtin` / `fluxion-redis` / `fluxion-script-engine`（元数据种子化）
+> 目标模块：`fluxion-core`（兼容层）、`fluxion-admin`（`WfFunction` 实体/表、`JsonMapperHelper`、`WfFunctionService`）、`fluxion-builtin` / `fluxion-redis` / `fluxion-script`（元数据种子化）
 > 约束：**`fluxion-core` 不得反向依赖 `fluxion-admin`**（admin → core，单向）
 > 本文为设计（RESEARCH + PROPOSAL），**不修改任何源文件**。
 
@@ -12,7 +12,7 @@
 |----|------------------|
 | `FunctionMeta` 字段 | `fluxion-core/.../value/FunctionMeta.kt`：`name, description, inputSchema, outputSchema, inputSchemaRef, outputSchemaRef, domain, descriptions` |
 | 内置函数注册路径 | `BuiltinFunctionRegistrar`（`fluxion-function/builtin/.../config/BuiltinConfig.kt`）遍历 `List<BuiltinFunction>`，调用 `function.meta()` 拿 `FunctionMeta` **直接注册**，**运行时无 DB 读** |
-| 脚本/外部函数注册路径 | `FunctionConfigApplier`（`fluxion-script-engine/.../FunctionConfigApplier.kt`）从 `FunctionConfigSnapshot` 现场 `FunctionMeta.builder(...)` 构造 |
+| 脚本/外部函数注册路径 | `FunctionConfigApplier`（`fluxion-script/.../FunctionConfigApplier.kt`）从 `FunctionConfigSnapshot` 现场 `FunctionMeta.builder(...)` 构造 |
 | 快照来源 | `WfFunctionService.toSnapshot()` 经 `JsonMapperHelper.functionToConfig()` 从 `wf_function.config` JSON 提取 `description/paramSchema/outputSchema/scriptBody/className/publishTarget` |
 | `wf_function` 字段 | `WfFunction` 实体：`functionName, scope, appGroup, sourceRef, functionType, domain, config(JSON), status` |
 | Schema SSOT | `wf_schema` 表 + V9 迁移已用 `INSERT IGNORE` 种子化内置函数 Schema；`BuiltinSchemaRefs`（`fluxion-function/builtin/.../meta/BuiltinFunctionMetas.kt`）持有 `name → wf_schema.schema_name` 引用 |
@@ -295,7 +295,7 @@ val meta = functionMetaBridge.fromSnapshot(snapshot) // 替换原内联 builder
 |------|----------|-------------------------------|------------------|
 | `fluxion-builtin` (`BuiltinFunctionMetas`) | **保留**（作为 fallback / dev 无 DB 场景） | V10 种子化 `wf_function`（scope=PLATFORM, functionType=BUILTIN），带 `paramSchemaRef`/`descriptions`/`category`/`domain` | Admin 侧 `WfFunctionService.loadAllEnabledSnapshots()` 已**显式排除 BUILTIN**（`!functionType.equals("BUILTIN")`），所以 Admin→Worker 推送路径**本就不推送内置函数**；内置函数始终由代码 `meta()` 注册。→ **内置 FunctionMeta 仍走代码常量，DB 种子仅用于"函数管理列表展示 / 前端分组 / 文档"，不参与运行时执行 meta** |
 | `fluxion-redis` (`RedisFunctionMetas`) | **保留**（动态 schema 不适合落库） | 可选种子化（仅 `category=other`/`data-access`、无 schema ref） | 代码常量 |
-| `fluxion-script-engine` (`ScriptEngineFunctionMetas`) | **保留** | 可选种子化 `builtin:groovyScript` | 代码常量 |
+| `fluxion-script` (`ScriptEngineFunctionMetas`) | **保留** | 可选种子化 `builtin:groovyScript` | 代码常量 |
 
 > **关键架构澄清**：内置函数的 `FunctionMeta` 在 Worker 运行时**始终由代码 `meta()` 提供**，不经过 `wf_function` 读取。因此 "core 不反向依赖 admin / 运行时无 DB 读" 的约束天然满足，无需让 `fluxion-core` 去读库。`wf_function` 种子化解决的是**Admin 管理面（函数列表、前端分组、文档、i18n 描述持久化）单一数据源**问题，与执行面解耦。
 
@@ -430,10 +430,10 @@ VALUES
 | `fluxion-admin/src/main/kotlin/com/fluxion/admin/mapper/JsonMapperHelper.kt` | 加 4 个读取函数 |
 | `fluxion-admin/src/main/kotlin/com/fluxion/admin/service/WfFunctionService.kt` | `toSnapshot` 填充新字段 + `loadBuiltinMetaList()` |
 | `fluxion-admin/src/main/kotlin/com/fluxion/admin/mapper/WfFunctionMetaBridge.kt` | **新增**适配器 |
-| `fluxion-script-engine/core/src/main/kotlin/com/fluxion/script/config/FunctionConfigApplier.kt` | 改用 bridge |
+| `fluxion-script/core/src/main/kotlin/com/fluxion/script/config/FunctionConfigApplier.kt` | 改用 bridge |
 | `fluxion-function/builtin/src/main/kotlin/com/fluxion/builtin/meta/BuiltinFunctionMetas.kt` | **保留**（fallback） |
 | `fluxion-redis/core/src/main/kotlin/com/fluxion/redis/meta/RedisFunctionMetas.kt` | **保留**（动态 schema） |
-| `fluxion-script-engine/core/src/main/kotlin/com/fluxion/script/meta/ScriptEngineFunctionMetas.kt` | **保留** |
+| `fluxion-script/core/src/main/kotlin/com/fluxion/script/meta/ScriptEngineFunctionMetas.kt` | **保留** |
 | `workflow-admin-ui/src/constants/functionDisplay.ts` | 不变（前端 key 已被 `category` 列对齐） |
 
 ---

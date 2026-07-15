@@ -14,10 +14,8 @@ sourceSets {
 }
 
 dependencies {
-    // Adapter SPI: base subscriber / change event contracts.
     implementation(project(":fluxion-config:core"))
-    // Config core SPI: ConfigCenterProvider + data model interfaces.
-    implementation(project(":fluxion-config:core"))
+    implementation(project(":fluxion-registry:core"))
 
     // Nacos Config Client SDK (non-Spring Cloud) - config subscription + listener support.
     implementation("com.alibaba.nacos:nacos-client")

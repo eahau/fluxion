@@ -1,4 +1,4 @@
-﻿package com.fluxion.core.engine
+package com.fluxion.core.engine
 
 import com.fluxion.core.value.EngineResult
 
@@ -67,10 +67,12 @@ data class CachedExecution(
     val executionId: String?,
     val errorMsg: String?,
     val workflowId: String,
-    val cachedAt: Long = System.currentTimeMillis()
+    val cachedAt: Long = System.currentTimeMillis(),
+    val expireAt: Long = Long.MAX_VALUE
 ) {
+    fun isExpired(): Boolean = expireAt != Long.MAX_VALUE && System.currentTimeMillis() > expireAt
+
     companion object {
-        /** Build a [CachedExecution] directly from a live [EngineResult]. */
         @JvmStatic
         fun from(result: EngineResult, workflowId: String) = CachedExecution(
             success = result.success,
@@ -78,6 +80,16 @@ data class CachedExecution(
             executionId = result.executionId,
             errorMsg = result.errorMsg,
             workflowId = workflowId
+        )
+
+        @JvmStatic
+        fun from(result: EngineResult, workflowId: String, ttl: java.time.Duration) = CachedExecution(
+            success = result.success,
+            data = result.data,
+            executionId = result.executionId,
+            errorMsg = result.errorMsg,
+            workflowId = workflowId,
+            expireAt = System.currentTimeMillis() + ttl.toMillis()
         )
     }
 }

@@ -14,10 +14,9 @@ sourceSets {
 }
 
 dependencies {
-    // Adapter SPI: base subscriber / change event contracts.
     implementation(project(":fluxion-config:core"))
-    // Config core SPI: ConfigCenterProvider + data model interfaces.
-    implementation(project(":fluxion-config:core"))
+    implementation(project(":fluxion-registry:core"))
+    implementation(project(":fluxion-discovery:core"))
 
     // Jackson Databind for JSON configuration response parsing.
     implementation("com.fasterxml.jackson.core:jackson-databind")

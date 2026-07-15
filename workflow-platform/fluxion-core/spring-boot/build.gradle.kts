@@ -20,6 +20,7 @@ dependencies {
     implementation(project(":fluxion-config:core"))
     implementation(project(":fluxion-schema:json"))
     implementation(project(":fluxion-outbound"))
+    implementation(project(":fluxion-cache"))
 
     // Spring Boot core starter - provides auto-configuration mechanism and core Spring context.
     implementation("org.springframework.boot:spring-boot-starter")

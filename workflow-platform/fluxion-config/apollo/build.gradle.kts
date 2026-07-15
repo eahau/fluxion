@@ -14,11 +14,8 @@ sourceSets {
 }
 
 dependencies {
-    // Adapter SPI: base subscriber / change event contracts.
     implementation(project(":fluxion-config:core"))
-    // Config core SPI: ConfigCenterProvider + data model interfaces.
-    implementation(project(":fluxion-config:core"))
-    // Unified logging extensions.
+    implementation(project(":fluxion-registry:core"))
     implementation(project(":fluxion-log"))
 
     // Apollo Client SDK - runtime config subscription + change notification mechanism.

@@ -1,9 +1,9 @@
-﻿package com.fluxion.config.nacos
+package com.fluxion.config.nacos
 
 import com.alibaba.nacos.api.config.ConfigService
 import com.fluxion.config.core.SchemaConfigPublisher
 import com.fluxion.config.core.SchemaConfigSnapshot
-import com.fluxion.config.core.PublishTarget
+import com.fluxion.registry.core.PublishTarget
 import com.fluxion.core.util.JsonUtil
 import org.slf4j.*
 

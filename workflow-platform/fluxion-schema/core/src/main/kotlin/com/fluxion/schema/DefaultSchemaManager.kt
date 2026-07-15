@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Default [SchemaManager] implementation that composes format-specific SPIs
  * loaded via [SchemaFormatBundle] entries.
  *
@@ -8,16 +8,17 @@
  * the application context; plain-JVM callers pass bundles directly to the
  * constructor.
  *
- * ### Parse caching
+ * ### Caching
  *
- * Schema compilation (especially JSON Schema and Protobuf descriptor
- * resolution) is expensive. The manager caches compiled `parsed` objects
- * keyed by `format.code + raw` so repeated `parse()` calls for the same
- * source text return in O(1). The cache is unbounded — appropriate for the
- * typical workload of a few hundred to a few thousand registered schemas.
+ * Two levels of caching are used via [SchemaCacheManager]:
+ * 1. **parseCache**: Caches compiled schema objects keyed by `format.code + raw`.
+ * 2. **schemaCache**: Caches named schemas loaded from [SchemaRegistry].
+ *
+ * Cache configuration is loaded from fluxion-config and can be updated dynamically.
  */
 package com.fluxion.schema
 
+import com.fluxion.schema.api.SchemaCacheManager
 import com.fluxion.schema.api.SchemaCodec
 import com.fluxion.schema.api.SchemaFieldExtractor
 import com.fluxion.schema.api.SchemaFormatBundle
@@ -30,22 +31,13 @@ import com.fluxion.schema.model.Schema
 import com.fluxion.schema.model.SchemaField
 import com.fluxion.schema.model.SchemaFormat
 import com.fluxion.schema.model.ValidationResult
-import java.util.concurrent.ConcurrentHashMap
+import com.github.benmanes.caffeine.cache.Caffeine
 
-/**
- * Default [SchemaManager] backed by pluggable [SchemaFormatBundle] entries
- * and an optional [SchemaResolver] / [SchemaRegistry] for reference
- * resolution and name-based validation.
- *
- * @property bundles format-specific SPI implementations, normally collected
- *   by Spring from the application context
- * @property resolver optional reference resolver used by [resolveRef]
- * @property registry optional named-schema store used by [validateByName]
- */
 class DefaultSchemaManager(
     bundles: List<SchemaFormatBundle> = emptyList(),
     private val resolver: SchemaResolver? = null,
-    private val registry: SchemaRegistry? = null
+    private val registry: SchemaRegistry? = null,
+    private val cacheManager: SchemaCacheManager = SchemaCacheManager()
 ) : SchemaManager {
 
     private val parserMap: Map<SchemaFormat, SchemaParser> =
@@ -60,28 +52,21 @@ class DefaultSchemaManager(
     private val codecMap: Map<SchemaFormat, SchemaCodec> =
         bundles.mapNotNull { b -> b.codec?.let { b.format to it } }.toMap()
 
-    /**
-     * Compiled-artifact cache keyed by `format.code + raw` text.
-     *
-     * Only caches the `parsed` payload rather than the full [Schema] wrapper
-     * because callers may supply different names for the same raw text
-     * (e.g. anonymous inline schemas vs registered named ones).
-     * Thread-safe via ConcurrentHashMap; entries are never evicted.
-     */
-    private val parseCache = ConcurrentHashMap<Pair<String, String>, Any>()
+    init {
+        registry?.let { cacheManager.preloadSchemas(it) }
+    }
 
     override fun parse(format: SchemaFormat, raw: String): Schema {
         val parser = parserMap[format]
             ?: throw IllegalArgumentException("No parser available for format: ${format.code}")
 
-        val cacheKey = format.code to raw
-        val cached = parseCache[cacheKey]
+        val cached = cacheManager.getParseResult(format.code, raw)
         if (cached != null) {
             return Schema(name = null, format = format, raw = raw, parsed = cached)
         }
 
         val schema = parser.parse(null, raw)
-        parseCache[cacheKey] = schema.parsed
+        cacheManager.putParseResult(format.code, raw, schema.parsed)
         return schema
     }
 
@@ -95,8 +80,16 @@ class DefaultSchemaManager(
 
     override fun validateByName(schemaName: String, data: Any?): ValidationResult {
         val registry = registry ?: throw IllegalStateException("SchemaRegistry is not configured")
+
+        val cachedSchema = cacheManager.getSchema(schemaName)
+        if (cachedSchema != null) {
+            return validate(cachedSchema, data)
+        }
+
         val schema = registry.get(schemaName)
-            ?: throw IllegalArgumentException("Schema not found: `$schemaName")
+            ?: throw IllegalArgumentException("Schema not found: `$schemaName`")
+
+        cacheManager.putSchema(schemaName, schema)
         return validate(schema, data)
     }
 
@@ -106,26 +99,20 @@ class DefaultSchemaManager(
         return extractor.extractFields(schema)
     }
 
-    override fun resolveRef(ref: String): Schema? {
-        return resolver?.resolve(ref)
-    }
+    override fun resolveRef(ref: String): Schema? = resolver?.resolve(ref)
 
     override fun codec(format: SchemaFormat): SchemaCodec {
         return codecMap[format]
             ?: throw IllegalArgumentException("No codec available for format: ${format.code}")
     }
 
-    /**
-     * Clears the internal parsed-artifact cache.
-     *
-     * Used by tests to reset state between runs and by admin-side
-     * hot-reload paths after a bulk schema-format upgrade invalidates
-     * previously compiled representations.
-     */
-    fun clearParseCache() {
-        parseCache.clear()
+    fun clearCache() {
+        cacheManager.invalidateAll()
     }
 
-    /** Number of compiled artifacts currently held in the parse cache. */
-    fun parseCacheSize(): Int = parseCache.size
+    fun parseCacheSize(): Int = cacheManager.parseCacheSize()
+
+    fun schemaCacheSize(): Int = cacheManager.schemaCacheSize()
+
+    fun getCacheManager(): SchemaCacheManager = cacheManager
 }

@@ -14,13 +14,12 @@ sourceSets {
 }
 
 dependencies {
-    // Core base types: JsonUtil, shared context abstractions.
     implementation(project(":fluxion-core"))
-    // Adapter SPI: Unified subscriber / change listener contracts that config backends extend.
     api(project(":fluxion-core"))
 
-    // Jackson Databind for JSON serialization of configuration payloads.
+    implementation(project(":fluxion-registry:core"))
+    implementation(project(":fluxion-discovery:core"))
+
     implementation("com.fasterxml.jackson.core:jackson-databind")
-    // Unified logging extensions.
     implementation(project(":fluxion-log"))
 }

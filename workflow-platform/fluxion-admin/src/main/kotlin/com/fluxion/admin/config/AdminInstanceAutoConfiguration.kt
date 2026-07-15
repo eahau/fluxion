@@ -6,7 +6,7 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.core.env.Environment
 
-import com.fluxion.config.core.InstanceRegistry
+import com.fluxion.registry.core.InstanceRegistry
 
 @Configuration
 @ConditionalOnProperty(name = ["workflow.instance.role"], havingValue = "admin", matchIfMissing = false)

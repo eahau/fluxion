@@ -393,18 +393,18 @@ function ModuleDependencySvg({ tokens: t }: { tokens: any }) {
 
       {/* ── Right column: function implementations ── */}
 
-      {/* fluxion-script-engine 能力域分组 */}
+      {/* fluxion-script 能力域分组 */}
       <rect x="750" y="10" width="220" height="95" rx="5" fill="none" stroke={c5} strokeWidth="1" strokeDasharray="5,3"/>
-      <text x="860" y="23" textAnchor="middle" fill={c5} fontSize="9" fontWeight="600">fluxion-script-engine</text>
+      <text x="860" y="23" textAnchor="middle" fill={c5} fontSize="9" fontWeight="600">fluxion-script</text>
 
       {h.box(760, 28, 200, 32, c5bg, c5)}
-      {h.lbl(860, 44, "script-engine-core", c5, 8, "700")}
+      {h.lbl(860, 44, "script-core", c5, 8, "700")}
       {h.sub(860, 54, "Groovy / GraalVM JS")}
       {h.sub(860, 64, "零 Spring")}
       {h.arr(460, 44, 760, 44, c0)}
 
       {h.box(760, 65, 200, 32, c5bg, c5)}
-      {h.lbl(860, 81, "script-engine-spring-boot", c5, 8, "700")}
+      {h.lbl(860, 81, "script-spring-boot", c5, 8, "700")}
       {h.sub(860, 91, "ScriptEngineAutoConfiguration")}
       {h.sub(860, 101, "Spring Boot 装配")}
 
@@ -802,8 +802,21 @@ export default function WorkflowV2ArchitectureFull() {
               ['fluxion-redis-spring-boot','Java','RedisWorkflowAutoConfiguration 装配桥接','redis-core'],
               ['fluxion-redis-lettuce','Java','LettuceRedisAdapter（120+ 命令 + 真 Pipeline）','redis-core + Lettuce'],
               ['fluxion-redis-redisson','Java','RedissonRedisAdapter（类型化 API + 原生分布式锁）','redis-core + Redisson'],
-              ['fluxion-script-engine:core','Kotlin','Groovy / GraalVM JS 脚本函数（零 Spring）','fluxion-core + Groovy/JS'],
-              ['fluxion-script-engine:spring-boot','Kotlin','ScriptEngineAutoConfiguration 装配','script-engine-core + Spring Boot'],
+              ['fluxion-script:core','Kotlin','Groovy / GraalVM JS 脚本函数（零 Spring）','fluxion-core + Groovy/JS'],
+              ['fluxion-script:spring-boot','Kotlin','ScriptEngineAutoConfiguration 装配','script-core + Spring Boot'],
+              ['fluxion-schema:core','Kotlin','SchemaManager · ExternalSchemaRegistry SPI · InMemorySchemaRegistry','fluxion-core'],
+              ['fluxion-schema:json','Kotlin','JSON Schema 解析与校验','schema-core'],
+              ['fluxion-schema:protobuf','Kotlin','Protobuf Schema 支持','schema-core'],
+              ['fluxion-schema:avro','Kotlin','Avro Schema 支持','schema-core'],
+              ['fluxion-schema:registry-confluent','Kotlin','Confluent Schema Registry 适配','schema-core'],
+              ['fluxion-schema:registry-aws-glue','Kotlin','AWS Glue Schema Registry 适配','schema-core'],
+              ['fluxion-schema:registry-azure','Kotlin','Azure Schema Registry 适配','schema-core'],
+              ['fluxion-schema:registry-apicurio','Kotlin','Apicurio Schema Registry 适配','schema-core'],
+              ['fluxion-schema:spring-boot','Kotlin','FluxionSchemaAutoConfiguration 装配','schema-core + Spring Boot'],
+              ['fluxion-registry:core','Kotlin','InstanceRegistry · InstanceInfo（零 Spring）','fluxion-core'],
+              ['fluxion-registry:spring-boot','Kotlin','SpringCloudInstanceRegistry 自动装配','registry-core + Spring Cloud Commons'],
+              ['fluxion-discovery:core','Kotlin','InstanceDiscovery SPI（零 Spring）','fluxion-registry:core'],
+              ['fluxion-discovery:spring-boot','Kotlin','SpringCloudInstanceDiscovery 自动装配','discovery-core + Spring Cloud DiscoveryClient'],
               ['fluxion-builtin-functions:core','Kotlin','HTTP / JSON / MQ / DB 内置函数（零 Spring）','fluxion-core + OkHttp/Jackson'],
               ['fluxion-builtin-functions:spring-boot','Kotlin','BuiltinAutoConfiguration 装配','builtin-functions-core + Spring Boot'],
               ['fluxion-config-core','Kotlin','Subscriber/Publisher 公共抽象 / HttpPushClient / SnapshotParser','fluxion-adapter-spi'],

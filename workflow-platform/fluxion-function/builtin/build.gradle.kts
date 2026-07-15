@@ -43,8 +43,8 @@ dependencies {
     implementation("com.fasterxml.jackson.core:jackson-databind")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
-    // Caffeine local cache backing CacheStore default implementation.
-    implementation("com.github.ben-manes.caffeine:caffeine")
+    // Fluxion cache - configurable cache backing CacheStore default implementation.
+    implementation(project(":fluxion-cache"))
     // Unified logging.
     implementation(project(":fluxion-log"))
 

@@ -1,17 +1,10 @@
-﻿package com.fluxion.config.http
+package com.fluxion.config.http
 
 import com.fluxion.config.core.DefinitionConfigPublisher
 import com.fluxion.config.core.DefinitionConfigSubscriber
 import com.fluxion.config.core.FunctionConfigPublisher
 import com.fluxion.config.core.FunctionConfigSubscriber
-import com.fluxion.config.core.SchemaConfigPublisher
-import com.fluxion.config.core.SchemaConfigSubscriber
-import com.fluxion.config.core.InstanceDiscovery
-import com.fluxion.config.core.InstanceRegistry
-import com.fluxion.registry.http.HttpAdminInstanceDiscovery
-import com.fluxion.registry.http.HttpAdminInstanceRegistry
-import com.fluxion.registry.http.HttpInstanceRegistry
-import com.fluxion.registry.http.InMemoryInstanceStore
+import com.fluxion.discovery.core.InstanceDiscovery
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.context.annotation.Bean
@@ -19,36 +12,13 @@ import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.Primary
 import org.springframework.core.env.Environment
 
-/**
- * HTTP config center + service discovery auto-configuration.
- */
 @AutoConfiguration
 @ConditionalOnProperty(name = ["workflow.config.type"], havingValue = "http", matchIfMissing = true)
 class HttpConfigAutoConfiguration {
 
-    // ===== Admin-side Beans ======================================================
-
     @Configuration
     @ConditionalOnProperty(name = ["workflow.instance.role"], havingValue = "admin")
     class AdminConfiguration {
-
-        @Bean
-        fun inMemoryInstanceStore(env: Environment): InMemoryInstanceStore {
-            val timeout = env.getProperty("workflow.config.http.heartbeat-timeout-ms", Long::class.java, 30_000L)!!
-            return InMemoryInstanceStore(timeout)
-        }
-
-        @Bean
-        fun instanceDiscovery(store: InMemoryInstanceStore): InstanceDiscovery =
-            HttpAdminInstanceDiscovery(store)
-
-        @Bean
-        fun instanceRegistry(store: InMemoryInstanceStore): InstanceRegistry =
-            HttpAdminInstanceRegistry(store)
-
-        @Bean
-        fun instanceRegistrationController(registry: InstanceRegistry): InstanceRegistrationController =
-            InstanceRegistrationController(registry)
 
         @Bean
         fun httpDefinitionConfigPublisher(
@@ -59,24 +29,11 @@ class HttpConfigAutoConfiguration {
         fun httpFunctionConfigPublisher(
             instanceDiscovery: InstanceDiscovery
         ): FunctionConfigPublisher = HttpFunctionConfigPublisher(instanceDiscovery)
-
-        @Bean
-        fun httpSchemaConfigPublisher(
-            instanceDiscovery: InstanceDiscovery
-        ): SchemaConfigPublisher = HttpSchemaConfigPublisher(instanceDiscovery)
     }
-
-    // ===== Worker-side Beans =====================================================
 
     @Configuration
     @ConditionalOnProperty(name = ["workflow.instance.role"], havingValue = "worker")
     class WorkerConfiguration {
-
-        @Bean
-        fun httpInstanceRegistry(env: Environment): InstanceRegistry {
-            val adminUrl = env.getRequiredProperty("workflow.config.http.admin-url")
-            return HttpInstanceRegistry(adminUrl)
-        }
 
         @Bean
         fun httpDefinitionConfigSubscriber(
@@ -115,24 +72,5 @@ class HttpConfigAutoConfiguration {
         fun functionPushController(
             httpSubscriber: HttpFunctionConfigSubscriber
         ): FunctionPushController = FunctionPushController(httpSubscriber)
-
-        @Bean
-        fun httpSchemaConfigSubscriber(
-            env: Environment
-        ): HttpSchemaConfigSubscriber {
-            val adminUrl = env.getRequiredProperty("workflow.config.http.admin-url")
-            return HttpSchemaConfigSubscriber(adminUrl)
-        }
-
-        @Bean
-        @Primary
-        fun schemaConfigSubscriber(
-            httpSubscriber: HttpSchemaConfigSubscriber
-        ): SchemaConfigSubscriber = httpSubscriber
-
-        @Bean
-        fun schemaPushController(
-            httpSubscriber: HttpSchemaConfigSubscriber
-        ): SchemaPushController = SchemaPushController(httpSubscriber)
     }
 }

@@ -450,18 +450,18 @@ class JsonMapperHelper {
      * Translate the OpenAPI-generated `PublishTarget` DTO into its SPI-layer counterpart
      * used by the registry push mechanism.
      */
-    fun toSpiPublishTarget(target: PublishTarget?): com.fluxion.config.core.PublishTarget {
+    fun toSpiPublishTarget(target: PublishTarget?): com.fluxion.registry.core.PublishTarget {
         if (target == null || target.type == null || target.type == PublishType.ALL) {
-            return com.fluxion.config.core.PublishTarget.all()
+            return com.fluxion.registry.core.PublishTarget.all()
         }
         return when (target.type) {
-            PublishType.APP_GROUP -> com.fluxion.config.core.PublishTarget.ofGroups(
+            PublishType.APP_GROUP -> com.fluxion.registry.core.PublishTarget.ofGroups(
                 target.groups?.filterNotNull() ?: emptyList()
             )
-            PublishType.INSTANCES -> com.fluxion.config.core.PublishTarget.ofInstances(
+            PublishType.INSTANCES -> com.fluxion.registry.core.PublishTarget.ofInstances(
                 target.instanceIds?.filterNotNull() ?: emptyList()
             )
-            else -> com.fluxion.config.core.PublishTarget.all()
+            else -> com.fluxion.registry.core.PublishTarget.all()
         }
     }
 

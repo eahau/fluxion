@@ -1,4 +1,4 @@
-﻿package com.fluxion.admin.service
+package com.fluxion.admin.service
 
 import com.fluxion.builtin.db.workflow.DbExecuteWorkflowCompiler
 import com.fluxion.core.function.FunctionRegistry
@@ -11,7 +11,7 @@ import com.fluxion.core.util.JsonUtil
 import com.fluxion.core.util.uncheckedCast
 import com.fluxion.config.core.DefinitionConfigPublisher
 import com.fluxion.runtime.core.provider.DefinitionProvider
-import com.fluxion.config.core.PublishTarget as SpiPublishTarget
+import com.fluxion.registry.core.PublishTarget as SpiPublishTarget
 import com.fluxion.admin.entity.WfDefinition
 import com.fluxion.admin.generated.model.FunctionStatus
 import com.fluxion.admin.mapper.JsonMapperHelper

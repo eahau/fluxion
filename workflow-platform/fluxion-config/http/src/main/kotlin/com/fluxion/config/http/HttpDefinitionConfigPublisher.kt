@@ -1,8 +1,8 @@
-﻿package com.fluxion.config.http
+package com.fluxion.config.http
 
 import com.fluxion.config.core.DefinitionConfigPublisher
-import com.fluxion.config.core.InstanceDiscovery
-import com.fluxion.config.core.PublishTarget
+import com.fluxion.discovery.core.InstanceDiscovery
+import com.fluxion.registry.core.PublishTarget
 import com.fluxion.config.core.HttpPushClient
 import com.fluxion.core.util.JsonUtil
 import org.slf4j.*

@@ -1,10 +1,10 @@
-﻿package com.fluxion.config.nacos
+package com.fluxion.config.nacos
 
 import com.alibaba.nacos.api.config.ConfigService
 import com.fluxion.config.core.FunctionConfigPublisher
 import com.fluxion.core.util.JsonUtil
 import com.fluxion.config.core.FunctionConfigSnapshot
-import com.fluxion.config.core.PublishTarget
+import com.fluxion.registry.core.PublishTarget
 import org.slf4j.*
 
 /**
