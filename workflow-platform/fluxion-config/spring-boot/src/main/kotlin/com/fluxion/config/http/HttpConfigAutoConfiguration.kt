@@ -5,6 +5,7 @@ import com.fluxion.config.core.DefinitionConfigSubscriber
 import com.fluxion.config.core.FunctionConfigPublisher
 import com.fluxion.config.core.FunctionConfigSubscriber
 import com.fluxion.discovery.core.InstanceDiscovery
+import com.fluxion.registry.core.InstanceRegistry
 import org.springframework.boot.autoconfigure.AutoConfiguration
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.context.annotation.Bean
@@ -72,5 +73,15 @@ class HttpConfigAutoConfiguration {
         fun functionPushController(
             httpSubscriber: HttpFunctionConfigSubscriber
         ): FunctionPushController = FunctionPushController(httpSubscriber)
+
+        @Bean
+        fun httpInstanceRegistry(env: Environment): HttpInstanceRegistry {
+            val adminUrl = env.getRequiredProperty("workflow.config.http.admin-url")
+            return HttpInstanceRegistry(adminUrl)
+        }
+
+        @Bean
+        @Primary
+        fun instanceRegistry(httpRegistry: HttpInstanceRegistry): InstanceRegistry = httpRegistry
     }
 }

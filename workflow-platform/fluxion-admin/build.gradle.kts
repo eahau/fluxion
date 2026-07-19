@@ -218,6 +218,7 @@ tasks.named<org.springframework.boot.gradle.tasks.bundling.BootJar>("bootJar") {
 tasks.bootRun {
     val baseJvmArgs = mutableListOf<String>()
     baseJvmArgs += "-Dspring.devtools.restart.enabled=false"
+    baseJvmArgs += "-Dspring.profiles.active=local,nacos"
     if (project.hasProperty("debug")) {
         baseJvmArgs += "-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:5005"
     }

@@ -263,13 +263,33 @@ class ResourceCatalogController(
         val updatedAtMs = updatedAt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
         return GeneratedResource(
             id = id,
-            resourceType = com.fluxion.admin.generated.model.ResourceType.valueOf(resourceType),
+            resourceType = mapResourceType(resourceType, driver),
             resourceName = resourceName,
             configJson = sanitizedCfg,
             createdAt = createdAtMs,
             updatedAt = updatedAtMs
         ).apply {
             driver = this@toSanitizedGenerated.driver
+        }
+    }
+
+    private fun mapResourceType(dbType: String, driver: String?): com.fluxion.admin.generated.model.ResourceType {
+        return try {
+            com.fluxion.admin.generated.model.ResourceType.valueOf(dbType)
+        } catch (e: IllegalArgumentException) {
+            when (dbType.uppercase()) {
+                "DB" -> driver?.uppercase()?.let { d ->
+                    when {
+                        d.contains("MYSQL") -> com.fluxion.admin.generated.model.ResourceType.MYSQL
+                        d.contains("POSTGRESQL") || d.contains("POSTGRES") -> com.fluxion.admin.generated.model.ResourceType.POSTGRESQL
+                        d.contains("ORACLE") -> com.fluxion.admin.generated.model.ResourceType.ORACLE
+                        d.contains("SQLSERVER") || d.contains("MSSQL") -> com.fluxion.admin.generated.model.ResourceType.SQLSERVER
+                        d.contains("CLICKHOUSE") -> com.fluxion.admin.generated.model.ResourceType.CLICKHOUSE
+                        else -> com.fluxion.admin.generated.model.ResourceType.OTHER
+                    }
+                } ?: com.fluxion.admin.generated.model.ResourceType.OTHER
+                else -> com.fluxion.admin.generated.model.ResourceType.OTHER
+            }
         }
     }
 

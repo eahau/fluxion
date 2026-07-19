@@ -19,7 +19,7 @@ object FluxionCacheFactory {
     private val cacheRefMap = ConcurrentHashMap<String, AtomicReference<Cache<*, *>>>()
     private val configRef = AtomicReference<Map<String, CaffeineSpec>>(emptyMap())
 
-    private lateinit var defaultSpec: CaffeineSpec
+    private var defaultSpec: CaffeineSpec = CaffeineSpec.parse("maximumSize=1000,expireAfterWrite=30m")
     private var initialized = false
 
     fun init(
@@ -92,8 +92,7 @@ object FluxionCacheFactory {
     private class FluxionCacheProxy<K, V>(private val ref: AtomicReference<Cache<K, V>>) : Cache<K, V> {
         private val cache get() = ref.get()
 
-        override fun get(key: K, mappingFunction: Function<in K, out V>): V =
-            (cache as Cache<K, V>).get(key, mappingFunction)
+        override fun get(key: K, mappingFunction: Function<in K, out V>): V = cache.get(key, mappingFunction)
 
         override fun getIfPresent(key: K): V? = cache.getIfPresent(key)
         override fun getAllPresent(keys: MutableIterable<K>): MutableMap<K, V> = cache.getAllPresent(keys)
@@ -101,8 +100,7 @@ object FluxionCacheFactory {
         override fun getAll(
             keys: MutableIterable<K>?,
             mappingFunction: Function<in MutableSet<out K>, out MutableMap<out K, out V>>?
-        ): MutableMap<K, V>? =
-            (cache as Cache<K, V>).getAll(keys, mappingFunction)
+        ): MutableMap<K, V>? = cache.getAll(keys, mappingFunction)
 
         override fun put(key: K, value: V) = cache.put(key, value)
         override fun putAll(map: MutableMap<out K, out V>) = cache.putAll(map)

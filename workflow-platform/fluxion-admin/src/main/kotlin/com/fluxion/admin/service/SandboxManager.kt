@@ -1,4 +1,4 @@
-﻿package com.fluxion.admin.service
+package com.fluxion.admin.service
 
 import com.fluxion.admin.entity.App
 import com.fluxion.admin.entity.AppResource
@@ -82,7 +82,7 @@ class SandboxManager(
         // Determine which resources to sandbox: explicit IDs → those; otherwise every DB/REDIS
         // binding the app has declared.
         val bindings = bindingRepo.findAllByAppIdWithResource(appId).filter { b ->
-            b.resource.resourceType in setOf("DB", "REDIS") &&
+            (isDbType(b.resource.resourceType) || b.resource.resourceType == "REDIS") &&
                 (baseResourceIds == null || b.resource.id in baseResourceIds)
         }
         require(bindings.isNotEmpty()) {
@@ -97,12 +97,13 @@ class SandboxManager(
         val reused = mutableListOf<SandboxInstance>()
 
         for (binding in bindings) {
-            when (binding.resource.resourceType) {
-                "DB"    -> existing[binding.resource.id]
+            if (isDbType(binding.resource.resourceType)) {
+                existing[binding.resource.id]
                     ?.also { reused += touch(it) }
                     ?: createDbSandbox(app, binding.resource, ownerSession, ownerUsername, expiredAt)
                         .also { created += it }
-                "REDIS" -> existing[binding.resource.id]
+            } else if (binding.resource.resourceType == "REDIS") {
+                existing[binding.resource.id]
                     ?.also { reused += touch(it) }
                     ?: createRedisDbIndexSandbox(app, binding.resource, ownerSession, ownerUsername, expiredAt)
                         .also { created += it }
@@ -391,6 +392,10 @@ class SandboxManager(
 
         const val SANDBOX_DB_PREFIX  = "DB_TABLE_PREFIX"
         const val SANDBOX_REDIS_DB   = "REDIS_DB_INDEX"
+
+        private val DB_TYPES = setOf("DB", "MYSQL", "POSTGRESQL", "ORACLE", "SQLSERVER", "H2", "CLICKHOUSE")
+
+        fun isDbType(resourceType: String): Boolean = DB_TYPES.contains(resourceType.uppercase())
 
         /**
          * Deterministic 8-char session-derived prefix so `ownerSession` length (UUIDs)

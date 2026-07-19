@@ -60,8 +60,7 @@ dependencies {
     // implementation(project(":fluxion-starters:consul-spring-boot-starter"))
     // Eureka (registry + discovery only):
     // implementation(project(":fluxion-starters:eureka-spring-boot-starter"))
-    // HTTP bootstrap config (default fallback):
-    // implementation(project(":fluxion-config:http"))
+    implementation(project(":fluxion-config:http"))
 
     // ===== Spring Boot Starters =====
     // DevTools for live-reload during local development.

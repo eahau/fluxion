@@ -10,6 +10,18 @@ Configuration:
       # 控制台格式：时间 [线程] 级别 [traceId] 包名首字母.完整类名 - 消息
       - name: CONSOLE_PATTERN
         value: "%d{HH:mm:ss.SSS} [%t] %-5level [%X{traceId}] %logger{1.} - %msg%n"
+      # 日志文件输出格式：加上日期，便于离线排查
+      - name: FILE_PATTERN
+        value: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%t] %-5level [%X{traceId}] %logger{36} - %msg%n"
+      # 日志根目录：优先环境变量 LOG_DIR，其次写到当前用户 home 下的 .fluxion/fluxion-worker/<appGroup>/logs
+      - name: LOG_PATH
+        value: "${env:LOG_DIR:-${sys:user.home}/.fluxion/fluxion-worker/${sys:appGroup:-default}/logs}"
+      - name: MAX_FILE_SIZE
+        value: "100 MB"
+      - name: FILE_MAX_HISTORY_DAYS
+        value: "30"
+      - name: TOTAL_SIZE_CAP
+        value: "10 GB"
 
   Appenders:
     Console:
@@ -18,31 +30,102 @@ Configuration:
       PatternLayout:
         pattern: "${CONSOLE_PATTERN}"
 
+    RollingFile:
+      - name: MainFile
+        fileName: "${LOG_PATH}/fluxion-worker.log"
+        filePattern: "${LOG_PATH}/archive/fluxion-worker.%d{yyyy-MM-dd}.%i.log.gz"
+        PatternLayout:
+          pattern: "${FILE_PATTERN}"
+        Policies:
+          TimeBasedTriggeringPolicy:
+            interval: 1
+            modulate: true
+          SizeBasedTriggeringPolicy:
+            size: "${MAX_FILE_SIZE}"
+        DefaultRolloverStrategy:
+          max: "${FILE_MAX_HISTORY_DAYS}"
+          Delete:
+            basePath: "${LOG_PATH}/archive"
+            maxDepth: 1
+            IfAccumulatedFileSize:
+              exceeds: "${TOTAL_SIZE_CAP}"
+
+      # Worker 侧工作流执行日志单独落盘
+      - name: WorkflowExecutionFile
+        fileName: "${LOG_PATH}/workflow-execution.log"
+        filePattern: "${LOG_PATH}/archive/workflow-execution.%d{yyyy-MM-dd}.%i.log.gz"
+        PatternLayout:
+          pattern: "${FILE_PATTERN}"
+        Policies:
+          TimeBasedTriggeringPolicy:
+            interval: 1
+            modulate: true
+          SizeBasedTriggeringPolicy:
+            size: "${MAX_FILE_SIZE}"
+        DefaultRolloverStrategy:
+          max: "${FILE_MAX_HISTORY_DAYS}"
+
+      - name: WorkflowSnapshotFile
+        fileName: "${LOG_PATH}/workflow-snapshot.log"
+        filePattern: "${LOG_PATH}/archive/workflow-snapshot.%d{yyyy-MM-dd}.%i.log.gz"
+        PatternLayout:
+          pattern: "${FILE_PATTERN}"
+        Policies:
+          TimeBasedTriggeringPolicy:
+            interval: 1
+            modulate: true
+          SizeBasedTriggeringPolicy:
+            size: "${MAX_FILE_SIZE}"
+        DefaultRolloverStrategy:
+          max: "${FILE_MAX_HISTORY_DAYS}"
+
+      - name: EngineFile
+        fileName: "${LOG_PATH}/fluxion-engine.log"
+        filePattern: "${LOG_PATH}/archive/fluxion-engine.%d{yyyy-MM-dd}.%i.log.gz"
+        PatternLayout:
+          pattern: "${FILE_PATTERN}"
+        Policies:
+          TimeBasedTriggeringPolicy:
+            interval: 1
+            modulate: true
+          SizeBasedTriggeringPolicy:
+            size: "${MAX_FILE_SIZE}"
+        DefaultRolloverStrategy:
+          max: "${FILE_MAX_HISTORY_DAYS}"
+
   Loggers:
-    # 项目日志
     Logger:
       - name: com.fluxion
         level: INFO
         additivity: false
         AppenderRef:
-          ref: Console
+          - ref: Console
+          - ref: MainFile
+
       - name: com.fluxion.core.engine
         level: DEBUG
         additivity: false
         AppenderRef:
-          ref: Console
+          - ref: Console
+          - ref: EngineFile
+
       # 工作流执行日志（专用命名 Logger）
       - name: WorkflowExecutionLog
         level: INFO
         additivity: false
         AppenderRef:
-          ref: Console
+          - ref: Console
+          - ref: WorkflowExecutionFile
+
+      # 执行快照
       - name: WorkflowExecutionSnapshot
         level: INFO
         additivity: false
         AppenderRef:
-          ref: Console
-      # 减少 Spring 框架噪音
+          - ref: Console
+          - ref: WorkflowSnapshotFile
+
+      # 减少 Spring/第三方框架噪音
       - name: org.springframework
         level: WARN
       - name: org.apache
@@ -51,4 +134,5 @@ Configuration:
     Root:
       level: WARN
       AppenderRef:
-        ref: Console
+        - ref: Console
+        - ref: MainFile

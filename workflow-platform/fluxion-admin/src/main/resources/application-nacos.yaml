@@ -6,6 +6,14 @@ spring:
   config:
     activate:
       on-profile: nacos
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
+        namespace: ${NACOS_NAMESPACE:}
+        username: ${NACOS_USERNAME:nacos}
+        password: ${NACOS_PASSWORD:nacos}
+        connect-timeout: 30000
 
 workflow:
   config:
@@ -13,5 +21,5 @@ workflow:
     nacos:
       server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
       namespace: ${NACOS_NAMESPACE:}
-      # username: ${NACOS_USERNAME:nacos}
-      # password: ${NACOS_PASSWORD:nacos}
+      username: ${NACOS_USERNAME:nacos}
+      password: ${NACOS_PASSWORD:nacos}

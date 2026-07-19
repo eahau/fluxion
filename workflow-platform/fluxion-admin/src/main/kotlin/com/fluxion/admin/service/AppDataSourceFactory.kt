@@ -1,4 +1,4 @@
-﻿package com.fluxion.admin.service
+package com.fluxion.admin.service
 
 import com.fluxion.admin.entity.AppResource
 import com.fluxion.admin.repository.AppResourceRepository
@@ -42,7 +42,7 @@ class AppDataSourceFactory(
         val resource = requireNotNull(resourceRepo.findById(resourceId).orElse(null)) {
             "AppResource id=$resourceId not found"
         }
-        require(resource.resourceType.equals("DB", ignoreCase = true)) {
+        require(isDbType(resource.resourceType)) {
             "AppResource id=$resourceId type=${resource.resourceType} is not DB"
         }
         val cached = cache.compute(resource.id) { _, prev ->
@@ -112,4 +112,8 @@ class AppDataSourceFactory(
         val ds: HikariDataSource,
         val updatedAt: java.time.LocalDateTime
     )
+
+    private fun isDbType(resourceType: String): Boolean =
+        setOf("DB", "MYSQL", "POSTGRESQL", "ORACLE", "SQLSERVER", "H2", "CLICKHOUSE")
+            .contains(resourceType.uppercase())
 }

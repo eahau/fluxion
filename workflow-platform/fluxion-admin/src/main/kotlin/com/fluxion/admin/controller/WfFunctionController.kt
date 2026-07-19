@@ -1,4 +1,4 @@
-﻿package com.fluxion.admin.controller
+package com.fluxion.admin.controller
 
 import com.fluxion.admin.exception.WorkflowAdminException
 import com.fluxion.admin.generated.api.FunctionsApi
@@ -88,7 +88,6 @@ class WfFunctionController(
         val direction = if (sortDir.equals("asc", ignoreCase = true)) Sort.Direction.ASC else Sort.Direction.DESC
         val pageable = PageRequest.of(page, size, Sort.by(direction, sortBy))
 
-        // Source 1: BUILTIN functions registered in the engine's FunctionRegistry
         val registryFunctions = functionRegistry.listAll()
             .map { meta -> functionMapper.registryMetaToDto(meta) }
             .filter { dto ->
@@ -100,7 +99,6 @@ class WfFunctionController(
             }
             .sortedBy { it.name }
 
-        // Source 2: DB-backed non-BUILTIN functions
         val accessibleGroups = securityContext.accessibleAppGroups()
         val dbFunctions = functionRepository.findAll()
             .filter { fn -> fn.functionType != "BUILTIN" }
@@ -117,7 +115,6 @@ class WfFunctionController(
                 matchKeyword && matchCategory
             }
 
-        // Manual pagination across the merged list
         val all = registryFunctions + dbFunctions
         val start = pageable.offset.toInt()
         val end = (start + pageable.pageSize).coerceAtMost(all.size)
@@ -223,7 +220,6 @@ class WfFunctionController(
         val fn = resolved.function
         val outputSchema = resolved.outputSchema
 
-        // default fallbacks: test UI only fills nodeParams in simple cases
         val nodeInput = NodeInput(
             directInput = testFunctionRequest.directInput ?: inputs,
             nodeParams = inputs,
